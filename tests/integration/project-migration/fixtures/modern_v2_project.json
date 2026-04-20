@@ -1,0 +1,255 @@
+{
+  "fixture_name": "modern_v2_project",
+  "files": {
+    "requirements/requirement-model.json": {
+      "project_meta": {
+        "project_name": "Modern Migration Project",
+        "scenario_type": "assembly",
+        "description": "modern v2 project fixture"
+      },
+      "load_requirements": {
+        "rated_payload": 5.0,
+        "max_payload": 6.0,
+        "tool_mass": 0.9,
+        "fixture_mass": 0.6,
+        "payload_cog": [0.0, 0.0, 0.06],
+        "payload_inertia": [0.008, 0.008, 0.006, 0.0, 0.0, 0.0],
+        "off_center_load": false,
+        "cable_drag_load": 0.1,
+        "load_variants": []
+      },
+      "workspace_requirements": {
+        "max_radius": 1.1,
+        "min_radius": 0.2,
+        "max_height": 1.2,
+        "min_height": 0.1,
+        "key_poses": [
+          {
+            "pose_id": "pose_modern_001",
+            "name": "modern_pose",
+            "pose": [0.3, 0.0, 0.6, 0.0, 90.0, 0.0],
+            "position_tol": 0.5,
+            "orientation_tol": 0.5
+          }
+        ],
+        "forbidden_regions": [],
+        "obstacle_regions": [],
+        "base_constraints": {}
+      },
+      "motion_requirements": {
+        "max_linear_speed": 1.0,
+        "max_angular_speed": 90.0,
+        "max_acceleration": 2.0,
+        "max_angular_acceleration": 240.0,
+        "jerk_limit": 8.0,
+        "takt_time": 5.0
+      },
+      "accuracy_requirements": {
+        "absolute_accuracy": 0.6,
+        "repeatability": 0.04,
+        "tracking_accuracy": 0.15,
+        "orientation_accuracy": 0.1,
+        "tcp_position_tol": 0.3,
+        "tcp_orientation_tol": 0.3
+      },
+      "reliability_requirements": {
+        "design_life": 10.0,
+        "cycle_count": 1200000,
+        "duty_cycle": 0.8,
+        "operating_hours_per_day": 18.0,
+        "mtbf_target": 25000.0
+      },
+      "derived_conditions": {
+        "rated_case": {},
+        "peak_case": {}
+      }
+    },
+    "topology/topology-model.json": {
+      "meta": {
+        "topology_id": "topology_modern_v2",
+        "name": "Modern URDF Topology",
+        "version": 2,
+        "source": "template",
+        "status": "ready",
+        "remarks": "",
+        "template_id": "6r-floor-general",
+        "requirement_ref": "requirements/requirement-model.json"
+      },
+      "robot_definition": {
+        "robot_type": "serial_6r",
+        "joint_count": 6,
+        "application_tags": ["assembly"],
+        "base_mount_type": "floor",
+        "base_height_m": 0.0,
+        "base_orientation": [0.0, 0.0, 0.0],
+        "j1_rotation_range_deg": [-175.0, 175.0]
+      },
+      "layout": {
+        "shoulder_type": "standard",
+        "elbow_type": "standard",
+        "wrist_type": "spherical",
+        "wrist_intersection": true,
+        "wrist_offset": false,
+        "internal_routing_required": false,
+        "hollow_joint_ids": [],
+        "hollow_wrist_required": false,
+        "reserved_channel_diameter_mm": 0.0,
+        "seventh_axis_reserved": false
+      },
+      "axis_relations": [],
+      "joints": [
+        { "joint_id": "joint_1", "axis_index": 1, "role": "base", "joint_type": "revolute", "parent_link_id": "base_link", "child_link_id": "link_1", "axis_direction": [0.0, 0.0, 1.0], "motion_range_deg": [-175.0, 175.0] },
+        { "joint_id": "joint_2", "axis_index": 2, "role": "shoulder", "joint_type": "revolute", "parent_link_id": "link_1", "child_link_id": "link_2", "axis_direction": [0.0, 1.0, 0.0], "motion_range_deg": [-130.0, 80.0] },
+        { "joint_id": "joint_3", "axis_index": 3, "role": "elbow", "joint_type": "revolute", "parent_link_id": "link_2", "child_link_id": "link_3", "axis_direction": [0.0, 1.0, 0.0], "motion_range_deg": [-145.0, 145.0] },
+        { "joint_id": "joint_4", "axis_index": 4, "role": "wrist_roll", "joint_type": "revolute", "parent_link_id": "link_3", "child_link_id": "link_4", "axis_direction": [1.0, 0.0, 0.0], "motion_range_deg": [-190.0, 190.0] },
+        { "joint_id": "joint_5", "axis_index": 5, "role": "wrist_pitch", "joint_type": "revolute", "parent_link_id": "link_4", "child_link_id": "link_5", "axis_direction": [0.0, 1.0, 0.0], "motion_range_deg": [-120.0, 120.0] },
+        { "joint_id": "joint_6", "axis_index": 6, "role": "tool", "joint_type": "revolute", "parent_link_id": "link_5", "child_link_id": "link_6", "axis_direction": [1.0, 0.0, 0.0], "motion_range_deg": [-350.0, 350.0] }
+      ],
+      "topology_graph": {
+        "links": [
+          { "link_id": "base_link", "parent_joint_id": "", "name": "base_link" },
+          { "link_id": "link_1", "parent_joint_id": "joint_1", "name": "link_1" },
+          { "link_id": "link_2", "parent_joint_id": "joint_2", "name": "link_2" },
+          { "link_id": "link_3", "parent_joint_id": "joint_3", "name": "link_3" },
+          { "link_id": "link_4", "parent_joint_id": "joint_4", "name": "link_4" },
+          { "link_id": "link_5", "parent_joint_id": "joint_5", "name": "link_5" },
+          { "link_id": "link_6", "parent_joint_id": "joint_6", "name": "link_6" }
+        ],
+        "joints_graph": [
+          { "joint_id": "joint_1", "parent_link_id": "base_link", "child_link_id": "link_1" },
+          { "joint_id": "joint_2", "parent_link_id": "link_1", "child_link_id": "link_2" },
+          { "joint_id": "joint_3", "parent_link_id": "link_2", "child_link_id": "link_3" },
+          { "joint_id": "joint_4", "parent_link_id": "link_3", "child_link_id": "link_4" },
+          { "joint_id": "joint_5", "parent_link_id": "link_4", "child_link_id": "link_5" },
+          { "joint_id": "joint_6", "parent_link_id": "link_5", "child_link_id": "link_6" }
+        ]
+      },
+      "candidates": [],
+      "recommendation": {
+        "recommended_candidate_id": "",
+        "recommended_topology_id": "",
+        "recommended_template_id": "",
+        "combined_score": 0.0,
+        "requirement_loaded": true,
+        "requirement_constraints_applied": true,
+        "recommendation_reason": []
+      }
+    },
+    "kinematics/kinematic-model.json": {
+      "meta": {
+        "kinematic_id": "kinematic_modern_v2",
+        "name": "Modern URDF Kinematic",
+        "version": 2,
+        "source": "urdf",
+        "status": "ready",
+        "topology_ref": "topology_modern_v2",
+        "requirement_ref": "requirements/requirement-model.json"
+      },
+      "modeling_mode": "URDF",
+      "unified_robot_model_ref": "robot://modern-v2/urdf",
+      "model_source_mode": "urdf_imported",
+      "backend_type": "pinocchio_kinematic_backend",
+      "parameter_convention": "URDF",
+      "joint_count": 6,
+      "urdf_source_path": "__SAMPLE_URDF_PATH__",
+      "pinocchio_model_ready": true,
+      "frame_semantics_version": 2,
+      "joint_order_signature": "joint_1|joint_2|joint_3|joint_4|joint_5|joint_6",
+      "base_frame": {
+        "position_m": [0.0, 0.0, 0.0],
+        "rpy_deg": [0.0, 0.0, 0.0]
+      },
+      "flange_frame": {
+        "position_m": [0.0, 0.0, 0.0],
+        "rpy_deg": [0.0, 0.0, 0.0]
+      },
+      "tool_frame": null,
+      "workpiece_frame": null,
+      "links": [
+        { "link_id": "link_1", "a": 0.0, "alpha": 90.0, "d": 0.35, "theta_offset": 0.0 },
+        { "link_id": "link_2", "a": 0.30, "alpha": 0.0, "d": 0.0, "theta_offset": 0.0 },
+        { "link_id": "link_3", "a": 0.25, "alpha": 0.0, "d": 0.0, "theta_offset": 0.0 },
+        { "link_id": "link_4", "a": 0.0, "alpha": 90.0, "d": 0.12, "theta_offset": 0.0 },
+        { "link_id": "link_5", "a": 0.0, "alpha": -90.0, "d": 0.10, "theta_offset": 0.0 },
+        { "link_id": "link_6", "a": 0.0, "alpha": 0.0, "d": 0.08, "theta_offset": 0.0 }
+      ],
+      "joint_limits": [
+        { "joint_id": "joint_1", "soft_limit": [-175.0, 175.0], "hard_limit": [-185.0, 185.0], "max_velocity": 180.0, "max_acceleration": 360.0 },
+        { "joint_id": "joint_2", "soft_limit": [-130.0, 80.0], "hard_limit": [-135.0, 85.0], "max_velocity": 180.0, "max_acceleration": 360.0 },
+        { "joint_id": "joint_3", "soft_limit": [-145.0, 145.0], "hard_limit": [-150.0, 150.0], "max_velocity": 180.0, "max_acceleration": 360.0 },
+        { "joint_id": "joint_4", "soft_limit": [-190.0, 190.0], "hard_limit": [-200.0, 200.0], "max_velocity": 260.0, "max_acceleration": 520.0 },
+        { "joint_id": "joint_5", "soft_limit": [-120.0, 120.0], "hard_limit": [-125.0, 125.0], "max_velocity": 260.0, "max_acceleration": 520.0 },
+        { "joint_id": "joint_6", "soft_limit": [-350.0, 350.0], "hard_limit": [-360.0, 360.0], "max_velocity": 320.0, "max_acceleration": 640.0 }
+      ],
+      "tcp_frame": {
+        "translation_m": [0.0, 0.0, 0.1],
+        "rpy_deg": [0.0, 0.0, 0.0]
+      },
+      "ik_solver_config": {
+        "solver_type": "numeric_jacobian_transpose",
+        "branch_policy": "nearest_seed",
+        "max_iterations": 200,
+        "position_tolerance_mm": 1.0,
+        "orientation_tolerance_deg": 1.0,
+        "step_gain": 0.35
+      },
+      "last_fk_result": {},
+      "last_ik_result": {},
+      "backend_summary": {
+        "default_backend_type": "pinocchio_kinematic_backend",
+        "active_backend_type": "pinocchio_kinematic_backend",
+        "shared_kernel_stage": "pinocchio_primary",
+        "shared_robot_kernel_ready": true,
+        "status_message": "Modern fixture ready."
+      }
+    },
+    "dynamics/dynamic-model.json": {
+      "meta": {
+        "dynamic_id": "dynamic_modern_v2",
+        "name": "Modern Dynamics",
+        "version": 2,
+        "source": "kinematics",
+        "status": "ready",
+        "kinematic_ref": "kinematic_modern_v2",
+        "topology_ref": "topology_modern_v2",
+        "requirement_ref": "requirements/requirement-model.json"
+      },
+      "gravity": [0.0, 0.0, -9.81],
+      "installation_pose": {
+        "position_m": [0.0, 0.0, 0.0],
+        "rpy_deg": [0.0, 0.0, 0.0]
+      },
+      "trajectories": []
+    },
+    "dynamics/mass-properties.json": {
+      "links": [
+        { "link_id": "link_1", "mass": 8.0, "cog": [0.0, 0.0, 0.18], "inertia_tensor": [0.08, 0.08, 0.02, 0.0, 0.0, 0.0], "source_detail": "estimated_stage1" },
+        { "link_id": "link_2", "mass": 6.5, "cog": [0.15, 0.0, 0.0], "inertia_tensor": [0.06, 0.05, 0.03, 0.0, 0.0, 0.0], "source_detail": "estimated_stage1" },
+        { "link_id": "link_3", "mass": 5.0, "cog": [0.12, 0.0, 0.0], "inertia_tensor": [0.04, 0.04, 0.02, 0.0, 0.0, 0.0], "source_detail": "estimated_stage1" },
+        { "link_id": "link_4", "mass": 3.5, "cog": [0.0, 0.0, 0.06], "inertia_tensor": [0.02, 0.02, 0.01, 0.0, 0.0, 0.0], "source_detail": "estimated_stage1" },
+        { "link_id": "link_5", "mass": 2.4, "cog": [0.0, 0.0, 0.05], "inertia_tensor": [0.015, 0.015, 0.008, 0.0, 0.0, 0.0], "source_detail": "estimated_stage1" },
+        { "link_id": "link_6", "mass": 1.5, "cog": [0.0, 0.0, 0.04], "inertia_tensor": [0.01, 0.01, 0.005, 0.0, 0.0, 0.0], "source_detail": "estimated_stage1" }
+      ],
+      "joints": [
+        { "joint_id": "joint_1", "transmission_ratio": 120.0, "efficiency": 0.92, "friction": { "viscous": 0.08, "coulomb": 0.45, "static": 0.50 } },
+        { "joint_id": "joint_2", "transmission_ratio": 120.0, "efficiency": 0.92, "friction": { "viscous": 0.08, "coulomb": 0.45, "static": 0.50 } },
+        { "joint_id": "joint_3", "transmission_ratio": 100.0, "efficiency": 0.93, "friction": { "viscous": 0.06, "coulomb": 0.35, "static": 0.40 } },
+        { "joint_id": "joint_4", "transmission_ratio": 80.0, "efficiency": 0.94, "friction": { "viscous": 0.04, "coulomb": 0.22, "static": 0.25 } },
+        { "joint_id": "joint_5", "transmission_ratio": 80.0, "efficiency": 0.94, "friction": { "viscous": 0.04, "coulomb": 0.22, "static": 0.25 } },
+        { "joint_id": "joint_6", "transmission_ratio": 60.0, "efficiency": 0.95, "friction": { "viscous": 0.02, "coulomb": 0.12, "static": 0.15 } }
+      ],
+      "end_effector": {
+        "mass": 1.2,
+        "cog": [0.0, 0.0, 0.05],
+        "inertia_tensor": [0.005, 0.005, 0.003, 0.0, 0.0, 0.0]
+      }
+    },
+    "dynamics/load-envelopes.json": {
+      "parameterized_trajectories": [],
+      "trajectory_results": [],
+      "peak_stats": [],
+      "rms_stats": [],
+      "load_envelope": []
+    }
+  }
+}

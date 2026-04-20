@@ -1,0 +1,59 @@
+{
+  "reducers": [
+    {
+      "reducer_id": "reducer_050",
+      "name": "精密减速器 050",
+      "vendor": "Stage1Vendor",
+      "ratio": 50.0,
+      "rated_output_torque_nm": 120.0,
+      "peak_output_torque_nm": 240.0,
+      "max_input_speed_rpm": 5000.0,
+      "efficiency": 0.94,
+      "backlash_arcmin": 8.0
+    },
+    {
+      "reducer_id": "reducer_080",
+      "name": "精密减速器 080",
+      "vendor": "Stage1Vendor",
+      "ratio": 80.0,
+      "rated_output_torque_nm": 180.0,
+      "peak_output_torque_nm": 360.0,
+      "max_input_speed_rpm": 4500.0,
+      "efficiency": 0.93,
+      "backlash_arcmin": 8.0
+    },
+    {
+      "reducer_id": "reducer_100",
+      "name": "精密减速器 100",
+      "vendor": "Stage1Vendor",
+      "ratio": 100.0,
+      "rated_output_torque_nm": 240.0,
+      "peak_output_torque_nm": 480.0,
+      "max_input_speed_rpm": 4000.0,
+      "efficiency": 0.92,
+      "backlash_arcmin": 7.0
+    },
+    {
+      "reducer_id": "reducer_120",
+      "name": "精密减速器 120",
+      "vendor": "Stage1Vendor",
+      "ratio": 120.0,
+      "rated_output_torque_nm": 320.0,
+      "peak_output_torque_nm": 640.0,
+      "max_input_speed_rpm": 4000.0,
+      "efficiency": 0.91,
+      "backlash_arcmin": 7.0
+    },
+    {
+      "reducer_id": "reducer_160",
+      "name": "精密减速器 160",
+      "vendor": "Stage1Vendor",
+      "ratio": 160.0,
+      "rated_output_torque_nm": 450.0,
+      "peak_output_torque_nm": 900.0,
+      "max_input_speed_rpm": 3500.0,
+      "efficiency": 0.9,
+      "backlash_arcmin": 6.0
+    }
+  ]
+}

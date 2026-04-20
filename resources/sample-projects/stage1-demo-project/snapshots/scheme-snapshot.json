@@ -1,0 +1,89 @@
+{
+    "aggregate": {
+        "available_module_count": 6,
+        "completeness_summary": "已聚合全部 6 个上游模块结果。",
+        "dynamics_summary": {
+            "available": true,
+            "dynamic_id": "dynamic_stage1_demo",
+            "envelope_joint_count": 6,
+            "max_peak_torque_nm": 13.962104761471252,
+            "peak_stat_count": 12,
+            "rms_stat_count": 12,
+            "summary_text": "轨迹 2 条 / 包络关节 6 个 / 最大峰值 13.96 Nm",
+            "trajectory_count": 2
+        },
+        "export_meta": {
+            "default_export_format": "json",
+            "default_export_relative_path": "exports/scheme-export.json",
+            "last_export_relative_path": "",
+            "last_exported_at": ""
+        },
+        "kinematics_summary": {
+            "available": true,
+            "joint_count": 6,
+            "kinematic_id": "kinematic_stage1_demo",
+            "last_fk_success": false,
+            "last_ik_success": false,
+            "parameter_convention": "DH",
+            "summary_text": "DH / 可达样本 0 / 最大半径 0.000 m",
+            "workspace_max_radius_m": 0,
+            "workspace_reachable_sample_count": 0
+        },
+        "planning_summary": {
+            "available": true,
+            "collision_issue_count": 0,
+            "cycle_time_within_target": true,
+            "request_count": 1,
+            "self_collision_issue_count": 0,
+            "success": true,
+            "summary_text": "验证 1 条 / 碰撞问题 0 / 自碰撞问题 0",
+            "verification_count": 1
+        },
+        "refs": {
+            "dynamic_ref": "dynamic_stage1_demo",
+            "kinematic_ref": "kinematic_stage1_demo",
+            "planning_result_ref": "planning_verification_stage1_demo_001",
+            "planning_scene_ref": "planning_scene_stage1_demo",
+            "requirement_ref": "requirements/requirement-model.json",
+            "selection_ref": "selection/drivetrain-selection.json",
+            "topology_ref": "topology_stage1_demo"
+        },
+        "requirement_summary": {
+            "available": true,
+            "key_pose_count": 2,
+            "max_payload_kg": 10,
+            "project_name": "Stage1 Demo Project",
+            "rated_payload_kg": 8.5,
+            "scenario_type": "handling",
+            "summary_text": "handling / 额定负载 8.50 kg / 节拍 4.20 s",
+            "takt_time_s": 4.2
+        },
+        "selection_summary": {
+            "available": true,
+            "joint_selection_count": 6,
+            "recommended_joint_count": 6,
+            "success": true,
+            "summary_text": "联合驱动链 成功 / 推荐覆盖 6 个关节"
+        },
+        "topology_summary": {
+            "available": true,
+            "candidate_count": 1,
+            "joint_count": 6,
+            "recommended_candidate_id": "candidate_stage1_demo_001",
+            "robot_type": "6R_serial",
+            "summary_text": "6R_serial / 6 轴 / 推荐候选 candidate_stage1_demo_001",
+            "template_id": "tpl_6r_floor_general",
+            "topology_id": "topology_stage1_demo",
+            "topology_name": "Stage1 Demo 6R 串联构型"
+        }
+    },
+    "meta": {
+        "created_at": "2026-04-13T06:23:33Z",
+        "name": "阶段 1 方案快照（6）",
+        "scheme_id": "scheme_snapshot_1776061413",
+        "source_project_root": "D:/10_Source_Repos/21_robot/RoboSDP_v1.0/resources/sample-projects/stage1-demo-project",
+        "status": "draft",
+        "updated_at": "2026-04-13T06:23:33Z",
+        "version": 1
+    }
+}

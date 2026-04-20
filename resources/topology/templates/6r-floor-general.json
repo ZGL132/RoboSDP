@@ -1,0 +1,124 @@
+{
+  "template_id": "tpl_6r_floor_general",
+  "display_name": "通用落地式 6R 串联",
+  "description": "适合搬运与装配场景的通用落地安装模板。",
+  "model": {
+    "meta": {
+      "topology_id": "template_topology_floor_general",
+      "name": "通用落地式 6R 串联",
+      "version": 1,
+      "source": "template",
+      "status": "draft",
+      "remarks": "用于 Topology 阶段最小闭环的基础模板。",
+      "template_id": "tpl_6r_floor_general"
+    },
+    "robot_definition": {
+      "robot_type": "6R_serial",
+      "joint_count": 6,
+      "application_tags": [
+        "handling",
+        "assembly"
+      ],
+      "base_mount_type": "floor",
+      "base_height_m": 0.0,
+      "base_orientation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "j1_rotation_range_deg": [
+        -185.0,
+        185.0
+      ]
+    },
+    "layout": {
+      "shoulder_type": "offset",
+      "elbow_type": "articulated",
+      "wrist_type": "spherical",
+      "hollow_wrist_required": false,
+      "reserved_channel_diameter_mm": 20.0,
+      "seventh_axis_reserved": false
+    },
+    "joints": [
+      {
+        "joint_id": "joint_1",
+        "axis_index": 1,
+        "role": "base",
+        "joint_type": "revolute",
+        "parent_link_id": "base_link",
+        "child_link_id": "link_1",
+        "axis_direction": [0.0, 0.0, 1.0],
+        "motion_range_deg": [-185.0, 185.0]
+      },
+      {
+        "joint_id": "joint_2",
+        "axis_index": 2,
+        "role": "shoulder",
+        "joint_type": "revolute",
+        "parent_link_id": "link_1",
+        "child_link_id": "link_2",
+        "axis_direction": [0.0, 1.0, 0.0],
+        "motion_range_deg": [-135.0, 85.0]
+      },
+      {
+        "joint_id": "joint_3",
+        "axis_index": 3,
+        "role": "elbow",
+        "joint_type": "revolute",
+        "parent_link_id": "link_2",
+        "child_link_id": "link_3",
+        "axis_direction": [0.0, 1.0, 0.0],
+        "motion_range_deg": [-150.0, 150.0]
+      },
+      {
+        "joint_id": "joint_4",
+        "axis_index": 4,
+        "role": "wrist_roll",
+        "joint_type": "revolute",
+        "parent_link_id": "link_3",
+        "child_link_id": "link_4",
+        "axis_direction": [1.0, 0.0, 0.0],
+        "motion_range_deg": [-200.0, 200.0]
+      },
+      {
+        "joint_id": "joint_5",
+        "axis_index": 5,
+        "role": "wrist_pitch",
+        "joint_type": "revolute",
+        "parent_link_id": "link_4",
+        "child_link_id": "link_5",
+        "axis_direction": [0.0, 1.0, 0.0],
+        "motion_range_deg": [-125.0, 125.0]
+      },
+      {
+        "joint_id": "joint_6",
+        "axis_index": 6,
+        "role": "wrist_yaw",
+        "joint_type": "revolute",
+        "parent_link_id": "link_5",
+        "child_link_id": "tool_link",
+        "axis_direction": [1.0, 0.0, 0.0],
+        "motion_range_deg": [-360.0, 360.0]
+      }
+    ],
+    "topology_graph": {
+      "links": [
+        { "link_id": "base_link", "parent_joint_id": "", "name": "基座" },
+        { "link_id": "link_1", "parent_joint_id": "joint_1", "name": "大臂回转连杆" },
+        { "link_id": "link_2", "parent_joint_id": "joint_2", "name": "肩部连杆" },
+        { "link_id": "link_3", "parent_joint_id": "joint_3", "name": "肘部连杆" },
+        { "link_id": "link_4", "parent_joint_id": "joint_4", "name": "腕部连杆 1" },
+        { "link_id": "link_5", "parent_joint_id": "joint_5", "name": "腕部连杆 2" },
+        { "link_id": "tool_link", "parent_joint_id": "joint_6", "name": "法兰末端" }
+      ],
+      "joints_graph": [
+        { "joint_id": "joint_1", "parent_link_id": "base_link", "child_link_id": "link_1" },
+        { "joint_id": "joint_2", "parent_link_id": "link_1", "child_link_id": "link_2" },
+        { "joint_id": "joint_3", "parent_link_id": "link_2", "child_link_id": "link_3" },
+        { "joint_id": "joint_4", "parent_link_id": "link_3", "child_link_id": "link_4" },
+        { "joint_id": "joint_5", "parent_link_id": "link_4", "child_link_id": "link_5" },
+        { "joint_id": "joint_6", "parent_link_id": "link_5", "child_link_id": "tool_link" }
+      ]
+    }
+  }
+}

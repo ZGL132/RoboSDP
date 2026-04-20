@@ -1,16 +1,30 @@
-# C++ objects and libs
-*.slo
-*.lo
-*.o
+# CMake / Build
+build/
+build-*/
+out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Binaries / libraries
+*.exe
+*.dll
+*.lib
 *.a
-*.la
-*.lai
+*.obj
+*.o
+*.pdb
+*.ilk
 *.so
 *.so.*
-*.dll
 *.dylib
+*.la
+*.lai
 
-# Qt-es
+# Qt / Qt Creator generated files
 object_script.*.Release
 object_script.*.Debug
 *_plugin_import.cpp
@@ -28,27 +42,52 @@ ui_*.h
 *.qmlc
 *.jsc
 Makefile*
-*build-*
 *.qm
 *.prl
-
-# Qt unit tests
 target_wrapper.*
-
-# QtCreator
 *.autosave
-
-# QtCreator Qml
 *.qmlproject.user
 *.qmlproject.user.*
-
-# QtCreator CMake
 CMakeLists.txt.user*
-
-# QtCreator 4.8< compilation database
-compile_commands.json
-
-# QtCreator local machine specific files for imported projects
 *creator.user*
-
 *_qmlcache.qrc
+
+# IDE / editor
+*.user
+*.user.*
+.vs/
+.vscode/
+.idea/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Generated / temp
+*.tmp
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local dependency cache / third-party build artifacts
+.deps/
+deps/
+third_party_build/
+_thirdparty-build/
+
+# Local smoke-test project outputs generated at repository root
+dynamics-backend-fallback-project/
+dynamics-backend-strict-project/
+dynamics-backend-switch-project/
+dynamics-observability-project/
+kinematics-build-context-stage16-project/
+kinematics-refactor-prep-smoke-project/
+kinematics-urdf-preview-stage17-project/
+planning-smoke-project/
+schema-smoke-project/
+selection-smoke-project/
+
+# Historical local backup folder, not part of the current CMake target graph
+modules/kinematics/source/

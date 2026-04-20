@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package robosdp.planning.v1;
+
+// 点到点规划请求消息。
+message PointToPointPlanningRequest {
+  string request_id = 1;
+  string planning_scene_id = 2;
+  string motion_group = 3;
+  string planner_id = 4;
+  double allowed_planning_time_s = 5;
+  double target_cycle_time_s = 6;
+  repeated string joint_ids = 7;
+  repeated double start_joint_values_deg = 8;
+  repeated double goal_joint_values_deg = 9;
+  bool check_collision = 10;
+  bool check_self_collision = 11;
+}
+
+// 单个轨迹路点消息。
+message TrajectoryWaypoint {
+  double time_from_start_s = 1;
+  repeated double joint_values_deg = 2;
+}
+
+// 点到点规划响应消息。
+message PointToPointPlanningResponse {
+  string request_id = 1;
+  bool transport_success = 2;
+  bool planning_success = 3;
+  string message = 4;
+  string planner_id = 5;
+  double planning_time_s = 6;
+  double trajectory_duration_s = 7;
+  repeated TrajectoryWaypoint waypoints = 8;
+  bool in_collision = 9;
+  string collision_object_id = 10;
+  string collision_message = 11;
+  bool in_self_collision = 12;
+  string self_collision_link_a = 13;
+  string self_collision_link_b = 14;
+  string self_collision_message = 15;
+}
+
+// MoveIt 规划验证最小服务定义。
+service PlanningVerificationService {
+  rpc VerifyPointToPoint(PointToPointPlanningRequest) returns (PointToPointPlanningResponse);
+}

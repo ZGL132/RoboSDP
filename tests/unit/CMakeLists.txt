@@ -1,0 +1,8 @@
+add_subdirectory(core)
+add_subdirectory(kinematics)
+add_subdirectory(dynamics)
+add_subdirectory(selection)
+add_subdirectory(planning)
+add_subdirectory(scheme)
+add_subdirectory(schema)
+add_subdirectory(vtk)

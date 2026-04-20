@@ -1,0 +1,221 @@
+﻿{
+    "base_frame": {
+        "position_m": [
+            0,
+            0,
+            0
+        ],
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ]
+    },
+    "ik_solver_config": {
+        "branch_policy": "nearest_seed",
+        "max_iterations": 200,
+        "orientation_tolerance_deg": 1,
+        "position_tolerance_mm": 1,
+        "solver_type": "numeric_jacobian_transpose",
+        "step_gain": 0.35
+    },
+    "joint_count": 6,
+    "joint_limits": [
+        {
+            "hard_limit": [
+                -185,
+                185
+            ],
+            "joint_id": "joint_1",
+            "max_acceleration": 360,
+            "max_velocity": 180,
+            "soft_limit": [
+                -175,
+                175
+            ]
+        },
+        {
+            "hard_limit": [
+                -135,
+                85
+            ],
+            "joint_id": "joint_2",
+            "max_acceleration": 360,
+            "max_velocity": 180,
+            "soft_limit": [
+                -130,
+                80
+            ]
+        },
+        {
+            "hard_limit": [
+                -150,
+                150
+            ],
+            "joint_id": "joint_3",
+            "max_acceleration": 360,
+            "max_velocity": 180,
+            "soft_limit": [
+                -145,
+                145
+            ]
+        },
+        {
+            "hard_limit": [
+                -200,
+                200
+            ],
+            "joint_id": "joint_4",
+            "max_acceleration": 520,
+            "max_velocity": 260,
+            "soft_limit": [
+                -190,
+                190
+            ]
+        },
+        {
+            "hard_limit": [
+                -125,
+                125
+            ],
+            "joint_id": "joint_5",
+            "max_acceleration": 520,
+            "max_velocity": 260,
+            "soft_limit": [
+                -120,
+                120
+            ]
+        },
+        {
+            "hard_limit": [
+                -360,
+                360
+            ],
+            "joint_id": "joint_6",
+            "max_acceleration": 640,
+            "max_velocity": 320,
+            "soft_limit": [
+                -350,
+                350
+            ]
+        }
+    ],
+    "last_fk_result": {
+        "joint_positions_deg": [
+        ],
+        "link_poses": [
+        ],
+        "message": "",
+        "success": false,
+        "tcp_pose": {
+            "position_m": [
+                0,
+                0,
+                0
+            ],
+            "rpy_deg": [
+                0,
+                0,
+                0
+            ]
+        },
+        "tcp_transform_matrix": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1
+        ]
+    },
+    "last_ik_result": {
+        "iteration_count": 0,
+        "joint_positions_deg": [
+        ],
+        "message": "",
+        "orientation_error_deg": 0,
+        "position_error_mm": 0,
+        "success": false
+    },
+    "links": [
+        {
+            "a": 0,
+            "alpha": 90,
+            "d": 0.35,
+            "link_id": "link_1",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.3,
+            "alpha": 0,
+            "d": 0,
+            "link_id": "link_2",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.25,
+            "alpha": 0,
+            "d": 0,
+            "link_id": "link_3",
+            "theta_offset": 0
+        },
+        {
+            "a": 0,
+            "alpha": 90,
+            "d": 0.12,
+            "link_id": "link_4",
+            "theta_offset": 0
+        },
+        {
+            "a": 0,
+            "alpha": -90,
+            "d": 0.1,
+            "link_id": "link_5",
+            "theta_offset": 0
+        },
+        {
+            "a": 0,
+            "alpha": 0,
+            "d": 0.08,
+            "link_id": "link_6",
+            "theta_offset": 0
+        }
+    ],
+    "meta": {
+        "kinematic_id": "kinematic_stage1_demo",
+        "name": "6R 串联运动学模型",
+        "requirement_ref": "requirement_stage1_demo",
+        "source": "topology",
+        "status": "draft",
+        "topology_ref": "topology_stage1_demo",
+        "version": 1
+    },
+    "parameter_convention": "DH",
+    "tcp_frame": {
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ],
+        "translation_m": [
+            0,
+            0,
+            0.1
+        ]
+    }
+}
+
+
+
+
+

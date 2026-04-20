@@ -1,0 +1,21 @@
+﻿{
+  "export_id": "scheme_export_stage1_demo",
+  "scheme_id": "scheme_snapshot_stage1_demo",
+  "export_format": "json",
+  "generated_at": "2026-04-13T10:00:00",
+  "output_file_path": "exports/scheme-export.json",
+  "success": true,
+  "message": "样例项目已预置 JSON 导出摘要。",
+  "available_module_count": 6,
+  "executive_summary": "Stage1 Demo Project 已包含 Requirement、Topology、Kinematics、Dynamics、Selection、Planning 的一阶段演示结果。",
+  "module_records": [
+    {"module_name": "Requirement", "object_ref": "requirements/requirement-model.json", "available": true, "summary_text": "handling / 额定负载 8.50 kg / 节拍 4.20 s"},
+    {"module_name": "Topology", "object_ref": "topology_stage1_demo", "available": true, "summary_text": "6R 串联模板候选已推荐。"},
+    {"module_name": "Kinematics", "object_ref": "kinematic_stage1_demo", "available": true, "summary_text": "DH 模型与工作空间缓存已就位。"},
+    {"module_name": "Dynamics", "object_ref": "dynamic_stage1_demo", "available": true, "summary_text": "逆动力学、峰值、RMS 与包络结果已就位。"},
+    {"module_name": "Selection", "object_ref": "selection/drivetrain-selection.json", "available": true, "summary_text": "6 个关节均有驱动链推荐。"},
+    {"module_name": "Planning", "object_ref": "planning_verification_stage1_demo_001", "available": true, "summary_text": "点到点规划验证已通过。"}
+  ]
+}
+
+

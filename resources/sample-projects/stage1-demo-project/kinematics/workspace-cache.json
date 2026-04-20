@@ -1,0 +1,27 @@
+﻿{
+  "success": true,
+  "message": "样例项目已预置基础工作空间采样结果。",
+  "requested_sample_count": 24,
+  "reachable_sample_count": 24,
+  "max_radius_m": 1.26,
+  "min_position_m": [0.22, -0.68, 0.18],
+  "max_position_m": [1.18, 0.72, 1.46],
+  "sampled_points": [
+    {
+      "joint_positions_deg": [0.0, -20.0, 35.0, 0.0, 15.0, 0.0],
+      "tcp_pose": {
+        "position_m": [0.82, 0.05, 1.02],
+        "rpy_deg": [180.0, 0.0, 90.0]
+      }
+    },
+    {
+      "joint_positions_deg": [15.0, -35.0, 45.0, 10.0, 15.0, 20.0],
+      "tcp_pose": {
+        "position_m": [0.74, 0.32, 0.96],
+        "rpy_deg": [180.0, 0.0, 110.0]
+      }
+    }
+  ]
+}
+
+
