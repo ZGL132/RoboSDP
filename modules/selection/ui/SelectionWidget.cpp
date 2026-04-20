@@ -1,5 +1,7 @@
 ﻿#include "modules/selection/ui/SelectionWidget.h"
 
+#include "core/infrastructure/ProjectManager.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileDialog>
@@ -72,7 +74,34 @@ SelectionWidget::SelectionWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
+    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
+    connect(
+        &projectManager,
+        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
+        this,
+        [this](const QString& newPath) {
+            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
+            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
+        });
+    if (!projectManager.getCurrentProjectPath().isEmpty())
+    {
+        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
+    }
     RenderState();
+}
+
+QString SelectionWidget::ModuleName() const
+{
+    return QStringLiteral("Selection");
+}
+
+RoboSDP::Infrastructure::ProjectSaveItemResult SelectionWidget::SaveCurrentDraft()
+{
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
+    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
 }
 
 void SelectionWidget::BuildUi()
@@ -83,8 +112,12 @@ void SelectionWidget::BuildUi()
 
     auto* projectLayout = new QHBoxLayout();
     projectLayout->addWidget(new QLabel(QStringLiteral("项目目录"), this));
-    m_project_root_edit = new QLineEdit(QDir::current().filePath(QStringLiteral("requirement-draft-project")), this);
+    m_project_root_edit = new QLineEdit(this);
+    m_project_root_edit->setReadOnly(true);
+    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
     m_browse_project_button = new QPushButton(QStringLiteral("选择项目"), this);
+    m_browse_project_button->setVisible(false);
+    m_browse_project_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
     projectLayout->addWidget(m_project_root_edit, 1);
     projectLayout->addWidget(m_browse_project_button);
 
@@ -104,7 +137,7 @@ void SelectionWidget::BuildUi()
     actionLayout->addWidget(m_load_button);
     actionLayout->addStretch();
 
-    m_operation_label = new QLabel(QStringLiteral("就绪：请选择项目目录和样例目录后执行驱动选型。"), this);
+    m_operation_label = new QLabel(QStringLiteral("就绪：请先通过顶部功能区新建或打开项目，再选择样例目录后执行驱动选型。"), this);
     m_operation_label->setWordWrap(true);
 
     auto* scrollArea = new QScrollArea(this);
@@ -135,7 +168,6 @@ void SelectionWidget::BuildUi()
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
 
-    connect(m_browse_project_button, &QPushButton::clicked, this, [this]() { OnBrowseProjectRootClicked(); });
     connect(m_browse_catalog_button, &QPushButton::clicked, this, [this]() { OnBrowseCatalogRootClicked(); });
     connect(m_run_button, &QPushButton::clicked, this, [this]() { OnRunSelectionClicked(); });
     connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
@@ -247,8 +279,10 @@ void SelectionWidget::OnBrowseCatalogRootClicked()
 
 void SelectionWidget::OnRunSelectionClicked()
 {
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto runResult = m_service.RunSelection(
-        m_project_root_edit->text().trimmed(),
+        projectRootPath,
         m_catalog_root_edit->text().trimmed());
     if (runResult.IsSuccess())
     {
@@ -263,14 +297,15 @@ void SelectionWidget::OnRunSelectionClicked()
 
 void SelectionWidget::OnSaveDraftClicked()
 {
-    const auto saveResult = m_service.SaveDraft(m_project_root_edit->text().trimmed(), m_state);
-    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    const auto saveResult = SaveCurrentDraft();
     emit LogMessageGenerated(QStringLiteral("[Selection] %1").arg(saveResult.message));
 }
 
 void SelectionWidget::OnLoadClicked()
 {
-    const auto loadResult = m_service.LoadDraft(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto loadResult = m_service.LoadDraft(projectRootPath);
     if (loadResult.IsSuccess())
     {
         m_state = loadResult.state;

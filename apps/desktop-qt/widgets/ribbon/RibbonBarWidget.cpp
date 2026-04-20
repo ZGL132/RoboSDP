@@ -46,17 +46,10 @@ QWidget* RibbonBarWidget::CreateFileTab()
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("项目文件"),
         {
-            CreateDisabledButton(QStringLiteral("新建项目"), QStringLiteral("统一项目级新建流程尚未接入，本轮先冻结入口。")),
-            CreateDisabledButton(QStringLiteral("打开项目"), QStringLiteral("统一项目级打开流程尚未接入，请暂用各模块项目目录输入框。")),
-            CreateDisabledButton(QStringLiteral("保存"), QStringLiteral("统一项目级保存尚未接入，请暂用右侧模块保存草稿。")),
-        }));
-    layout->addWidget(CreateButtonGroup(
-        QStringLiteral("导入 / 导出"),
-        {
-            CreateImportUrdfButton(
-                QStringLiteral("导入 URDF"),
-                QStringLiteral("切换到 Kinematics 页面并打开 URDF 文件选择。")),
-            CreateDisabledButton(QStringLiteral("导出 JSON"), QStringLiteral("统一导出入口尚未接入，后续由 Scheme / Export 模块承载。")),
+            CreateNewProjectButton(),
+            CreateOpenProjectButton(),
+            CreateGlobalSaveButton(),
+            CreateDisabledButton(QStringLiteral("导出 JSON"), QStringLiteral("等待统一导出服务接入，请暂用 Scheme 页面内部导出能力。")),
         }));
     layout->addStretch();
     return tab;
@@ -72,15 +65,26 @@ QWidget* RibbonBarWidget::CreateModelingTab()
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("需求与构型"),
         {
-            CreateNavigationButton(QStringLiteral("需求定义"), QStringLiteral("切换到 Requirement 页面。"), RibbonNavigationTarget::Requirement),
-            CreateNavigationButton(QStringLiteral("构型设计"), QStringLiteral("切换到 Topology 页面。"), RibbonNavigationTarget::Topology),
+            CreateNavigationButton(
+                QStringLiteral("需求定义"),
+                QStringLiteral("切换到 Requirement 页面。"),
+                &RibbonBarWidget::signalNavigateToRequirement),
+            CreateNavigationButton(
+                QStringLiteral("构型设计"),
+                QStringLiteral("切换到 Topology 页面。"),
+                &RibbonBarWidget::signalNavigateToTopology),
         }));
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("运动学建模"),
         {
-            CreateNavigationButton(QStringLiteral("DH/MDH 建模"), QStringLiteral("切换到 Kinematics 页面编辑 DH/MDH 参数。"), RibbonNavigationTarget::Kinematics),
-            CreateImportUrdfButton(QStringLiteral("URDF 导入"), QStringLiteral("切换到 Kinematics 页面并打开 URDF 文件选择。")),
-            CreateDisabledButton(QStringLiteral("坐标系定义"), QStringLiteral("坐标系定义当前位于 Kinematics 右侧属性面板，本轮不新增弹窗。")),
+            CreateNavigationButton(
+                QStringLiteral("DH/MDH 建模"),
+                QStringLiteral("切换到 Kinematics 页面编辑 DH/MDH 参数。"),
+                &RibbonBarWidget::signalNavigateToKinematics),
+            CreateNavigationButton(
+                QStringLiteral("导入 URDF"),
+                QStringLiteral("切换到 Kinematics 页面，下一阶段接入项目级 URDF 导入服务。"),
+                &RibbonBarWidget::signalNavigateToKinematics),
         }));
     layout->addStretch();
     return tab;
@@ -96,10 +100,10 @@ QWidget* RibbonBarWidget::CreateDynamicsTab()
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("动力学分析"),
         {
-            CreateNavigationButton(QStringLiteral("质量/惯量定义"), QStringLiteral("切换到 Dynamics 页面。"), RibbonNavigationTarget::Dynamics),
-            CreateNavigationButton(QStringLiteral("工况轨迹"), QStringLiteral("切换到 Dynamics 页面编辑轨迹输入。"), RibbonNavigationTarget::Dynamics),
-            CreateRunDynamicsAnalysisButton(QStringLiteral("执行动力学"), QStringLiteral("切换到 Dynamics 页面并执行逆动力学分析。")),
-            CreateDisabledButton(QStringLiteral("负载包络"), QStringLiteral("负载包络详情入口后续接入结果详情窗口。")),
+            CreateNavigationButton(
+                QStringLiteral("动力学分析"),
+                QStringLiteral("切换到 Dynamics 页面。"),
+                &RibbonBarWidget::signalNavigateToDynamics),
         }));
     layout->addStretch();
     return tab;
@@ -115,10 +119,9 @@ QWidget* RibbonBarWidget::CreateDriveSelectionTab()
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("驱动链"),
         {
-            CreateNavigationButton(QStringLiteral("电机选型"), QStringLiteral("切换到 Selection 页面。"), RibbonNavigationTarget::Selection),
-            CreateNavigationButton(QStringLiteral("减速器选型"), QStringLiteral("切换到 Selection 页面。"), RibbonNavigationTarget::Selection),
-            CreateNavigationButton(QStringLiteral("驱动链匹配"), QStringLiteral("切换到 Selection 页面执行联合匹配。"), RibbonNavigationTarget::Selection),
-            CreateDisabledButton(QStringLiteral("抱闸校核"), QStringLiteral("抱闸校核属于后续细化能力，本轮暂不接入。")),
+            CreateDisabledButton(QStringLiteral("电机选型"), QStringLiteral("二期建设中，等待电机库与项目级选型服务接入。")),
+            CreateDisabledButton(QStringLiteral("减速器选型"), QStringLiteral("二期建设中，等待减速器库与项目级选型服务接入。")),
+            CreateDisabledButton(QStringLiteral("驱动链匹配"), QStringLiteral("等待驱动链匹配服务纳入顶部全局编排。")),
         }));
     layout->addStretch();
     return tab;
@@ -134,10 +137,18 @@ QWidget* RibbonBarWidget::CreatePlanningAnalysisTab()
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("规划验证"),
         {
-            CreateNavigationButton(QStringLiteral("规划场景"), QStringLiteral("切换到 Planning 页面。"), RibbonNavigationTarget::Planning),
-            CreateNavigationButton(QStringLiteral("路径规划"), QStringLiteral("切换到 Planning 页面执行最小规划验证。"), RibbonNavigationTarget::Planning),
-            CreateDisabledButton(QStringLiteral("碰撞检测"), QStringLiteral("HPP-FCL 碰撞检测内核尚未接入，本轮先冻结入口。")),
-            CreateDisabledButton(QStringLiteral("自碰撞检测"), QStringLiteral("自碰撞检测将在碰撞内核阶段接入。")),
+            CreateNavigationButton(
+                QStringLiteral("规划场景"),
+                QStringLiteral("切换到 Planning 页面编辑规划场景。"),
+                &RibbonBarWidget::signalNavigateToPlanning),
+            CreateNavigationButton(
+                QStringLiteral("路径规划"),
+                QStringLiteral("切换到 Planning 页面执行最小规划验证。"),
+                &RibbonBarWidget::signalNavigateToPlanning),
+            CreateNavigationButton(
+                QStringLiteral("碰撞检测"),
+                QStringLiteral("切换到 Planning 页面查看碰撞检测结果表。"),
+                &RibbonBarWidget::signalNavigateToPlanning),
         }));
     layout->addStretch();
     return tab;
@@ -153,10 +164,14 @@ QWidget* RibbonBarWidget::CreateResultExportTab()
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("方案结果"),
         {
-            CreateNavigationButton(QStringLiteral("方案快照"), QStringLiteral("切换到 Scheme 页面生成快照。"), RibbonNavigationTarget::Scheme),
-            CreateNavigationButton(QStringLiteral("结果摘要"), QStringLiteral("切换到 Scheme 页面查看当前摘要。"), RibbonNavigationTarget::Scheme),
-            CreateDisabledButton(QStringLiteral("结果对比"), QStringLiteral("结果对比窗口尚未接入。")),
-            CreateDisabledButton(QStringLiteral("导出结果"), QStringLiteral("统一结果导出入口后续接入。")),
+            CreateNavigationButton(
+                QStringLiteral("方案快照"),
+                QStringLiteral("切换到 Scheme 页面生成方案快照。"),
+                &RibbonBarWidget::signalNavigateToScheme),
+            CreateNavigationButton(
+                QStringLiteral("导出结果"),
+                QStringLiteral("切换到 Scheme 页面执行结果导出。"),
+                &RibbonBarWidget::signalNavigateToScheme),
         }));
     layout->addStretch();
     return tab;
@@ -170,8 +185,42 @@ QToolButton* RibbonBarWidget::CreateActionButton(const QString& text, const QStr
     button->setMinimumWidth(92);
     button->setMinimumHeight(44);
     button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    connect(button, &QToolButton::clicked, this, [this, text]() {
-        emit RibbonActionRequested(text);
+    button->setEnabled(true);
+    return button;
+}
+
+QToolButton* RibbonBarWidget::CreateNewProjectButton()
+{
+    auto* button = CreateActionButton(
+        QStringLiteral("新建项目"),
+        QStringLiteral("选择项目根目录并创建最小项目骨架。"));
+    connect(button, &QToolButton::clicked, this, [this]() {
+        // 中文说明：Ribbon 只发出项目级命令，目录选择、服务调用和状态同步交给 MainWindow。
+        emit signalCreateNewProject();
+    });
+    return button;
+}
+
+QToolButton* RibbonBarWidget::CreateOpenProjectButton()
+{
+    auto* button = CreateActionButton(
+        QStringLiteral("打开项目"),
+        QStringLiteral("选择包含 project.json 的 RoboSDP 项目目录。"));
+    connect(button, &QToolButton::clicked, this, [this]() {
+        // 中文说明：Ribbon 只发出打开项目命令，项目合法性校验由 MainWindow 与 ProjectManager 协作完成。
+        emit signalOpenProject();
+    });
+    return button;
+}
+
+QToolButton* RibbonBarWidget::CreateGlobalSaveButton()
+{
+    auto* button = CreateActionButton(
+        QStringLiteral("保存"),
+        QStringLiteral("保存当前项目中所有已接入模块的草稿。"));
+    connect(button, &QToolButton::clicked, this, [this]() {
+        // 中文说明：Ribbon 只发出全局保存命令，具体保存编排由 MainWindow / ProjectSaveCoordinator 处理。
+        emit signalGlobalSaveRequested();
     });
     return button;
 }
@@ -179,39 +228,12 @@ QToolButton* RibbonBarWidget::CreateActionButton(const QString& text, const QStr
 QToolButton* RibbonBarWidget::CreateNavigationButton(
     const QString& text,
     const QString& tooltip,
-    RoboSDP::Desktop::Ribbon::RibbonNavigationTarget target)
+    void (RibbonBarWidget::*navigationSignal)())
 {
     auto* button = CreateActionButton(text, tooltip);
-    disconnect(button, nullptr, this, nullptr);
-    connect(button, &QToolButton::clicked, this, [this, target, text]() {
-        emit RibbonActionRequested(text);
-        emit NavigationRequested(target);
-    });
-    return button;
-}
-
-QToolButton* RibbonBarWidget::CreateImportUrdfButton(const QString& text, const QString& tooltip)
-{
-    auto* button = CreateActionButton(text, tooltip);
-    disconnect(button, nullptr, this, nullptr);
-    connect(button, &QToolButton::clicked, this, [this, text]() {
-        // 中文说明：Ribbon 只发出导入意图，文件选择和 URDF 解析仍由 KinematicsWidget / Service 承担。
-        emit RibbonActionRequested(text);
-        emit NavigationRequested(RibbonNavigationTarget::Kinematics);
-        emit ImportUrdfRequested();
-    });
-    return button;
-}
-
-QToolButton* RibbonBarWidget::CreateRunDynamicsAnalysisButton(const QString& text, const QString& tooltip)
-{
-    auto* button = CreateActionButton(text, tooltip);
-    disconnect(button, nullptr, this, nullptr);
-    connect(button, &QToolButton::clicked, this, [this, text]() {
-        // 中文说明：Ribbon 只发起动力学分析意图，表格校验、Service 调用和图表刷新仍由 DynamicsWidget 承担。
-        emit RibbonActionRequested(text);
-        emit NavigationRequested(RibbonNavigationTarget::Dynamics);
-        emit RunDynamicsAnalysisRequested();
+    connect(button, &QToolButton::clicked, this, [this, navigationSignal]() {
+        // 中文说明：顶部功能区只表达导航意图，具体页面状态切换由 MainWindow 统一处理。
+        (this->*navigationSignal)();
     });
     return button;
 }

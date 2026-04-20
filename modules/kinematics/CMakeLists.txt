@@ -74,6 +74,7 @@ target_link_libraries(robosdp_kinematics
         Qt${QT_VERSION_MAJOR}::Widgets
         robosdp_errors
         robosdp_logging
+        robosdp_infrastructure
         robosdp_repository
         robosdp_topology
 )

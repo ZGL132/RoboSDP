@@ -1,6 +1,9 @@
 ﻿#pragma once
 
+#include "core/infrastructure/ProjectSaveCoordinator.h"
+
 #include <QMainWindow>
+#include <QString>
 
 class QPlainTextEdit;
 class QStackedWidget;
@@ -17,7 +20,6 @@ class RobotVtkView;
 namespace Ribbon
 {
 class RibbonBarWidget;
-enum class RibbonNavigationTarget;
 }
 }
 
@@ -94,7 +96,19 @@ private:
     void HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem);
 
     /// 响应顶部功能区导航请求，统一复用左侧项目树和右侧属性页切换逻辑。
-    void HandleRibbonNavigationRequested(RoboSDP::Desktop::Ribbon::RibbonNavigationTarget target);
+    void HandleRibbonNavigateTo(QTreeWidgetItem* targetItem, const QString& targetName);
+
+    /// 响应顶部功能区“新建项目”命令，创建最小项目目录骨架。
+    void HandleCreateNewProjectRequested();
+
+    /// 响应顶部功能区“打开项目”命令，校验 project.json 后更新全局项目上下文。
+    void HandleOpenProjectRequested();
+
+    /// 响应顶部功能区“保存”命令，执行全局保存编排。
+    void HandleGlobalSaveRequested();
+
+    /// 响应全局项目上下文变化，刷新主窗口项目树、状态栏和日志。
+    void HandleProjectContextPathChanged(const QString& projectRootPath);
 
     /// 将底层引擎状态遥测同步到状态栏，warning 为 true 时使用告警样式。
     void ShowTelemetryStatus(const QString& moduleName, const QString& message, bool warning);
@@ -106,6 +120,7 @@ private:
     RoboSDP::Desktop::Ribbon::RibbonBarWidget* m_ribbonBar = nullptr;
     RoboSDP::Desktop::Vtk::RobotVtkView* m_robotVtkView = nullptr;
     QTreeWidget* m_projectTree = nullptr;
+    QTreeWidgetItem* m_projectRootTreeItem = nullptr;
     QTreeWidgetItem* m_requirementTreeItem = nullptr;
     QTreeWidgetItem* m_topologyTreeItem = nullptr;
     QTreeWidgetItem* m_kinematicsTreeItem = nullptr;
@@ -123,6 +138,7 @@ private:
     RoboSDP::Planning::Ui::PlanningWidget* m_planningWidget = nullptr;
     RoboSDP::Scheme::Ui::SchemeWidget* m_schemeWidget = nullptr;
     QPlainTextEdit* m_logPanel = nullptr;
+    RoboSDP::Infrastructure::ProjectSaveCoordinator m_projectSaveCoordinator;
 };
 
 } // namespace RoboSDP::Desktop

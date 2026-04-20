@@ -1,11 +1,13 @@
 ﻿#pragma once
 
+#include "core/infrastructure/ProjectSaveCoordinator.h"
 #include "core/logging/ConsoleLogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/dynamics/persistence/DynamicJsonStorage.h"
 #include "modules/selection/persistence/SelectionJsonStorage.h"
 #include "modules/selection/service/DriveTrainMatchingService.h"
 
+#include <QString>
 #include <QWidget>
 
 class QLabel;
@@ -25,12 +27,18 @@ namespace RoboSDP::Selection::Ui
  * 2. 触发联合驱动链最小选型；
  * 3. 展示每关节推荐链路与推荐理由，并支持保存/加载。
  */
-class SelectionWidget : public QWidget
+class SelectionWidget : public QWidget, public RoboSDP::Infrastructure::IProjectSaveParticipant
 {
     Q_OBJECT
 
 public:
     explicit SelectionWidget(QWidget* parent = nullptr);
+
+    /// @brief 返回全局保存日志使用的模块名称。
+    QString ModuleName() const override;
+
+    /// @brief 保存当前 Selection 草稿，供模块按钮和全局保存共用。
+    RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
 signals:
     void LogMessageGenerated(const QString& message);

@@ -2,6 +2,8 @@
 
 #include "apps/desktop-qt/widgets/ribbon/RibbonBarWidget.h"
 #include "apps/desktop-qt/widgets/vtk/RobotVtkView.h"
+#include "core/infrastructure/ProjectManager.h"
+#include "core/repository/ProjectService.h"
 #include "modules/dynamics/ui/DynamicsWidget.h"
 #include "modules/kinematics/ui/KinematicsWidget.h"
 #include "modules/planning/ui/PlanningWidget.h"
@@ -12,6 +14,10 @@
 
 #include <QDateTime>
 #include <QDockWidget>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -41,6 +47,14 @@ void MainWindow::BuildUi()
     CreateLogDock();
 
     connect(
+        &RoboSDP::Infrastructure::ProjectManager::instance(),
+        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
+        this,
+        [this](const QString& projectRootPath) {
+            HandleProjectContextPathChanged(projectRootPath);
+        });
+
+    connect(
         m_projectTree,
         &QTreeWidget::currentItemChanged,
         this,
@@ -67,18 +81,54 @@ void MainWindow::CreateRibbonBar()
 
     connect(
         m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::NavigationRequested,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCreateNewProject,
         this,
-        [this](RoboSDP::Desktop::Ribbon::RibbonNavigationTarget target) {
-            HandleRibbonNavigationRequested(target);
-        });
+        [this]() { HandleCreateNewProjectRequested(); });
     connect(
         m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::RibbonActionRequested,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalOpenProject,
         this,
-        [this](const QString& actionName) {
-            AppendLogLine(QStringLiteral("[Ribbon] 触发顶部功能区入口：%1").arg(actionName));
-        });
+        [this]() { HandleOpenProjectRequested(); });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalGlobalSaveRequested,
+        this,
+        [this]() { HandleGlobalSaveRequested(); });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToRequirement,
+        this,
+        [this]() { HandleRibbonNavigateTo(m_requirementTreeItem, QStringLiteral("需求定义")); });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToTopology,
+        this,
+        [this]() { HandleRibbonNavigateTo(m_topologyTreeItem, QStringLiteral("构型设计")); });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToKinematics,
+        this,
+        [this]() { HandleRibbonNavigateTo(m_kinematicsTreeItem, QStringLiteral("运动学建模")); });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToDynamics,
+        this,
+        [this]() { HandleRibbonNavigateTo(m_dynamicsTreeItem, QStringLiteral("动力学分析")); });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToSelection,
+        this,
+        [this]() { HandleRibbonNavigateTo(m_selectionTreeItem, QStringLiteral("驱动选型")); });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToPlanning,
+        this,
+        [this]() { HandleRibbonNavigateTo(m_planningTreeItem, QStringLiteral("规划与分析")); });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToScheme,
+        this,
+        [this]() { HandleRibbonNavigateTo(m_schemeTreeItem, QStringLiteral("结果与导出")); });
 }
 
 void MainWindow::CreateCentralView()
@@ -96,7 +146,7 @@ void MainWindow::CreateProjectTreeDock()
     m_projectTree = new QTreeWidget(dock);
     m_projectTree->setHeaderLabel(QStringLiteral("项目骨架"));
 
-    auto* projectRoot = new QTreeWidgetItem(QStringList{QStringLiteral("当前项目")});
+    m_projectRootTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("当前项目")});
     m_requirementTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Requirement")});
     m_topologyTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Topology")});
     m_kinematicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Kinematics")});
@@ -104,16 +154,16 @@ void MainWindow::CreateProjectTreeDock()
     m_selectionTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Selection")});
     m_planningTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Planning")});
     m_schemeTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Scheme")});
-    projectRoot->addChild(m_requirementTreeItem);
-    projectRoot->addChild(m_topologyTreeItem);
-    projectRoot->addChild(m_kinematicsTreeItem);
-    projectRoot->addChild(m_dynamicsTreeItem);
-    projectRoot->addChild(m_selectionTreeItem);
-    projectRoot->addChild(m_planningTreeItem);
-    projectRoot->addChild(m_schemeTreeItem);
+    m_projectRootTreeItem->addChild(m_requirementTreeItem);
+    m_projectRootTreeItem->addChild(m_topologyTreeItem);
+    m_projectRootTreeItem->addChild(m_kinematicsTreeItem);
+    m_projectRootTreeItem->addChild(m_dynamicsTreeItem);
+    m_projectRootTreeItem->addChild(m_selectionTreeItem);
+    m_projectRootTreeItem->addChild(m_planningTreeItem);
+    m_projectRootTreeItem->addChild(m_schemeTreeItem);
 
-    m_projectTree->addTopLevelItem(projectRoot);
-    projectRoot->setExpanded(true);
+    m_projectTree->addTopLevelItem(m_projectRootTreeItem);
+    m_projectRootTreeItem->setExpanded(true);
 
     dock->setWidget(m_projectTree);
     addDockWidget(Qt::LeftDockWidgetArea, dock);
@@ -151,6 +201,15 @@ void MainWindow::CreatePropertyDock()
     m_propertyStack->addWidget(m_placeholderPropertyPanel);
     dock->setWidget(m_propertyStack);
     addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    // 中文说明：全局保存固定按主链顺序执行；协调器只保存接口指针，不接管 Widget 生命周期。
+    m_projectSaveCoordinator.RegisterParticipant(m_requirementWidget);
+    m_projectSaveCoordinator.RegisterParticipant(m_topologyWidget);
+    m_projectSaveCoordinator.RegisterParticipant(m_kinematicsWidget);
+    m_projectSaveCoordinator.RegisterParticipant(m_dynamicsWidget);
+    m_projectSaveCoordinator.RegisterParticipant(m_selectionWidget);
+    m_projectSaveCoordinator.RegisterParticipant(m_planningWidget);
+    m_projectSaveCoordinator.RegisterParticipant(m_schemeWidget);
 
     connect(
         m_requirementWidget,
@@ -218,47 +277,11 @@ void MainWindow::CreatePropertyDock()
             }
         });
 
-    if (m_ribbonBar != nullptr)
-    {
-        connect(
-            m_ribbonBar,
-            &RoboSDP::Desktop::Ribbon::RibbonBarWidget::ImportUrdfRequested,
-            this,
-            [this]() {
-                if (m_kinematicsWidget == nullptr)
-                {
-                    AppendLogLine(QStringLiteral("[Ribbon][Warning] Kinematics 页面尚未就绪，无法导入 URDF。"));
-                    return;
-                }
-
-                // 中文说明：Ribbon 只负责把操作意图转交给 Kinematics 页面，文件选择和 Service 编排仍保持原边界。
-                m_kinematicsWidget->TriggerImportUrdf();
-            });
-    }
-
     connect(
         m_dynamicsWidget,
         &RoboSDP::Dynamics::Ui::DynamicsWidget::LogMessageGenerated,
         this,
         [this](const QString& message) { AppendLogLine(message); });
-
-    if (m_ribbonBar != nullptr)
-    {
-        connect(
-            m_ribbonBar,
-            &RoboSDP::Desktop::Ribbon::RibbonBarWidget::RunDynamicsAnalysisRequested,
-            this,
-            [this]() {
-                if (m_dynamicsWidget == nullptr)
-                {
-                    AppendLogLine(QStringLiteral("[Ribbon][Warning] Dynamics 页面尚未就绪，无法执行动力学分析。"));
-                    return;
-                }
-
-                // 中文说明：Ribbon 只负责转交动作意图，Dynamics 页面继续负责参数校验、Service 编排与结果展示。
-                m_dynamicsWidget->TriggerRunAnalysis();
-            });
-    }
 
     connect(
         m_dynamicsWidget,
@@ -364,48 +387,138 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     statusBar()->showMessage(QStringLiteral("当前节点尚未实现编辑页面"));
 }
 
-void MainWindow::HandleRibbonNavigationRequested(
-    RoboSDP::Desktop::Ribbon::RibbonNavigationTarget target)
+void MainWindow::HandleRibbonNavigateTo(QTreeWidgetItem* targetItem, const QString& targetName)
 {
     if (m_projectTree == nullptr)
     {
         return;
     }
 
-    QTreeWidgetItem* targetItem = nullptr;
-    switch (target)
-    {
-    case RoboSDP::Desktop::Ribbon::RibbonNavigationTarget::Requirement:
-        targetItem = m_requirementTreeItem;
-        break;
-    case RoboSDP::Desktop::Ribbon::RibbonNavigationTarget::Topology:
-        targetItem = m_topologyTreeItem;
-        break;
-    case RoboSDP::Desktop::Ribbon::RibbonNavigationTarget::Kinematics:
-        targetItem = m_kinematicsTreeItem;
-        break;
-    case RoboSDP::Desktop::Ribbon::RibbonNavigationTarget::Dynamics:
-        targetItem = m_dynamicsTreeItem;
-        break;
-    case RoboSDP::Desktop::Ribbon::RibbonNavigationTarget::Selection:
-        targetItem = m_selectionTreeItem;
-        break;
-    case RoboSDP::Desktop::Ribbon::RibbonNavigationTarget::Planning:
-        targetItem = m_planningTreeItem;
-        break;
-    case RoboSDP::Desktop::Ribbon::RibbonNavigationTarget::Scheme:
-        targetItem = m_schemeTreeItem;
-        break;
-    }
-
     if (targetItem == nullptr)
     {
-        AppendLogLine(QStringLiteral("[Ribbon][Warning] 顶部功能区导航目标尚未接入项目树。"));
+        AppendLogLine(QStringLiteral("[WARN] [顶部功能区] 导航目标尚未接入项目树：%1").arg(targetName));
         return;
     }
 
     // 中文说明：Ribbon 只发起导航请求，真正的属性页切换仍复用项目树现有逻辑，避免双份状态。
+    AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至%1").arg(targetName));
     m_projectTree->setCurrentItem(targetItem);
+}
+
+void MainWindow::HandleCreateNewProjectRequested()
+{
+    AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求新建项目"));
+
+    const QString selectedDirectory = QFileDialog::getExistingDirectory(
+        this,
+        QStringLiteral("选择项目根目录"),
+        QString(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (selectedDirectory.trimmed().isEmpty())
+    {
+        AppendLogLine(QStringLiteral("[INFO] [项目服务] 用户取消新建项目。"));
+        return;
+    }
+
+    RoboSDP::Repository::ProjectService projectService;
+    const RoboSDP::Repository::ProjectCreateResult createResult =
+        projectService.CreateProject(selectedDirectory);
+
+    if (!createResult.success)
+    {
+        AppendLogLine(QStringLiteral("[WARN] [项目服务] %1").arg(createResult.message));
+        statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#b54708;font-weight:600;}"));
+        statusBar()->showMessage(createResult.message);
+        return;
+    }
+
+    AppendLogLine(QStringLiteral("[INFO] [项目服务] %1").arg(createResult.message));
+    AppendLogLine(QStringLiteral("[INFO] [项目服务] 已生成 project.json 和第一阶段最小目录骨架。"));
+    RoboSDP::Infrastructure::ProjectManager::instance().setCurrentProjectPath(createResult.project_root_path);
+}
+
+void MainWindow::HandleOpenProjectRequested()
+{
+    AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求打开项目"));
+
+    const QString selectedDirectory = QFileDialog::getExistingDirectory(
+        this,
+        QStringLiteral("打开 RoboSDP 项目"),
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (selectedDirectory.trimmed().isEmpty())
+    {
+        AppendLogLine(QStringLiteral("[INFO] [项目服务] 用户取消打开项目。"));
+        return;
+    }
+
+    const QFileInfo projectFileInfo(QDir(selectedDirectory).filePath(QStringLiteral("project.json")));
+    if (!projectFileInfo.exists() || !projectFileInfo.isFile())
+    {
+        const QString message = QStringLiteral("该目录不是有效的 RoboSDP 项目：缺少 project.json。");
+        AppendLogLine(QStringLiteral("[ERROR] [项目服务] %1").arg(message));
+        QMessageBox::warning(this, QStringLiteral("打开项目失败"), message);
+        return;
+    }
+
+    // 中文说明：通过 ProjectManager 更新全局上下文，业务模块依靠信号自动刷新只读项目目录。
+    RoboSDP::Infrastructure::ProjectManager::instance().setCurrentProjectPath(selectedDirectory);
+    AppendLogLine(QStringLiteral("[INFO] [项目服务] 已打开项目：%1").arg(QDir::toNativeSeparators(selectedDirectory)));
+}
+
+void MainWindow::HandleGlobalSaveRequested()
+{
+    AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求全局保存"));
+
+    const RoboSDP::Infrastructure::ProjectSaveSummary summary =
+        m_projectSaveCoordinator.SaveAll();
+    if (summary.project_root_path.trimmed().isEmpty())
+    {
+        AppendLogLine(QStringLiteral("[ERROR] [全局保存] %1").arg(summary.message));
+        statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#b54708;font-weight:600;}"));
+        statusBar()->showMessage(summary.message);
+        return;
+    }
+
+    for (const RoboSDP::Infrastructure::ProjectSaveItemResult& itemResult : summary.item_results)
+    {
+        AppendLogLine(
+            QStringLiteral("%1 [全局保存] %2：%3")
+                .arg(itemResult.success ? QStringLiteral("[INFO]") : QStringLiteral("[ERROR]"),
+                     itemResult.module_name,
+                     itemResult.message));
+    }
+
+    AppendLogLine(QStringLiteral("%1 [全局保存] %2")
+        .arg(summary.success ? QStringLiteral("[INFO]") : QStringLiteral("[ERROR]"), summary.message));
+    statusBar()->setStyleSheet(
+        summary.success
+            ? QStringLiteral("QStatusBar{color:#1b7f3b;}")
+            : QStringLiteral("QStatusBar{color:#b54708;font-weight:600;}"));
+    statusBar()->showMessage(summary.message);
+}
+
+void MainWindow::HandleProjectContextPathChanged(const QString& projectRootPath)
+{
+    if (projectRootPath.trimmed().isEmpty())
+    {
+        return;
+    }
+
+    const QFileInfo projectRootInfo(projectRootPath);
+    if (m_projectRootTreeItem != nullptr)
+    {
+        // 中文说明：项目树只展示 ProjectManager 中的当前项目上下文摘要，不保存独立项目状态。
+        m_projectRootTreeItem->setText(
+            0,
+            QStringLiteral("%1 (%2)")
+                .arg(projectRootInfo.fileName(), QDir::toNativeSeparators(projectRootInfo.absoluteFilePath())));
+        m_projectRootTreeItem->setExpanded(true);
+    }
+
+    statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#1b7f3b;}"));
+    statusBar()->showMessage(QStringLiteral("当前项目：%1").arg(QDir::toNativeSeparators(projectRootPath)));
+    AppendLogLine(QStringLiteral("[INFO] [项目上下文] 当前项目已切换：%1").arg(QDir::toNativeSeparators(projectRootPath)));
 }
 
 void MainWindow::ShowTelemetryStatus(const QString& moduleName, const QString& message, bool warning)

@@ -1,11 +1,13 @@
 #pragma once
 
+#include "core/infrastructure/ProjectSaveCoordinator.h"
 #include "core/logging/ConsoleLogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/dynamics/persistence/DynamicJsonStorage.h"
 #include "modules/dynamics/service/DynamicsService.h"
 #include "modules/kinematics/persistence/KinematicJsonStorage.h"
 
+#include <QString>
 #include <QWidget>
 
 class QDoubleSpinBox;
@@ -31,12 +33,18 @@ namespace RoboSDP::Dynamics::Ui
  * 4. 保存与加载 Dynamics JSON 草稿；
  * 5. 将后端状态遥测同步到主窗口状态栏。
  */
-class DynamicsWidget : public QWidget
+class DynamicsWidget : public QWidget, public RoboSDP::Infrastructure::IProjectSaveParticipant
 {
     Q_OBJECT
 
 public:
     explicit DynamicsWidget(QWidget* parent = nullptr);
+
+    /// @brief 返回全局保存日志使用的模块名称。
+    QString ModuleName() const override;
+
+    /// @brief 保存当前 Dynamics 草稿，供模块按钮和全局保存共用。
+    RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
     /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有“执行逆动力学”流程，不在 MainWindow 中复制业务逻辑。
     void TriggerRunAnalysis();

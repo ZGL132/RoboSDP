@@ -1,5 +1,7 @@
 #include "modules/requirement/ui/RequirementWidget.h"
 
+#include "core/infrastructure/ProjectManager.h"
+
 #include <algorithm>
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -29,7 +31,44 @@ RequirementWidget::RequirementWidget(QWidget* parent)
     , m_service(m_storage, m_validator, &m_logger)
 {
     BuildUi();
+    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
+    connect(
+        &projectManager,
+        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
+        this,
+        [this](const QString& newPath) {
+            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
+            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
+        });
+    if (!projectManager.getCurrentProjectPath().isEmpty())
+    {
+        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
+    }
     PopulateForm(m_service.CreateDefaultModel());
+}
+
+QString RequirementWidget::ModuleName() const
+{
+    return QStringLiteral("Requirement");
+}
+
+RoboSDP::Infrastructure::ProjectSaveItemResult RequirementWidget::SaveCurrentDraft()
+{
+    const auto model = CollectModelFromForm();
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto saveResult = m_service.SaveDraft(projectRootPath, model);
+    ApplyValidationResult(saveResult.validation_result);
+    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+
+    if (saveResult.IsSuccess() && !saveResult.validation_result.IsValid())
+    {
+        SetOperationMessage(
+            QStringLiteral("草稿已保存，但当前仍有 %1 条校验问题。").arg(saveResult.validation_result.issues.size()),
+            true);
+    }
+
+    return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
 }
 
 void RequirementWidget::BuildUi()
@@ -41,8 +80,11 @@ void RequirementWidget::BuildUi()
     auto* projectPathLayout = new QHBoxLayout();
     auto* projectPathLabel = new QLabel(QStringLiteral("项目目录"), this);
     m_project_root_edit = new QLineEdit(this);
-    m_project_root_edit->setText(QDir::current().filePath(QStringLiteral("requirement-draft-project")));
+    m_project_root_edit->setReadOnly(true);
+    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
     m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
+    m_browse_button->setVisible(false);
+    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
     projectPathLayout->addWidget(projectPathLabel);
     projectPathLayout->addWidget(m_project_root_edit, 1);
     projectPathLayout->addWidget(m_browse_button);
@@ -81,7 +123,6 @@ void RequirementWidget::BuildUi()
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
 
-    connect(m_browse_button, &QPushButton::clicked, this, [this]() { OnBrowseProjectRootClicked(); });
     connect(m_validate_button, &QPushButton::clicked, this, [this]() { OnValidateClicked(); });
     connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
     connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
@@ -793,24 +834,15 @@ void RequirementWidget::OnValidateClicked()
 
 void RequirementWidget::OnSaveDraftClicked()
 {
-    const auto model = CollectModelFromForm();
-    const auto saveResult = m_service.SaveDraft(m_project_root_edit->text().trimmed(), model);
-    ApplyValidationResult(saveResult.validation_result);
-    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
-
-    if (saveResult.IsSuccess() && !saveResult.validation_result.IsValid())
-    {
-        SetOperationMessage(
-            QStringLiteral("草稿已保存，但当前仍有 %1 条校验问题。").arg(saveResult.validation_result.issues.size()),
-            true);
-    }
-
+    const auto saveResult = SaveCurrentDraft();
     emit LogMessageGenerated(QStringLiteral("[Requirement] %1").arg(saveResult.message));
 }
 
 void RequirementWidget::OnLoadClicked()
 {
-    const auto loadResult = m_service.LoadDraft(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto loadResult = m_service.LoadDraft(projectRootPath);
     if (loadResult.IsSuccess())
     {
         PopulateForm(loadResult.model);

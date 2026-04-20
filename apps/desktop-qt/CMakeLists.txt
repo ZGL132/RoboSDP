@@ -75,6 +75,7 @@ target_link_libraries(RoboSDPDesktop
         robosdp_errors
         robosdp_logging
         robosdp_config
+        robosdp_infrastructure
         robosdp_repository
         robosdp_requirement
         robosdp_topology

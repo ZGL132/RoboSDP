@@ -1,5 +1,7 @@
 ﻿#include "modules/kinematics/ui/KinematicsWidget.h"
 
+#include "core/infrastructure/ProjectManager.h"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
@@ -196,9 +198,37 @@ KinematicsWidget::KinematicsWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
+    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
+    connect(
+        &projectManager,
+        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
+        this,
+        [this](const QString& newPath) {
+            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
+            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
+        });
+    if (!projectManager.getCurrentProjectPath().isEmpty())
+    {
+        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
+    }
     PopulateForm(m_state.current_model);
     RefreshBackendDiagnostics();
     RenderResults();
+}
+
+QString KinematicsWidget::ModuleName() const
+{
+    return QStringLiteral("Kinematics");
+}
+
+RoboSDP::Infrastructure::ProjectSaveItemResult KinematicsWidget::SaveCurrentDraft()
+{
+    m_state.current_model = CollectModelFromForm();
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
+    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
 }
 
 void KinematicsWidget::TriggerImportUrdf()
@@ -217,8 +247,11 @@ void KinematicsWidget::BuildUi()
     auto* projectPathLabel = new QLabel(QStringLiteral("项目目录"), this);
     m_project_root_edit = new QLineEdit(this);
     m_project_root_edit->setObjectName(QStringLiteral("kinematics_project_root_edit"));
-    m_project_root_edit->setText(QDir::current().filePath(QStringLiteral("kinematics-draft-project")));
+    m_project_root_edit->setReadOnly(true);
+    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
     m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
+    m_browse_button->setVisible(false);
+    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
     projectPathLayout->addWidget(projectPathLabel);
     projectPathLayout->addWidget(m_project_root_edit, 1);
     projectPathLayout->addWidget(m_browse_button);
@@ -276,7 +309,6 @@ void KinematicsWidget::BuildUi()
         FlushPreviewPoseUpdate();
     });
 
-    connect(m_browse_button, &QPushButton::clicked, this, [this]() { OnBrowseProjectRootClicked(); });
     connect(m_import_urdf_button, &QPushButton::clicked, this, [this]() { OnImportUrdfClicked(); });
     connect(m_build_from_topology_button, &QPushButton::clicked, this, [this]() { OnBuildFromTopologyClicked(); });
     connect(m_run_fk_button, &QPushButton::clicked, this, [this]() { OnRunFkClicked(); });
@@ -877,9 +909,11 @@ void KinematicsWidget::OnBrowseProjectRootClicked()
 
 void KinematicsWidget::OnImportUrdfClicked()
 {
-    const QString initialDirectory = m_project_root_edit->text().trimmed().isEmpty()
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const QString initialDirectory = projectRootPath.trimmed().isEmpty()
         ? QDir::currentPath()
-        : m_project_root_edit->text().trimmed();
+        : projectRootPath;
     const QString urdfFilePath = QFileDialog::getOpenFileName(
         this,
         QStringLiteral("选择 URDF 文件"),
@@ -908,7 +942,9 @@ void KinematicsWidget::OnImportUrdfClicked()
 
 void KinematicsWidget::OnBuildFromTopologyClicked()
 {
-    const auto buildResult = m_service.BuildFromTopology(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto buildResult = m_service.BuildFromTopology(projectRootPath);
     if (buildResult.IsSuccess())
     {
         m_state = buildResult.state;
@@ -997,15 +1033,15 @@ void KinematicsWidget::OnSampleWorkspaceClicked()
 
 void KinematicsWidget::OnSaveDraftClicked()
 {
-    m_state.current_model = CollectModelFromForm();
-    const auto saveResult = m_service.SaveDraft(m_project_root_edit->text().trimmed(), m_state);
-    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    const auto saveResult = SaveCurrentDraft();
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(saveResult.message));
 }
 
 void KinematicsWidget::OnLoadClicked()
 {
-    const auto loadResult = m_service.LoadDraft(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto loadResult = m_service.LoadDraft(projectRootPath);
     if (loadResult.IsSuccess())
     {
         m_state = loadResult.state;

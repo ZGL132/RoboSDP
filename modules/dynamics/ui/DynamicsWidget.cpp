@@ -1,6 +1,7 @@
 #include "modules/dynamics/ui/DynamicsWidget.h"
 
 #include "apps/desktop-qt/third_party/qcustomplot/qcustomplot.h"
+#include "core/infrastructure/ProjectManager.h"
 
 #include <QDir>
 #include <QDoubleSpinBox>
@@ -114,10 +115,45 @@ DynamicsWidget::DynamicsWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
+    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
+    connect(
+        &projectManager,
+        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
+        this,
+        [this](const QString& newPath) {
+            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
+            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
+        });
+    if (!projectManager.getCurrentProjectPath().isEmpty())
+    {
+        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
+    }
     PopulateForm(m_state.current_model);
     RenderBackendStatus();
     RenderTorquePlot();
     RenderResults();
+}
+
+QString DynamicsWidget::ModuleName() const
+{
+    return QStringLiteral("Dynamics");
+}
+
+RoboSDP::Infrastructure::ProjectSaveItemResult DynamicsWidget::SaveCurrentDraft()
+{
+    QString validationMessage;
+    if (!ValidateTablesAndHighlight(&validationMessage))
+    {
+        SetOperationMessage(validationMessage, false);
+        return {ModuleName(), false, validationMessage};
+    }
+
+    m_state.current_model = CollectModelFromForm();
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
+    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
 }
 
 void DynamicsWidget::TriggerRunAnalysis()
@@ -136,8 +172,11 @@ void DynamicsWidget::BuildUi()
     auto* projectPathLabel = new QLabel(QStringLiteral("项目目录"), this);
     m_project_root_edit = new QLineEdit(this);
     m_project_root_edit->setObjectName(QStringLiteral("dynamics_project_root_edit"));
-    m_project_root_edit->setText(QDir::current().filePath(QStringLiteral("requirement-draft-project")));
+    m_project_root_edit->setReadOnly(true);
+    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
     m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
+    m_browse_button->setVisible(false);
+    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
     projectPathLayout->addWidget(projectPathLabel);
     projectPathLayout->addWidget(m_project_root_edit, 1);
     projectPathLayout->addWidget(m_browse_button);
@@ -181,7 +220,6 @@ void DynamicsWidget::BuildUi()
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
 
-    connect(m_browse_button, &QPushButton::clicked, this, [this]() { OnBrowseProjectRootClicked(); });
     connect(m_build_from_kinematics_button, &QPushButton::clicked, this, [this]() { OnBuildFromKinematicsClicked(); });
     connect(m_run_analysis_button, &QPushButton::clicked, this, [this]() { OnRunAnalysisClicked(); });
     connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
@@ -740,7 +778,9 @@ void DynamicsWidget::OnBrowseProjectRootClicked()
 
 void DynamicsWidget::OnBuildFromKinematicsClicked()
 {
-    const auto buildResult = m_service.BuildFromKinematics(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto buildResult = m_service.BuildFromKinematics(projectRootPath);
     if (buildResult.IsSuccess())
     {
         m_state = buildResult.state;
@@ -765,8 +805,10 @@ void DynamicsWidget::OnRunAnalysisClicked()
     }
 
     m_state.current_model = CollectModelFromForm();
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto analyzeResult = m_service.RunInverseDynamicsChain(
-        m_project_root_edit->text().trimmed(),
+        projectRootPath,
         m_state);
 
     if (analyzeResult.IsSuccess())
@@ -788,23 +830,15 @@ void DynamicsWidget::OnRunAnalysisClicked()
 
 void DynamicsWidget::OnSaveDraftClicked()
 {
-    QString validationMessage;
-    if (!ValidateTablesAndHighlight(&validationMessage))
-    {
-        SetOperationMessage(validationMessage, false);
-        emit LogMessageGenerated(QStringLiteral("[Dynamics] %1").arg(validationMessage));
-        return;
-    }
-
-    m_state.current_model = CollectModelFromForm();
-    const auto saveResult = m_service.SaveDraft(m_project_root_edit->text().trimmed(), m_state);
-    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    const auto saveResult = SaveCurrentDraft();
     emit LogMessageGenerated(QStringLiteral("[Dynamics] %1").arg(saveResult.message));
 }
 
 void DynamicsWidget::OnLoadClicked()
 {
-    const auto loadResult = m_service.LoadDraft(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto loadResult = m_service.LoadDraft(projectRootPath);
     if (loadResult.IsSuccess())
     {
         m_state = loadResult.state;

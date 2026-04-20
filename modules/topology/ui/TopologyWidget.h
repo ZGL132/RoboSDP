@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/infrastructure/ProjectSaveCoordinator.h"
 #include "core/logging/ConsoleLogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/requirement/persistence/RequirementJsonStorage.h"
@@ -8,6 +9,7 @@
 #include "modules/topology/service/TopologyTemplateLoader.h"
 
 #include <QHash>
+#include <QString>
 #include <QWidget>
 
 #include <array>
@@ -31,12 +33,18 @@ namespace RoboSDP::Topology::Ui
  * 页面负责模板选择、候选生成、推荐展示以及保存/加载，
  * 不承载真实三维实体、复杂对比窗口和二期结构设计能力。
  */
-class TopologyWidget : public QWidget
+class TopologyWidget : public QWidget, public RoboSDP::Infrastructure::IProjectSaveParticipant
 {
     Q_OBJECT
 
 public:
     explicit TopologyWidget(QWidget* parent = nullptr);
+
+    /// @brief 返回全局保存日志使用的模块名称。
+    QString ModuleName() const override;
+
+    /// @brief 保存当前 Topology 草稿，供模块按钮和全局保存共用。
+    RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
 signals:
     /// 将 Topology 操作消息抛给主窗口底部日志面板。

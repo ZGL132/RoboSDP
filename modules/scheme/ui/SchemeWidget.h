@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/infrastructure/ProjectSaveCoordinator.h"
 #include "core/logging/ConsoleLogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/dynamics/persistence/DynamicJsonStorage.h"
@@ -12,6 +13,7 @@
 #include "modules/selection/persistence/SelectionJsonStorage.h"
 #include "modules/topology/persistence/TopologyJsonStorage.h"
 
+#include <QString>
 #include <QWidget>
 
 class QLabel;
@@ -31,12 +33,18 @@ namespace RoboSDP::Scheme::Ui
  * 3. 通过日志信号把最小操作结果回传给主窗口。
  * 不承载复杂方案对比、图表和上游原始对象浏览能力。
  */
-class SchemeWidget : public QWidget
+class SchemeWidget : public QWidget, public RoboSDP::Infrastructure::IProjectSaveParticipant
 {
     Q_OBJECT
 
 public:
     explicit SchemeWidget(QWidget* parent = nullptr);
+
+    /// @brief 返回全局保存日志使用的模块名称。
+    QString ModuleName() const override;
+
+    /// @brief 保存当前 Scheme 快照，供模块按钮和全局保存共用。
+    RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
 signals:
     /// 向主窗口输出一条简短日志消息。

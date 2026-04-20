@@ -1,5 +1,7 @@
 #include "modules/scheme/ui/SchemeWidget.h"
 
+#include "core/infrastructure/ProjectManager.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
@@ -38,7 +40,53 @@ SchemeWidget::SchemeWidget(QWidget* parent)
     , m_snapshot(m_snapshot_service.CreateDefaultSnapshot())
 {
     BuildUi();
+    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
+    connect(
+        &projectManager,
+        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
+        this,
+        [this](const QString& newPath) {
+            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
+            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
+        });
+    if (!projectManager.getCurrentProjectPath().isEmpty())
+    {
+        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
+    }
     RenderSnapshotSummary();
+}
+
+QString SchemeWidget::ModuleName() const
+{
+    return QStringLiteral("Scheme");
+}
+
+RoboSDP::Infrastructure::ProjectSaveItemResult SchemeWidget::SaveCurrentDraft()
+{
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto buildResult = m_snapshot_service.BuildSnapshot(projectRootPath);
+    if (!buildResult.IsSuccess())
+    {
+        SetOperationMessage(buildResult.message, false);
+        return {ModuleName(), false, buildResult.message};
+    }
+
+    const auto saveResult = m_snapshot_service.SaveSnapshot(projectRootPath, buildResult.snapshot);
+    if (saveResult.IsSuccess())
+    {
+        m_snapshot = buildResult.snapshot;
+        m_snapshot.meta.updated_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        m_last_snapshot_file_path = saveResult.snapshot_file_path;
+        m_has_snapshot = true;
+        RenderSnapshotSummary();
+    }
+
+    const QString message = saveResult.IsSuccess()
+        ? QStringLiteral("SchemeSnapshot 已重新生成并保存。")
+        : saveResult.message;
+    SetOperationMessage(message, saveResult.IsSuccess());
+    return {ModuleName(), saveResult.IsSuccess(), message};
 }
 
 void SchemeWidget::BuildUi()
@@ -49,8 +97,12 @@ void SchemeWidget::BuildUi()
 
     auto* projectPathLayout = new QHBoxLayout();
     projectPathLayout->addWidget(new QLabel(QStringLiteral("项目目录"), this));
-    m_project_root_edit = new QLineEdit(QDir::currentPath(), this);
+    m_project_root_edit = new QLineEdit(this);
+    m_project_root_edit->setReadOnly(true);
+    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
     m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
+    m_browse_button->setVisible(false);
+    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
     projectPathLayout->addWidget(m_project_root_edit, 1);
     projectPathLayout->addWidget(m_browse_button);
 
@@ -66,7 +118,7 @@ void SchemeWidget::BuildUi()
     actionLayout->addStretch();
 
     m_operation_label = new QLabel(
-        QStringLiteral("就绪：请选择项目目录，然后生成或加载 SchemeSnapshot。"),
+        QStringLiteral("就绪：请先通过顶部功能区新建或打开项目，然后生成或加载 SchemeSnapshot。"),
         this);
     m_operation_label->setWordWrap(true);
 
@@ -126,7 +178,6 @@ void SchemeWidget::BuildUi()
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
 
-    connect(m_browse_button, &QPushButton::clicked, this, [this]() { OnBrowseProjectRootClicked(); });
     connect(
         m_generate_snapshot_button,
         &QPushButton::clicked,
@@ -212,7 +263,9 @@ void SchemeWidget::SetOperationMessage(const QString& message, bool success)
 
 void SchemeWidget::OnGenerateSnapshotClicked()
 {
-    const auto buildResult = m_snapshot_service.BuildSnapshot(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto buildResult = m_snapshot_service.BuildSnapshot(projectRootPath);
     if (buildResult.IsSuccess())
     {
         m_snapshot = buildResult.snapshot;
@@ -227,35 +280,15 @@ void SchemeWidget::OnGenerateSnapshotClicked()
 
 void SchemeWidget::OnRegenerateAndSaveSnapshotClicked()
 {
-    const QString projectRootPath = m_project_root_edit->text().trimmed();
-    const auto buildResult = m_snapshot_service.BuildSnapshot(projectRootPath);
-    if (!buildResult.IsSuccess())
-    {
-        SetOperationMessage(buildResult.message, false);
-        emit LogMessageGenerated(QStringLiteral("[Scheme] %1").arg(buildResult.message));
-        return;
-    }
-
-    const auto saveResult = m_snapshot_service.SaveSnapshot(projectRootPath, buildResult.snapshot);
-    if (saveResult.IsSuccess())
-    {
-        m_snapshot = buildResult.snapshot;
-        m_snapshot.meta.updated_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-        m_last_snapshot_file_path = saveResult.snapshot_file_path;
-        m_has_snapshot = true;
-        RenderSnapshotSummary();
-    }
-
-    const QString message = saveResult.IsSuccess()
-        ? QStringLiteral("SchemeSnapshot 已重新生成并保存。")
-        : saveResult.message;
-    SetOperationMessage(message, saveResult.IsSuccess());
-    emit LogMessageGenerated(QStringLiteral("[Scheme] %1").arg(message));
+    const auto saveResult = SaveCurrentDraft();
+    emit LogMessageGenerated(QStringLiteral("[Scheme] %1").arg(saveResult.message));
 }
 
 void SchemeWidget::OnLoadSnapshotClicked()
 {
-    const auto loadResult = m_snapshot_service.LoadSnapshot(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto loadResult = m_snapshot_service.LoadSnapshot(projectRootPath);
     if (loadResult.IsSuccess())
     {
         m_snapshot = loadResult.snapshot;
@@ -278,8 +311,10 @@ void SchemeWidget::OnExportJsonClicked()
         return;
     }
 
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto exportResult =
-        m_export_service.ExportAsJson(m_project_root_edit->text().trimmed(), m_snapshot);
+        m_export_service.ExportAsJson(projectRootPath, m_snapshot);
     if (exportResult.IsSuccess())
     {
         m_last_export_file_path = exportResult.export_file_path;

@@ -1,10 +1,12 @@
 #pragma once
 
+#include "core/infrastructure/ProjectSaveCoordinator.h"
 #include "core/logging/ConsoleLogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/requirement/service/RequirementService.h"
 
 #include <QHash>
+#include <QString>
 #include <QWidget>
 
 class QCheckBox;
@@ -26,12 +28,18 @@ namespace RoboSDP::Requirement::Ui
  * 页面只承担字段录入、保存/加载和基础校验结果展示，
  * 不做视觉美化扩展，也不接入三维联动和复杂结果窗口。
  */
-class RequirementWidget : public QWidget
+class RequirementWidget : public QWidget, public RoboSDP::Infrastructure::IProjectSaveParticipant
 {
     Q_OBJECT
 
 public:
     explicit RequirementWidget(QWidget* parent = nullptr);
+
+    /// @brief 返回全局保存日志使用的模块名称。
+    QString ModuleName() const override;
+
+    /// @brief 保存当前 Requirement 草稿，供模块按钮和全局保存共用。
+    RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
 signals:
     /// 将 Requirement 操作消息抛给主窗口底部日志面板。

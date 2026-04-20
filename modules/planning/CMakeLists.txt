@@ -24,6 +24,7 @@ target_link_libraries(robosdp_planning
         Qt${QT_VERSION_MAJOR}::Widgets
         robosdp_errors
         robosdp_logging
+        robosdp_infrastructure
         robosdp_repository
         robosdp_kinematics
         robosdp_selection

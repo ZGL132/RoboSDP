@@ -1,5 +1,7 @@
 #include "modules/planning/ui/PlanningWidget.h"
 
+#include "core/infrastructure/ProjectManager.h"
+
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
@@ -62,8 +64,43 @@ PlanningWidget::PlanningWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
+    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
+    connect(
+        &projectManager,
+        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
+        this,
+        [this](const QString& newPath) {
+            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
+            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
+        });
+    if (!projectManager.getCurrentProjectPath().isEmpty())
+    {
+        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
+    }
     PopulateForm(m_state.current_scene);
     RenderResults();
+}
+
+QString PlanningWidget::ModuleName() const
+{
+    return QStringLiteral("Planning");
+}
+
+RoboSDP::Infrastructure::ProjectSaveItemResult PlanningWidget::SaveCurrentDraft()
+{
+    QString validationMessage;
+    if (!ValidateJointTableAndHighlight(&validationMessage))
+    {
+        SetOperationMessage(validationMessage, false);
+        return {ModuleName(), false, validationMessage};
+    }
+
+    m_state.current_scene = CollectSceneFromForm();
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
+    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
 }
 
 void PlanningWidget::BuildUi()
@@ -74,8 +111,12 @@ void PlanningWidget::BuildUi()
 
     auto* projectPathLayout = new QHBoxLayout();
     projectPathLayout->addWidget(new QLabel(QStringLiteral("项目目录"), this));
-    m_project_root_edit = new QLineEdit(QDir::current().filePath(QStringLiteral("requirement-draft-project")), this);
+    m_project_root_edit = new QLineEdit(this);
+    m_project_root_edit->setReadOnly(true);
+    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
     m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
+    m_browse_button->setVisible(false);
+    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
     projectPathLayout->addWidget(m_project_root_edit, 1);
     projectPathLayout->addWidget(m_browse_button);
 
@@ -162,7 +203,6 @@ void PlanningWidget::BuildUi()
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
 
-    connect(m_browse_button, &QPushButton::clicked, this, [this]() { OnBrowseProjectRootClicked(); });
     connect(m_build_scene_button, &QPushButton::clicked, this, [this]() { OnBuildSceneClicked(); });
     connect(m_run_verification_button, &QPushButton::clicked, this, [this]() { OnRunVerificationClicked(); });
     connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
@@ -400,7 +440,9 @@ void PlanningWidget::OnBrowseProjectRootClicked()
 
 void PlanningWidget::OnBuildSceneClicked()
 {
-    const auto buildResult = m_service.BuildPlanningScene(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto buildResult = m_service.BuildPlanningScene(projectRootPath);
     if (buildResult.IsSuccess())
     {
         m_state = buildResult.state;
@@ -423,8 +465,10 @@ void PlanningWidget::OnRunVerificationClicked()
     }
 
     m_state.current_scene = CollectSceneFromForm();
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto runResult = m_service.RunPointToPointVerification(
-        m_project_root_edit->text().trimmed(),
+        projectRootPath,
         m_state);
     if (runResult.IsSuccess())
     {
@@ -439,23 +483,15 @@ void PlanningWidget::OnRunVerificationClicked()
 
 void PlanningWidget::OnSaveDraftClicked()
 {
-    QString validationMessage;
-    if (!ValidateJointTableAndHighlight(&validationMessage))
-    {
-        SetOperationMessage(validationMessage, false);
-        emit LogMessageGenerated(QStringLiteral("[Planning] %1").arg(validationMessage));
-        return;
-    }
-
-    m_state.current_scene = CollectSceneFromForm();
-    const auto saveResult = m_service.SaveDraft(m_project_root_edit->text().trimmed(), m_state);
-    SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    const auto saveResult = SaveCurrentDraft();
     emit LogMessageGenerated(QStringLiteral("[Planning] %1").arg(saveResult.message));
 }
 
 void PlanningWidget::OnLoadClicked()
 {
-    const auto loadResult = m_service.LoadDraft(m_project_root_edit->text().trimmed());
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    const auto loadResult = m_service.LoadDraft(projectRootPath);
     if (loadResult.IsSuccess())
     {
         m_state = loadResult.state;

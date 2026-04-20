@@ -2,6 +2,8 @@ add_library(robosdp_repository STATIC
     IJsonRepository.h
     LocalJsonRepository.h
     LocalJsonRepository.cpp
+    ProjectService.h
+    ProjectService.cpp
 )
 
 target_include_directories(robosdp_repository

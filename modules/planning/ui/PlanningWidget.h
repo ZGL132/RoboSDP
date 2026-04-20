@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/infrastructure/ProjectSaveCoordinator.h"
 #include "core/logging/ConsoleLogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/kinematics/persistence/KinematicJsonStorage.h"
@@ -7,6 +8,7 @@
 #include "modules/planning/service/PlanningVerificationService.h"
 #include "modules/selection/persistence/SelectionJsonStorage.h"
 
+#include <QString>
 #include <QWidget>
 
 class QDoubleSpinBox;
@@ -29,12 +31,18 @@ namespace RoboSDP::Planning::Ui
  * 3. 用表格与文本摘要展示轨迹、碰撞、自碰撞和节拍结果；
  * 4. 支持 Planning JSON 保存与加载。
  */
-class PlanningWidget : public QWidget
+class PlanningWidget : public QWidget, public RoboSDP::Infrastructure::IProjectSaveParticipant
 {
     Q_OBJECT
 
 public:
     explicit PlanningWidget(QWidget* parent = nullptr);
+
+    /// @brief 返回全局保存日志使用的模块名称。
+    QString ModuleName() const override;
+
+    /// @brief 保存当前 Planning 草稿，供模块按钮和全局保存共用。
+    RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
 signals:
     void LogMessageGenerated(const QString& message);
