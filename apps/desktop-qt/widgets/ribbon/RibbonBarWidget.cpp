@@ -31,6 +31,7 @@ void RibbonBarWidget::BuildUi()
     m_tabs->addTab(CreateDriveSelectionTab(), QStringLiteral("驱动选型"));
     m_tabs->addTab(CreatePlanningAnalysisTab(), QStringLiteral("规划与分析"));
     m_tabs->addTab(CreateResultExportTab(), QStringLiteral("结果与导出"));
+    m_tabs->addTab(CreateViewTab(), QStringLiteral("视图"));
 
     rootLayout->addWidget(m_tabs);
     setMaximumHeight(128);
@@ -177,6 +178,105 @@ QWidget* RibbonBarWidget::CreateResultExportTab()
     return tab;
 }
 
+QWidget* RibbonBarWidget::CreateViewTab()
+{
+    auto* tab = new QWidget(this);
+    auto* layout = new QHBoxLayout(tab);
+    layout->setContentsMargins(8, 4, 8, 6);
+    layout->setSpacing(8);
+
+    layout->addWidget(CreateButtonGroup(
+        QStringLiteral("三维显示"),
+        {
+            CreateToggleButton(
+                QStringLiteral("显示骨架"),
+                QStringLiteral("显示 link 节点、joint 高亮和父子连杆线。"),
+                true,
+                &RibbonBarWidget::signalSetSkeletonVisible),
+            CreateToggleButton(
+                QStringLiteral("Visual"),
+                QStringLiteral("显示 URDF visual mesh，用于检查外观几何与骨架是否重合。"),
+                true,
+                &RibbonBarWidget::signalSetVisualMeshVisible),
+            CreateToggleButton(
+                QStringLiteral("Collision"),
+                QStringLiteral("以半透明线框显示 URDF collision mesh；碰撞计算仍在后续阶段接入。"),
+                false,
+                &RibbonBarWidget::signalSetCollisionMeshVisible),
+            CreateToggleButton(
+                QStringLiteral("关节轴"),
+                QStringLiteral("显示 URDF joint axis 箭头，方向随当前 FK 姿态更新。"),
+                true,
+                &RibbonBarWidget::signalSetJointAxesVisible),
+        }));
+
+    layout->addWidget(CreateButtonGroup(
+        QStringLiteral("标注与相机"),
+        {
+            CreateToggleButton(
+                QStringLiteral("坐标系"),
+                QStringLiteral("显示中央三维视图中的世界坐标系。"),
+                true,
+                &RibbonBarWidget::signalSetAxesVisible),
+            CreateToggleButton(
+                QStringLiteral("Link 标签"),
+                QStringLiteral("显示 URDF Link 名称标签。"),
+                true,
+                &RibbonBarWidget::signalSetLinkLabelsVisible),
+            CreateToggleButton(
+                QStringLiteral("Joint 标签"),
+                QStringLiteral("显示 URDF Joint 名称标签。"),
+                true,
+                &RibbonBarWidget::signalSetJointLabelsVisible),
+            CreateResetCameraButton(),
+        }));
+
+    layout->addWidget(CreateButtonGroup(
+        QStringLiteral("相机视角"),
+        {
+            CreateCameraPresetButton(
+                QStringLiteral("正视图"),
+                QStringLiteral("沿 -Y 方向观察模型，Z 轴向上。"),
+                &RibbonBarWidget::signalCameraFrontViewRequested),
+            CreateCameraPresetButton(
+                QStringLiteral("侧视图"),
+                QStringLiteral("沿 +X 方向观察模型，Z 轴向上。"),
+                &RibbonBarWidget::signalCameraSideViewRequested),
+            CreateCameraPresetButton(
+                QStringLiteral("俯视图"),
+                QStringLiteral("沿 +Z 方向俯视模型，Y 轴向上。"),
+                &RibbonBarWidget::signalCameraTopViewRequested),
+            CreateCameraPresetButton(
+                QStringLiteral("等轴测"),
+                QStringLiteral("从 (1, -1, 1) 方向观察模型，适合检查整体结构。"),
+                &RibbonBarWidget::signalCameraIsometricViewRequested),
+        }));
+
+    layout->addWidget(CreateButtonGroup(
+        QStringLiteral("页面布置"),
+        {
+            CreateToggleButton(
+                QStringLiteral("项目树"),
+                QStringLiteral("显示或隐藏左侧项目树导航面板。"),
+                true,
+                &RibbonBarWidget::signalSetProjectTreeVisible),
+            CreateToggleButton(
+                QStringLiteral("属性面板"),
+                QStringLiteral("显示或隐藏右侧业务属性面板。"),
+                true,
+                &RibbonBarWidget::signalSetPropertyPanelVisible),
+            CreateToggleButton(
+                QStringLiteral("输出信息"),
+                QStringLiteral("显示或隐藏底部输出信息面板。"),
+                true,
+                &RibbonBarWidget::signalSetOutputPanelVisible),
+            CreateDisabledButton(QStringLiteral("布局恢复"), QStringLiteral("等待统一窗口布局持久化服务接入。")),
+        }));
+
+    layout->addStretch();
+    return tab;
+}
+
 QToolButton* RibbonBarWidget::CreateActionButton(const QString& text, const QString& tooltip)
 {
     auto* button = new QToolButton(this);
@@ -186,6 +286,22 @@ QToolButton* RibbonBarWidget::CreateActionButton(const QString& text, const QStr
     button->setMinimumHeight(44);
     button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     button->setEnabled(true);
+    return button;
+}
+
+QToolButton* RibbonBarWidget::CreateToggleButton(
+    const QString& text,
+    const QString& tooltip,
+    bool checked,
+    void (RibbonBarWidget::*toggleSignal)(bool))
+{
+    auto* button = CreateActionButton(text, tooltip);
+    button->setCheckable(true);
+    button->setChecked(checked);
+    connect(button, &QToolButton::toggled, this, [this, toggleSignal](bool visible) {
+        // 中文说明：视图页签只发布显示状态变化，不直接接触 VTK Actor 或 DockWidget 细节。
+        (this->*toggleSignal)(visible);
+    });
     return button;
 }
 
@@ -221,6 +337,31 @@ QToolButton* RibbonBarWidget::CreateGlobalSaveButton()
     connect(button, &QToolButton::clicked, this, [this]() {
         // 中文说明：Ribbon 只发出全局保存命令，具体保存编排由 MainWindow / ProjectSaveCoordinator 处理。
         emit signalGlobalSaveRequested();
+    });
+    return button;
+}
+
+QToolButton* RibbonBarWidget::CreateResetCameraButton()
+{
+    auto* button = CreateActionButton(
+        QStringLiteral("重置相机"),
+        QStringLiteral("将相机重新对准当前预览场景。"));
+    connect(button, &QToolButton::clicked, this, [this]() {
+        // 中文说明：相机操作属于全局视图命令，由 MainWindow 转交中央三维视图执行。
+        emit signalResetCameraRequested();
+    });
+    return button;
+}
+
+QToolButton* RibbonBarWidget::CreateCameraPresetButton(
+    const QString& text,
+    const QString& tooltip,
+    void (RibbonBarWidget::*cameraSignal)())
+{
+    auto* button = CreateActionButton(text, tooltip);
+    connect(button, &QToolButton::clicked, this, [this, cameraSignal]() {
+        // 中文说明：相机预设只表达视角意图，具体 VTK camera 设置由中央视图封装。
+        (this->*cameraSignal)();
     });
     return button;
 }

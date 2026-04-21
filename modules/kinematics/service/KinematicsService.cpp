@@ -458,6 +458,7 @@ UrdfImportResult ImportUrdfPreviewWithSharedKernel(
             segment.joint_type = previewSegment.joint_type;
             segment.parent_link_name = previewSegment.parent_link_name;
             segment.child_link_name = previewSegment.child_link_name;
+            segment.joint_axis_xyz = previewSegment.joint_axis_xyz;
             segment.start_position_m =
                 ToPreviewPosition(data.oMf[static_cast<std::size_t>(previewSegment.start_frame_id)].translation());
             segment.end_position_m =

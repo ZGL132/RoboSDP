@@ -88,11 +88,18 @@ SelectionWidget::SelectionWidget(QWidget* parent)
         m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
     }
     RenderState();
+    ConnectDirtyTracking();
+    MarkClean();
 }
 
 QString SelectionWidget::ModuleName() const
 {
     return QStringLiteral("Selection");
+}
+
+bool SelectionWidget::HasUnsavedChanges() const
+{
+    return m_has_unsaved_changes;
 }
 
 RoboSDP::Infrastructure::ProjectSaveItemResult SelectionWidget::SaveCurrentDraft()
@@ -101,7 +108,33 @@ RoboSDP::Infrastructure::ProjectSaveItemResult SelectionWidget::SaveCurrentDraft
         RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
     SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    if (saveResult.IsSuccess())
+    {
+        MarkClean();
+    }
     return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
+}
+
+void SelectionWidget::ConnectDirtyTracking()
+{
+    for (QLineEdit* editor : findChildren<QLineEdit*>())
+    {
+        if (editor == m_project_root_edit)
+        {
+            continue;
+        }
+        connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
+    }
+}
+
+void SelectionWidget::MarkDirty()
+{
+    m_has_unsaved_changes = true;
+}
+
+void SelectionWidget::MarkClean()
+{
+    m_has_unsaved_changes = false;
 }
 
 void SelectionWidget::BuildUi()
@@ -274,6 +307,7 @@ void SelectionWidget::OnBrowseCatalogRootClicked()
     if (!path.isEmpty())
     {
         m_catalog_root_edit->setText(QDir::toNativeSeparators(path));
+        MarkDirty();
     }
 }
 
@@ -289,6 +323,7 @@ void SelectionWidget::OnRunSelectionClicked()
         m_state = runResult.state;
         RenderState();
         m_catalog_root_edit->setText(QDir::toNativeSeparators(runResult.catalog_directory_path));
+        MarkDirty();
     }
 
     SetOperationMessage(runResult.message, runResult.IsSuccess());
@@ -310,6 +345,7 @@ void SelectionWidget::OnLoadClicked()
     {
         m_state = loadResult.state;
         RenderState();
+        MarkClean();
     }
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());

@@ -43,6 +43,7 @@ struct MinimalUrdfJointInput
     int child_link_index = -1;
     std::array<double, 3> xyz {0.0, 0.0, 0.0};
     std::array<double, 3> rpy_deg {0.0, 0.0, 0.0};
+    std::array<double, 3> axis_xyz {0.0, 0.0, 1.0};
 };
 
 struct MinimalUrdfLinkInput
@@ -190,6 +191,28 @@ std::array<double, 3> ParseOptionalTriple(
     return result;
 }
 
+std::array<double, 3> NormalizeUrdfJointAxis(
+    const QString& jointId,
+    const std::array<double, 3>& rawAxis,
+    QString& warningMessage)
+{
+    const double squaredNorm =
+        rawAxis[0] * rawAxis[0] +
+        rawAxis[1] * rawAxis[1] +
+        rawAxis[2] * rawAxis[2];
+    if (!IsFiniteValue(squaredNorm) || squaredNorm <= 1.0e-18)
+    {
+        // 中文说明：URDF 规范默认 revolute/continuous joint 轴为 Z；零向量无法建模，回退并输出诊断。
+        AppendWarningMessage(
+            warningMessage,
+            QStringLiteral("URDF joint=%1 的 axis 为零向量，已回退为默认 Z 轴。").arg(jointId));
+        return {0.0, 0.0, 1.0};
+    }
+
+    const double norm = std::sqrt(squaredNorm);
+    return {rawAxis[0] / norm, rawAxis[1] / norm, rawAxis[2] / norm};
+}
+
 struct ResolvedMeshPath
 {
     QString absolute_file_path;
@@ -268,11 +291,11 @@ ResolvedMeshPath ResolveMeshFilePath(
         QStringList candidatePaths;
         for (const QString& searchDirectory : meshSearchDirectories)
         {
-            const QFileInfo searchInfo(searchDirectory);
             candidatePaths.push_back(QDir(searchDirectory).absoluteFilePath(packageRelativePath));
-            if (!relativeInsidePackage.trimmed().isEmpty() &&
-                searchInfo.fileName().compare(packageName, Qt::CaseInsensitive) == 0)
+            if (!relativeInsidePackage.trimmed().isEmpty())
             {
+                // 中文说明：当 URDF 位于 package_root/urdf 下时，搜索目录通常已经是 package root，
+                // 此时 package://pkg/meshes/a.stl 应允许直接解析为 package_root/meshes/a.stl。
                 candidatePaths.push_back(QDir(searchDirectory).absoluteFilePath(relativeInsidePackage));
             }
         }
@@ -589,6 +612,14 @@ MinimalUrdfModelInput ReadMinimalUrdfModel(const RoboSDP::Kinematics::Dto::Kinem
                     rpyRad[1] * 180.0 / kPi,
                     rpyRad[2] * 180.0 / kPi};
             }
+            else if (insideJoint && elementName == QStringLiteral("axis"))
+            {
+                // 中文说明：axis 表达在 joint 局部坐标系中，后续直接交给 Pinocchio 任意轴 Revolute 模型。
+                currentJoint.axis_xyz = ParseOptionalTriple(
+                    reader.attributes().value(QStringLiteral("xyz")).toString(),
+                    QStringLiteral("joint.axis.xyz"),
+                    {0.0, 0.0, 1.0});
+            }
             else if (elementName == QStringLiteral("visual"))
             {
                 ++visualDepth;
@@ -697,6 +728,8 @@ MinimalUrdfModelInput ReadMinimalUrdfModel(const RoboSDP::Kinematics::Dto::Kinem
 
                 currentJoint.parent_link_index = ensureLinkIndex(currentJoint.parent_link_name);
                 currentJoint.child_link_index = ensureLinkIndex(currentJoint.child_link_name);
+                currentJoint.axis_xyz =
+                    NormalizeUrdfJointAxis(currentJoint.joint_id, currentJoint.axis_xyz, model.warning_message);
                 const int jointIndex = static_cast<int>(model.joints.size());
                 model.joints.push_back(currentJoint);
                 model.links[static_cast<std::size_t>(currentJoint.child_link_index)].parent_joint_index = jointIndex;
@@ -998,6 +1031,7 @@ SharedRobotKernelAcquireResult BuildKernel(
                     const QString& jointType,
                     const QString& parentLinkName,
                     const QString& childLinkName,
+                    const std::array<double, 3>& jointAxis,
                     int startFrameId,
                     int endFrameId)
             {
@@ -1006,6 +1040,7 @@ SharedRobotKernelAcquireResult BuildKernel(
                     jointType,
                     parentLinkName,
                     childLinkName,
+                    jointAxis,
                     startFrameId,
                     endFrameId});
             };
@@ -1033,6 +1068,7 @@ SharedRobotKernelAcquireResult BuildKernel(
                         urdfJoint.joint_type,
                         urdfJoint.parent_link_name,
                         urdfJoint.child_link_name,
+                        urdfJoint.axis_xyz,
                         parentPreviewFrameId,
                         fixedChildFrameId);
                     continue;
@@ -1049,9 +1085,13 @@ SharedRobotKernelAcquireResult BuildKernel(
 
                 const pinocchio::SE3 jointPlacement =
                     parentJoint == 0 ? BuildSe3FromPose(model.base_frame) * accumulatedPlacement : accumulatedPlacement;
+                // 中文说明：URDF axis 表达在 joint 局部坐标系中；使用任意轴 Revolute，避免全部硬编码为 Z 轴。
                 const pinocchio::JointIndex currentJoint = nativeModel->addJoint(
                     parentJoint,
-                    SharedJointModelRZ(),
+                    SharedJointModelRevoluteUnaligned(
+                        urdfJoint.axis_xyz[0],
+                        urdfJoint.axis_xyz[1],
+                        urdfJoint.axis_xyz[2]),
                     jointPlacement,
                     urdfJoint.joint_id.toStdString());
                 nativeModel->appendBodyToJoint(currentJoint, BuildPlaceholderInertia(), pinocchio::SE3::Identity());
@@ -1068,6 +1108,7 @@ SharedRobotKernelAcquireResult BuildKernel(
                     urdfJoint.joint_type,
                     urdfJoint.parent_link_name,
                     urdfJoint.child_link_name,
+                    urdfJoint.axis_xyz,
                     parentPreviewFrameId,
                     childLinkFrameId);
                 parentJoint = currentJoint;

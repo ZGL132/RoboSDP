@@ -1,4 +1,6 @@
 add_library(robosdp_infrastructure STATIC
+    ProjectDirtyDependencyGraph.h
+    ProjectDirtyDependencyGraph.cpp
     ProjectManager.h
     ProjectManager.cpp
     ProjectSaveCoordinator.h

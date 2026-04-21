@@ -55,6 +55,51 @@ signals:
     /// @brief 请求主窗口切换到 Scheme 方案快照与导出页面。
     void signalNavigateToScheme();
 
+    /// @brief 请求设置中央三维视图中的骨架显示状态。
+    void signalSetSkeletonVisible(bool visible);
+
+    /// @brief 请求设置中央三维视图中的 visual mesh 显示状态。
+    void signalSetVisualMeshVisible(bool visible);
+
+    /// @brief 请求设置中央三维视图中的 collision mesh 显示状态。
+    void signalSetCollisionMeshVisible(bool visible);
+
+    /// @brief 请求设置中央三维视图中的关节轴显示状态。
+    void signalSetJointAxesVisible(bool visible);
+
+    /// @brief 请求设置中央三维视图中的坐标系显示状态。
+    void signalSetAxesVisible(bool visible);
+
+    /// @brief 请求设置中央三维视图中的 Link 标签显示状态。
+    void signalSetLinkLabelsVisible(bool visible);
+
+    /// @brief 请求设置中央三维视图中的 Joint 标签显示状态。
+    void signalSetJointLabelsVisible(bool visible);
+
+    /// @brief 请求重置中央三维视图相机。
+    void signalResetCameraRequested();
+
+    /// @brief 请求切换中央三维视图到正视图。
+    void signalCameraFrontViewRequested();
+
+    /// @brief 请求切换中央三维视图到侧视图。
+    void signalCameraSideViewRequested();
+
+    /// @brief 请求切换中央三维视图到俯视图。
+    void signalCameraTopViewRequested();
+
+    /// @brief 请求切换中央三维视图到等轴测视图。
+    void signalCameraIsometricViewRequested();
+
+    /// @brief 请求设置左侧项目树显示状态。
+    void signalSetProjectTreeVisible(bool visible);
+
+    /// @brief 请求设置右侧属性面板显示状态。
+    void signalSetPropertyPanelVisible(bool visible);
+
+    /// @brief 请求设置底部输出信息面板显示状态。
+    void signalSetOutputPanelVisible(bool visible);
+
 private:
     void BuildUi();
     QWidget* CreateFileTab();
@@ -63,11 +108,22 @@ private:
     QWidget* CreateDriveSelectionTab();
     QWidget* CreatePlanningAnalysisTab();
     QWidget* CreateResultExportTab();
+    QWidget* CreateViewTab();
 
     QToolButton* CreateActionButton(const QString& text, const QString& tooltip);
+    QToolButton* CreateToggleButton(
+        const QString& text,
+        const QString& tooltip,
+        bool checked,
+        void (RibbonBarWidget::*toggleSignal)(bool));
     QToolButton* CreateNewProjectButton();
     QToolButton* CreateOpenProjectButton();
     QToolButton* CreateGlobalSaveButton();
+    QToolButton* CreateResetCameraButton();
+    QToolButton* CreateCameraPresetButton(
+        const QString& text,
+        const QString& tooltip,
+        void (RibbonBarWidget::*cameraSignal)());
     QToolButton* CreateNavigationButton(
         const QString& text,
         const QString& tooltip,

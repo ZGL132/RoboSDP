@@ -40,6 +40,9 @@ public:
     /// @brief 保存当前 Selection 草稿，供模块按钮和全局保存共用。
     RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
+    /// @brief 返回当前 Selection 页面是否存在未保存变更。
+    bool HasUnsavedChanges() const override;
+
 signals:
     void LogMessageGenerated(const QString& message);
 
@@ -48,6 +51,9 @@ private:
     void SetupResultTableColumns();
     void RenderState();
     void SetOperationMessage(const QString& message, bool success);
+    void ConnectDirtyTracking();
+    void MarkDirty();
+    void MarkClean();
 
     void OnBrowseProjectRootClicked();
     void OnBrowseCatalogRootClicked();
@@ -62,6 +68,7 @@ private:
     RoboSDP::Selection::Persistence::SelectionJsonStorage m_selection_storage;
     RoboSDP::Selection::Service::DriveTrainMatchingService m_service;
     RoboSDP::Selection::Dto::SelectionWorkspaceStateDto m_state;
+    bool m_has_unsaved_changes = false;
 
     QLineEdit* m_project_root_edit = nullptr;
     QLineEdit* m_catalog_root_edit = nullptr;

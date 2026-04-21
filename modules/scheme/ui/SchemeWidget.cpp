@@ -54,11 +54,18 @@ SchemeWidget::SchemeWidget(QWidget* parent)
         m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
     }
     RenderSnapshotSummary();
+    ConnectDirtyTracking();
+    MarkClean();
 }
 
 QString SchemeWidget::ModuleName() const
 {
     return QStringLiteral("Scheme");
+}
+
+bool SchemeWidget::HasUnsavedChanges() const
+{
+    return m_has_unsaved_changes;
 }
 
 RoboSDP::Infrastructure::ProjectSaveItemResult SchemeWidget::SaveCurrentDraft()
@@ -86,7 +93,40 @@ RoboSDP::Infrastructure::ProjectSaveItemResult SchemeWidget::SaveCurrentDraft()
         ? QStringLiteral("SchemeSnapshot 已重新生成并保存。")
         : saveResult.message;
     SetOperationMessage(message, saveResult.IsSuccess());
+    if (saveResult.IsSuccess())
+    {
+        MarkClean();
+    }
     return {ModuleName(), saveResult.IsSuccess(), message};
+}
+
+void SchemeWidget::ConnectDirtyTracking()
+{
+    for (QLineEdit* editor : findChildren<QLineEdit*>())
+    {
+        if (editor == m_project_root_edit || editor->isReadOnly())
+        {
+            continue;
+        }
+        connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
+    }
+    for (QPlainTextEdit* editor : findChildren<QPlainTextEdit*>())
+    {
+        if (!editor->isReadOnly())
+        {
+            connect(editor, &QPlainTextEdit::textChanged, this, [this]() { MarkDirty(); });
+        }
+    }
+}
+
+void SchemeWidget::MarkDirty()
+{
+    m_has_unsaved_changes = true;
+}
+
+void SchemeWidget::MarkClean()
+{
+    m_has_unsaved_changes = false;
 }
 
 void SchemeWidget::BuildUi()
@@ -272,6 +312,7 @@ void SchemeWidget::OnGenerateSnapshotClicked()
         m_last_snapshot_file_path = buildResult.snapshot_file_path;
         m_has_snapshot = true;
         RenderSnapshotSummary();
+        MarkDirty();
     }
 
     SetOperationMessage(buildResult.message, buildResult.IsSuccess());
@@ -295,6 +336,7 @@ void SchemeWidget::OnLoadSnapshotClicked()
         m_last_snapshot_file_path = loadResult.snapshot_file_path;
         m_has_snapshot = true;
         RenderSnapshotSummary();
+        MarkClean();
     }
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());
@@ -323,6 +365,7 @@ void SchemeWidget::OnExportJsonClicked()
         m_snapshot.aggregate.export_meta.last_exported_at = exportResult.export_dto.generated_at;
         m_snapshot.aggregate.export_meta.default_export_format = exportResult.export_dto.export_format;
         RenderSnapshotSummary();
+        MarkDirty();
     }
 
     SetOperationMessage(exportResult.message, exportResult.IsSuccess());

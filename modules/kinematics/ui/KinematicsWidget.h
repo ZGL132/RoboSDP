@@ -54,6 +54,9 @@ public:
     /// @brief 保存当前 Kinematics 草稿，供模块按钮和全局保存共用。
     RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
+    /// @brief 返回当前 Kinematics 页面是否存在未保存变更。
+    bool HasUnsavedChanges() const override;
+
     /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有“导入 URDF”流程，不在 MainWindow 中复制业务逻辑。
     void TriggerImportUrdf();
 
@@ -82,6 +85,9 @@ private:
     QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);
     void SetupDhTableColumns();
     void SetupJointLimitTableColumns();
+    void ConnectDirtyTracking();
+    void MarkDirty();
+    void MarkClean();
 
     RoboSDP::Kinematics::Dto::KinematicModelDto CollectModelFromForm() const;
     void PopulateForm(const RoboSDP::Kinematics::Dto::KinematicModelDto& model);
@@ -122,6 +128,7 @@ private:
     RoboSDP::Kinematics::Dto::KinematicModelDto m_urdf_preview_model;
     RoboSDP::Kinematics::Dto::KinematicBackendBuildContextResultDto m_backend_diagnostic;
     QTimer* m_preview_pose_update_timer = nullptr;
+    bool m_has_unsaved_changes = false;
 
     QLineEdit* m_project_root_edit = nullptr;
     QPushButton* m_browse_button = nullptr;

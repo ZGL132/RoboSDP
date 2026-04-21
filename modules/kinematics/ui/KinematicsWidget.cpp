@@ -214,11 +214,18 @@ KinematicsWidget::KinematicsWidget(QWidget* parent)
     PopulateForm(m_state.current_model);
     RefreshBackendDiagnostics();
     RenderResults();
+    ConnectDirtyTracking();
+    MarkClean();
 }
 
 QString KinematicsWidget::ModuleName() const
 {
     return QStringLiteral("Kinematics");
+}
+
+bool KinematicsWidget::HasUnsavedChanges() const
+{
+    return m_has_unsaved_changes;
 }
 
 RoboSDP::Infrastructure::ProjectSaveItemResult KinematicsWidget::SaveCurrentDraft()
@@ -228,7 +235,59 @@ RoboSDP::Infrastructure::ProjectSaveItemResult KinematicsWidget::SaveCurrentDraf
         RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
     SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    if (saveResult.IsSuccess())
+    {
+        MarkClean();
+    }
     return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
+}
+
+void KinematicsWidget::ConnectDirtyTracking()
+{
+    for (QLineEdit* editor : findChildren<QLineEdit*>())
+    {
+        if (editor == m_project_root_edit)
+        {
+            continue;
+        }
+        connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
+    }
+    for (QComboBox* editor : findChildren<QComboBox*>())
+    {
+        connect(editor, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [this](int) {
+            MarkDirty();
+        });
+    }
+    for (QDoubleSpinBox* editor : findChildren<QDoubleSpinBox*>())
+    {
+        connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
+            MarkDirty();
+        });
+    }
+    for (QSpinBox* editor : findChildren<QSpinBox*>())
+    {
+        connect(editor, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, [this](int) {
+            MarkDirty();
+        });
+    }
+    for (QCheckBox* editor : findChildren<QCheckBox*>())
+    {
+        connect(editor, &QCheckBox::toggled, this, [this](bool) { MarkDirty(); });
+    }
+    for (QTableWidget* table : findChildren<QTableWidget*>())
+    {
+        connect(table, &QTableWidget::cellChanged, this, [this](int, int) { MarkDirty(); });
+    }
+}
+
+void KinematicsWidget::MarkDirty()
+{
+    m_has_unsaved_changes = true;
+}
+
+void KinematicsWidget::MarkClean()
+{
+    m_has_unsaved_changes = false;
 }
 
 void KinematicsWidget::TriggerImportUrdf()
@@ -934,6 +993,7 @@ void KinematicsWidget::OnImportUrdfClicked()
         RenderResults();
         emit UrdfPreviewSceneGenerated(m_urdf_preview_scene);
         SchedulePreviewPoseUpdate();
+        MarkDirty();
     }
 
     SetOperationMessage(importResult.message, importResult.IsSuccess());
@@ -952,6 +1012,7 @@ void KinematicsWidget::OnBuildFromTopologyClicked()
         PopulateForm(m_state.current_model);
         RefreshBackendDiagnostics();
         RenderResults();
+        MarkDirty();
     }
 
     SetOperationMessage(buildResult.message, buildResult.IsSuccess());
@@ -966,6 +1027,7 @@ void KinematicsWidget::OnRunFkClicked()
     RoboSDP::Kinematics::Dto::FkRequestDto request;
     request.joint_positions_deg = CollectJointInputs(m_fk_joint_spins);
     m_state.last_fk_result = m_service.SolveFk(m_state.current_model, request);
+    MarkDirty();
     FillIkTargetFromFkResult();
     RenderResults();
 
@@ -997,6 +1059,7 @@ void KinematicsWidget::OnRunIkClicked()
         m_ik_target_pose_spins[5]->value()};
 
     m_state.last_ik_result = m_service.SolveIk(m_state.current_model, request);
+    MarkDirty();
     RenderResults();
 
     const bool warning = !m_state.last_ik_result.success;
@@ -1018,6 +1081,7 @@ void KinematicsWidget::OnSampleWorkspaceClicked()
     RoboSDP::Kinematics::Dto::WorkspaceRequestDto request;
     request.sample_count = m_workspace_sample_count_spin->value();
     m_state.last_workspace_result = m_service.SampleWorkspace(m_state.current_model, request);
+    MarkDirty();
     RenderResults();
 
     const bool warning = !m_state.last_workspace_result.success;
@@ -1049,6 +1113,7 @@ void KinematicsWidget::OnLoadClicked()
         PopulateForm(m_state.current_model);
         RefreshBackendDiagnostics();
         RenderResults();
+        MarkClean();
     }
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());

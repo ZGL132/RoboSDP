@@ -79,11 +79,18 @@ PlanningWidget::PlanningWidget(QWidget* parent)
     }
     PopulateForm(m_state.current_scene);
     RenderResults();
+    ConnectDirtyTracking();
+    MarkClean();
 }
 
 QString PlanningWidget::ModuleName() const
 {
     return QStringLiteral("Planning");
+}
+
+bool PlanningWidget::HasUnsavedChanges() const
+{
+    return m_has_unsaved_changes;
 }
 
 RoboSDP::Infrastructure::ProjectSaveItemResult PlanningWidget::SaveCurrentDraft()
@@ -100,7 +107,43 @@ RoboSDP::Infrastructure::ProjectSaveItemResult PlanningWidget::SaveCurrentDraft(
         RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
     SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    if (saveResult.IsSuccess())
+    {
+        MarkClean();
+    }
     return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
+}
+
+void PlanningWidget::ConnectDirtyTracking()
+{
+    for (QLineEdit* editor : findChildren<QLineEdit*>())
+    {
+        if (editor == m_project_root_edit || editor->isReadOnly())
+        {
+            continue;
+        }
+        connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
+    }
+    for (QDoubleSpinBox* editor : findChildren<QDoubleSpinBox*>())
+    {
+        connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
+            MarkDirty();
+        });
+    }
+    for (QTableWidget* table : findChildren<QTableWidget*>())
+    {
+        connect(table, &QTableWidget::cellChanged, this, [this](int, int) { MarkDirty(); });
+    }
+}
+
+void PlanningWidget::MarkDirty()
+{
+    m_has_unsaved_changes = true;
+}
+
+void PlanningWidget::MarkClean()
+{
+    m_has_unsaved_changes = false;
 }
 
 void PlanningWidget::BuildUi()
@@ -448,6 +491,7 @@ void PlanningWidget::OnBuildSceneClicked()
         m_state = buildResult.state;
         PopulateForm(m_state.current_scene);
         RenderResults();
+        MarkDirty();
     }
 
     SetOperationMessage(buildResult.message, buildResult.IsSuccess());
@@ -475,6 +519,7 @@ void PlanningWidget::OnRunVerificationClicked()
         m_state = runResult.state;
         PopulateForm(m_state.current_scene);
         RenderResults();
+        MarkDirty();
     }
 
     SetOperationMessage(runResult.message, runResult.IsSuccess());
@@ -497,6 +542,7 @@ void PlanningWidget::OnLoadClicked()
         m_state = loadResult.state;
         PopulateForm(m_state.current_scene);
         RenderResults();
+        MarkClean();
     }
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());

@@ -132,11 +132,18 @@ DynamicsWidget::DynamicsWidget(QWidget* parent)
     RenderBackendStatus();
     RenderTorquePlot();
     RenderResults();
+    ConnectDirtyTracking();
+    MarkClean();
 }
 
 QString DynamicsWidget::ModuleName() const
 {
     return QStringLiteral("Dynamics");
+}
+
+bool DynamicsWidget::HasUnsavedChanges() const
+{
+    return m_has_unsaved_changes;
 }
 
 RoboSDP::Infrastructure::ProjectSaveItemResult DynamicsWidget::SaveCurrentDraft()
@@ -153,7 +160,43 @@ RoboSDP::Infrastructure::ProjectSaveItemResult DynamicsWidget::SaveCurrentDraft(
         RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
     SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    if (saveResult.IsSuccess())
+    {
+        MarkClean();
+    }
     return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
+}
+
+void DynamicsWidget::ConnectDirtyTracking()
+{
+    for (QLineEdit* editor : findChildren<QLineEdit*>())
+    {
+        if (editor == m_project_root_edit || editor->isReadOnly())
+        {
+            continue;
+        }
+        connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
+    }
+    for (QDoubleSpinBox* editor : findChildren<QDoubleSpinBox*>())
+    {
+        connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
+            MarkDirty();
+        });
+    }
+    for (QTableWidget* table : findChildren<QTableWidget*>())
+    {
+        connect(table, &QTableWidget::cellChanged, this, [this](int, int) { MarkDirty(); });
+    }
+}
+
+void DynamicsWidget::MarkDirty()
+{
+    m_has_unsaved_changes = true;
+}
+
+void DynamicsWidget::MarkClean()
+{
+    m_has_unsaved_changes = false;
 }
 
 void DynamicsWidget::TriggerRunAnalysis()
@@ -788,6 +831,7 @@ void DynamicsWidget::OnBuildFromKinematicsClicked()
         RenderBackendStatus();
         RenderTorquePlot();
         RenderResults();
+        MarkDirty();
     }
 
     SetOperationMessage(buildResult.message, buildResult.IsSuccess());
@@ -818,6 +862,7 @@ void DynamicsWidget::OnRunAnalysisClicked()
         RenderBackendStatus();
         RenderTorquePlot();
         RenderResults();
+        MarkDirty();
     }
 
     const bool warning = !analyzeResult.IsSuccess();
@@ -846,6 +891,7 @@ void DynamicsWidget::OnLoadClicked()
         RenderBackendStatus();
         RenderTorquePlot();
         RenderResults();
+        MarkClean();
     }
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());

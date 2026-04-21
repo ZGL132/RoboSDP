@@ -46,6 +46,9 @@ public:
     /// @brief 保存当前 Dynamics 草稿，供模块按钮和全局保存共用。
     RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
+    /// @brief 返回当前 Dynamics 页面是否存在未保存变更。
+    bool HasUnsavedChanges() const override;
+
     /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有“执行逆动力学”流程，不在 MainWindow 中复制业务逻辑。
     void TriggerRunAnalysis();
 
@@ -71,6 +74,9 @@ private:
     void SetupLinkTableColumns();
     void SetupJointDriveTableColumns();
     void SetupTrajectoryTableColumns();
+    void ConnectDirtyTracking();
+    void MarkDirty();
+    void MarkClean();
     bool ValidateTablesAndHighlight(QString* message = nullptr);
     void HighlightItem(QTableWidgetItem* item, bool isValid, const QString& tooltip);
 
@@ -95,6 +101,7 @@ private:
     RoboSDP::Kinematics::Persistence::KinematicJsonStorage m_kinematic_storage;
     RoboSDP::Dynamics::Service::DynamicsService m_service;
     RoboSDP::Dynamics::Dto::DynamicsWorkspaceStateDto m_state;
+    bool m_has_unsaved_changes = false;
 
     QLineEdit* m_project_root_edit = nullptr;
     QPushButton* m_browse_button = nullptr;

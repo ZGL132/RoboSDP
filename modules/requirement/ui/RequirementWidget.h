@@ -41,6 +41,9 @@ public:
     /// @brief 保存当前 Requirement 草稿，供模块按钮和全局保存共用。
     RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
+    /// @brief 返回当前 Requirement 表单是否存在未保存变更。
+    bool HasUnsavedChanges() const override;
+
 signals:
     /// 将 Requirement 操作消息抛给主窗口底部日志面板。
     void LogMessageGenerated(const QString& message);
@@ -58,6 +61,9 @@ private:
     QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);
     QSpinBox* CreateIntegerSpinBox(int minimum, int maximum, int step);
     void RegisterFieldWidget(const QString& fieldPath, QWidget* widget);
+    void ConnectDirtyTracking();
+    void MarkDirty();
+    void MarkClean();
 
     /// 从当前表单收集 Requirement 模型，同时保留界面未直接编辑的透传字段。
     RoboSDP::Requirement::Dto::RequirementModelDto CollectModelFromForm();
@@ -108,6 +114,7 @@ private:
 
     QHash<QString, QWidget*> m_field_widgets;
     int m_current_key_pose_index = -1;
+    bool m_has_unsaved_changes = false;
 
     QLineEdit* m_project_root_edit = nullptr;
     QPushButton* m_browse_button = nullptr;

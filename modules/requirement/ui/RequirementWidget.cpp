@@ -45,11 +45,18 @@ RequirementWidget::RequirementWidget(QWidget* parent)
         m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
     }
     PopulateForm(m_service.CreateDefaultModel());
+    ConnectDirtyTracking();
+    MarkClean();
 }
 
 QString RequirementWidget::ModuleName() const
 {
     return QStringLiteral("Requirement");
+}
+
+bool RequirementWidget::HasUnsavedChanges() const
+{
+    return m_has_unsaved_changes;
 }
 
 RoboSDP::Infrastructure::ProjectSaveItemResult RequirementWidget::SaveCurrentDraft()
@@ -67,8 +74,56 @@ RoboSDP::Infrastructure::ProjectSaveItemResult RequirementWidget::SaveCurrentDra
             QStringLiteral("草稿已保存，但当前仍有 %1 条校验问题。").arg(saveResult.validation_result.issues.size()),
             true);
     }
+    if (saveResult.IsSuccess())
+    {
+        MarkClean();
+    }
 
     return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
+}
+
+void RequirementWidget::ConnectDirtyTracking()
+{
+    for (QLineEdit* editor : findChildren<QLineEdit*>())
+    {
+        if (editor == m_project_root_edit)
+        {
+            continue;
+        }
+        connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
+    }
+    for (QComboBox* editor : findChildren<QComboBox*>())
+    {
+        connect(editor, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [this](int) {
+            MarkDirty();
+        });
+    }
+    for (QDoubleSpinBox* editor : findChildren<QDoubleSpinBox*>())
+    {
+        connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
+            MarkDirty();
+        });
+    }
+    for (QSpinBox* editor : findChildren<QSpinBox*>())
+    {
+        connect(editor, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, [this](int) {
+            MarkDirty();
+        });
+    }
+    for (QCheckBox* editor : findChildren<QCheckBox*>())
+    {
+        connect(editor, &QCheckBox::toggled, this, [this](bool) { MarkDirty(); });
+    }
+}
+
+void RequirementWidget::MarkDirty()
+{
+    m_has_unsaved_changes = true;
+}
+
+void RequirementWidget::MarkClean()
+{
+    m_has_unsaved_changes = false;
 }
 
 void RequirementWidget::BuildUi()
@@ -847,6 +902,7 @@ void RequirementWidget::OnLoadClicked()
     {
         PopulateForm(loadResult.model);
         ApplyValidationResult(loadResult.validation_result);
+        MarkClean();
     }
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());
@@ -884,6 +940,7 @@ void RequirementWidget::OnAddKeyPoseClicked()
         m_key_pose_list->setCurrentRow(m_current_key_pose_index);
     }
     LoadCurrentKeyPoseToEditor();
+    MarkDirty();
 }
 
 void RequirementWidget::OnRemoveKeyPoseClicked()
@@ -908,6 +965,7 @@ void RequirementWidget::OnRemoveKeyPoseClicked()
         m_key_pose_list->setCurrentRow(m_current_key_pose_index);
     }
     LoadCurrentKeyPoseToEditor();
+    MarkDirty();
 }
 
 void RequirementWidget::OnKeyPoseSelectionChanged(int currentRow)

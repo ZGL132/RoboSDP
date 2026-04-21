@@ -77,6 +77,21 @@ const RoboSDP::Kinematics::Dto::GeometryObjectDto* FindGeometryByLink(
     return nullptr;
 }
 
+const RoboSDP::Kinematics::Dto::UrdfPreviewNodeDto* FindNodeByLink(
+    const std::vector<RoboSDP::Kinematics::Dto::UrdfPreviewNodeDto>& nodes,
+    const QString& linkName)
+{
+    for (const auto& node : nodes)
+    {
+        if (node.link_name == linkName)
+        {
+            return &node;
+        }
+    }
+
+    return nullptr;
+}
+
 } // namespace
 
 int main()
@@ -166,6 +181,26 @@ int main()
     {
         return 9;
     }
+    if (!IsNear(relativeGeometry->local_pose.position_m[0], 0.01) ||
+        !IsNear(relativeGeometry->local_pose.position_m[1], 0.02) ||
+        !IsNear(relativeGeometry->local_pose.position_m[2], 0.03))
+    {
+        return 26;
+    }
+
+    const auto* relativeToolNode = FindNodeByLink(
+        relativeImportResult.preview_scene.nodes,
+        QStringLiteral("tool_link"));
+    if (relativeToolNode == nullptr)
+    {
+        return 27;
+    }
+    if (!IsNear(relativeToolNode->world_pose.position_m[0], 0.0) ||
+        !IsNear(relativeToolNode->world_pose.position_m[1], 0.0) ||
+        !IsNear(relativeToolNode->world_pose.position_m[2], 0.3))
+    {
+        return 28;
+    }
 
     const auto poseUpdateResult =
         service.UpdatePreviewPoses(MakePreviewModel(relativeUrdfPath), std::vector<double>{30.0});
@@ -184,6 +219,58 @@ int main()
     if (badPoseUpdateResult.IsSuccess())
     {
         return 24;
+    }
+
+    const QString axisUrdfPath = QDir(tempRoot).absoluteFilePath(QStringLiteral("axis-x/robot.urdf"));
+    const QString axisUrdf = QStringLiteral(
+        "<robot name=\"axis_x_robot\">"
+        "<link name=\"base_link\"/>"
+        "<joint name=\"joint_1\" type=\"revolute\">"
+        "<parent link=\"base_link\"/><child link=\"link_1\"/>"
+        "<axis xyz=\"1 0 0\"/><origin xyz=\"0 0 0\" rpy=\"0 0 0\"/>"
+        "<limit lower=\"-3.14\" upper=\"3.14\" effort=\"1\" velocity=\"1\"/>"
+        "</joint>"
+        "<link name=\"link_1\"/>"
+        "<joint name=\"fixed_tool\" type=\"fixed\">"
+        "<parent link=\"link_1\"/><child link=\"tool_link\"/>"
+        "<origin xyz=\"0 1 0\" rpy=\"0 0 0\"/>"
+        "</joint>"
+        "<link name=\"tool_link\"/>"
+        "</robot>");
+    if (!WriteUtf8File(axisUrdfPath, axisUrdf))
+    {
+        return 36;
+    }
+
+    const auto axisImportResult = service.ImportUrdfPreview(axisUrdfPath);
+    if (!axisImportResult.IsSuccess())
+    {
+        return 37;
+    }
+    if (axisImportResult.preview_scene.segments.empty() ||
+        !IsNear(axisImportResult.preview_scene.segments.front().joint_axis_xyz[0], 1.0) ||
+        !IsNear(axisImportResult.preview_scene.segments.front().joint_axis_xyz[1], 0.0) ||
+        !IsNear(axisImportResult.preview_scene.segments.front().joint_axis_xyz[2], 0.0))
+    {
+        return 38;
+    }
+
+    const auto axisPoseUpdateResult =
+        service.UpdatePreviewPoses(MakePreviewModel(axisUrdfPath), std::vector<double>{90.0});
+    if (!axisPoseUpdateResult.IsSuccess())
+    {
+        return 39;
+    }
+    const auto axisToolPoseIt = axisPoseUpdateResult.link_world_poses.find(QStringLiteral("tool_link"));
+    if (axisToolPoseIt == axisPoseUpdateResult.link_world_poses.end())
+    {
+        return 40;
+    }
+    if (!IsNear(axisToolPoseIt->second.position_m[0], 0.0, 1.0e-6) ||
+        !IsNear(axisToolPoseIt->second.position_m[1], 0.0, 1.0e-6) ||
+        !IsNear(axisToolPoseIt->second.position_m[2], 1.0, 1.0e-6))
+    {
+        return 41;
     }
 
     const QString packageRoot = QDir(tempRoot).absoluteFilePath(QStringLiteral("package-search"));
@@ -244,6 +331,55 @@ int main()
     if (!packageAcquireResult.metadata.collision_geometries.front().resource_available)
     {
         return 15;
+    }
+
+    const QString siblingPackageRoot =
+        QDir(tempRoot).absoluteFilePath(QStringLiteral("folder-not-named-link12"));
+    const QString siblingPackageUrdfPath =
+        QDir(siblingPackageRoot).absoluteFilePath(QStringLiteral("urdf/link12.urdf"));
+    const QString siblingPackageMeshPath =
+        QDir(siblingPackageRoot).absoluteFilePath(QStringLiteral("meshes/base_link.STL"));
+    if (!WriteUtf8File(siblingPackageMeshPath, QStringLiteral("solid base_link\nendsolid base_link\n")))
+    {
+        return 30;
+    }
+
+    const QString siblingPackageUrdf = QStringLiteral(
+        "<robot name=\"link12\">"
+        "<link name=\"base_link\">"
+        "<visual><geometry><mesh filename=\"package://link12/meshes/base_link.STL\"/></geometry></visual>"
+        "</link>"
+        "<joint name=\"joint_1\" type=\"revolute\">"
+        "<parent link=\"base_link\"/><child link=\"link1\"/>"
+        "<origin xyz=\"0 0 0.2\" rpy=\"0 0 0\"/>"
+        "<limit lower=\"-3.14\" upper=\"3.14\" effort=\"1\" velocity=\"1\"/>"
+        "</joint>"
+        "<link name=\"link1\"/>"
+        "</robot>");
+    if (!WriteUtf8File(siblingPackageUrdfPath, siblingPackageUrdf))
+    {
+        return 31;
+    }
+
+    const auto siblingPackageImportResult = service.ImportUrdfPreview(siblingPackageUrdfPath);
+    if (!siblingPackageImportResult.IsSuccess())
+    {
+        return 32;
+    }
+    if (siblingPackageImportResult.preview_scene.visual_geometries.size() != 1)
+    {
+        return 33;
+    }
+    const auto& siblingPackageGeometry =
+        siblingPackageImportResult.preview_scene.visual_geometries.front();
+    if (QDir::fromNativeSeparators(siblingPackageGeometry.absolute_file_path) !=
+        QDir::fromNativeSeparators(QFileInfo(siblingPackageMeshPath).absoluteFilePath()))
+    {
+        return 34;
+    }
+    if (!siblingPackageGeometry.resource_available)
+    {
+        return 35;
     }
 
     const QString missingUrdfPath = QDir(tempRoot).absoluteFilePath(QStringLiteral("missing-mesh/robot.urdf"));

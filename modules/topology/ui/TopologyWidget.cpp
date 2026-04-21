@@ -145,11 +145,18 @@ TopologyWidget::TopologyWidget(QWidget* parent)
     RefreshTemplateOptions();
     RenderCandidates();
     RenderRecommendation();
+    ConnectDirtyTracking();
+    MarkClean();
 }
 
 QString TopologyWidget::ModuleName() const
 {
     return QStringLiteral("Topology");
+}
+
+bool TopologyWidget::HasUnsavedChanges() const
+{
+    return m_has_unsaved_changes;
 }
 
 RoboSDP::Infrastructure::ProjectSaveItemResult TopologyWidget::SaveCurrentDraft()
@@ -160,7 +167,56 @@ RoboSDP::Infrastructure::ProjectSaveItemResult TopologyWidget::SaveCurrentDraft(
     const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
     ApplyValidationResult(saveResult.validation_result);
     SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    if (saveResult.IsSuccess())
+    {
+        MarkClean();
+    }
     return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
+}
+
+void TopologyWidget::ConnectDirtyTracking()
+{
+    for (QLineEdit* editor : findChildren<QLineEdit*>())
+    {
+        if (editor == m_project_root_edit)
+        {
+            continue;
+        }
+        connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
+    }
+    for (QComboBox* editor : findChildren<QComboBox*>())
+    {
+        connect(editor, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [this](int) {
+            MarkDirty();
+        });
+    }
+    for (QDoubleSpinBox* editor : findChildren<QDoubleSpinBox*>())
+    {
+        connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
+            MarkDirty();
+        });
+    }
+    for (QCheckBox* editor : findChildren<QCheckBox*>())
+    {
+        connect(editor, &QCheckBox::toggled, this, [this](bool) { MarkDirty(); });
+    }
+    for (QPlainTextEdit* editor : findChildren<QPlainTextEdit*>())
+    {
+        if (!editor->isReadOnly())
+        {
+            connect(editor, &QPlainTextEdit::textChanged, this, [this]() { MarkDirty(); });
+        }
+    }
+}
+
+void TopologyWidget::MarkDirty()
+{
+    m_has_unsaved_changes = true;
+}
+
+void TopologyWidget::MarkClean()
+{
+    m_has_unsaved_changes = false;
 }
 
 void TopologyWidget::BuildUi()
@@ -647,6 +703,7 @@ void TopologyWidget::OnGenerateClicked()
         RenderCandidates();
         RenderRecommendation();
         ApplyValidationResult(generateResult.validation_result);
+        MarkDirty();
     }
 
     SetOperationMessage(generateResult.message, generateResult.IsSuccess());
@@ -689,6 +746,7 @@ void TopologyWidget::OnLoadClicked()
         RenderCandidates();
         RenderRecommendation();
         ApplyValidationResult(loadResult.validation_result);
+        MarkClean();
     }
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());

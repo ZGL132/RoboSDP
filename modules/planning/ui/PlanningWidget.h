@@ -44,6 +44,9 @@ public:
     /// @brief 保存当前 Planning 草稿，供模块按钮和全局保存共用。
     RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
+    /// @brief 返回当前 Planning 页面是否存在未保存变更。
+    bool HasUnsavedChanges() const override;
+
 signals:
     void LogMessageGenerated(const QString& message);
 
@@ -52,6 +55,9 @@ private:
     void SetupJointTableColumns();
     void SetupCollisionTableColumns();
     void SetupSelfCollisionTableColumns();
+    void ConnectDirtyTracking();
+    void MarkDirty();
+    void MarkClean();
     void PopulateForm(const RoboSDP::Planning::Dto::PlanningSceneDto& scene);
     RoboSDP::Planning::Dto::PlanningSceneDto CollectSceneFromForm() const;
     void RenderResults();
@@ -73,6 +79,7 @@ private:
     RoboSDP::Selection::Persistence::SelectionJsonStorage m_selection_storage;
     RoboSDP::Planning::Service::PlanningVerificationService m_service;
     RoboSDP::Planning::Dto::PlanningWorkspaceStateDto m_state;
+    bool m_has_unsaved_changes = false;
 
     QLineEdit* m_project_root_edit = nullptr;
     QPushButton* m_browse_button = nullptr;

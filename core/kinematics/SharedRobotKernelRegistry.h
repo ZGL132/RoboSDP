@@ -4,6 +4,7 @@
 
 #include <QString>
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -11,6 +12,7 @@
 #include <pinocchio/multibody/joint/joint-composite.hpp>
 #include <pinocchio/multibody/joint/joint-mimic.hpp>
 #include <pinocchio/multibody/joint/joint-revolute.hpp>
+#include <pinocchio/multibody/joint/joint-revolute-unaligned.hpp>
 #include <pinocchio/multibody/model.hpp>
 #endif
 
@@ -39,6 +41,8 @@ struct SharedRevoluteZJointCollectionTpl
 {
     typedef pinocchio::JointModelRevoluteTpl<Scalar, Options, 2> JointModelRZ;
     typedef pinocchio::JointDataRevoluteTpl<Scalar, Options, 2> JointDataRZ;
+    typedef pinocchio::JointModelRevoluteUnalignedTpl<Scalar, Options> JointModelRevoluteUnaligned;
+    typedef pinocchio::JointDataRevoluteUnalignedTpl<Scalar, Options> JointDataRevoluteUnaligned;
     typedef pinocchio::JointModelCompositeTpl<Scalar, Options, SharedRevoluteZJointCollectionTpl>
         JointModelComposite;
     typedef pinocchio::JointDataCompositeTpl<Scalar, Options, SharedRevoluteZJointCollectionTpl>
@@ -49,11 +53,13 @@ struct SharedRevoluteZJointCollectionTpl
         JointDataMimic;
     typedef boost::variant<
         JointModelRZ,
+        JointModelRevoluteUnaligned,
         boost::recursive_wrapper<JointModelComposite>,
         boost::recursive_wrapper<JointModelMimic>>
         JointModelVariant;
     typedef boost::variant<
         JointDataRZ,
+        JointDataRevoluteUnaligned,
         boost::recursive_wrapper<JointDataComposite>,
         boost::recursive_wrapper<JointDataMimic>>
         JointDataVariant;
@@ -67,6 +73,9 @@ using SharedPinocchioData = pinocchio::DataTpl<double, 0, SharedRevoluteZJointCo
 
 /// @brief 共享内核构建时使用的 Revolute-Z 关节模型类型。
 using SharedJointModelRZ = pinocchio::JointModelRevoluteTpl<double, 0, 2>;
+
+/// @brief URDF 关节使用的任意轴 Revolute 模型，严格承接 `<axis xyz="...">`。
+using SharedJointModelRevoluteUnaligned = pinocchio::JointModelRevoluteUnalignedTpl<double, 0>;
 #else
 struct SharedPinocchioModel;
 struct SharedPinocchioData;
@@ -112,6 +121,7 @@ struct SharedRobotPreviewSegmentMetadata
     QString joint_type;
     QString parent_link_name;
     QString child_link_name;
+    std::array<double, 3> joint_axis_xyz {0.0, 0.0, 1.0};
     int start_frame_id = 0;
     int end_frame_id = 0;
 };

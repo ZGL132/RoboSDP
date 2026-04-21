@@ -6,6 +6,7 @@
 #include <QString>
 
 class QPlainTextEdit;
+class QDockWidget;
 class QStackedWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -107,6 +108,9 @@ private:
     /// 响应顶部功能区“保存”命令，执行全局保存编排。
     void HandleGlobalSaveRequested();
 
+    /// 响应全局保存结果对话框中的模块定位请求。
+    void HandleGlobalSaveResultNavigateRequested(const QString& moduleName);
+
     /// 响应全局项目上下文变化，刷新主窗口项目树、状态栏和日志。
     void HandleProjectContextPathChanged(const QString& projectRootPath);
 
@@ -119,6 +123,9 @@ private:
 private:
     RoboSDP::Desktop::Ribbon::RibbonBarWidget* m_ribbonBar = nullptr;
     RoboSDP::Desktop::Vtk::RobotVtkView* m_robotVtkView = nullptr;
+    QDockWidget* m_projectTreeDock = nullptr;
+    QDockWidget* m_propertyDock = nullptr;
+    QDockWidget* m_logDock = nullptr;
     QTreeWidget* m_projectTree = nullptr;
     QTreeWidgetItem* m_projectRootTreeItem = nullptr;
     QTreeWidgetItem* m_requirementTreeItem = nullptr;

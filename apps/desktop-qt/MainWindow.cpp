@@ -1,5 +1,6 @@
 ﻿#include "apps/desktop-qt/MainWindow.h"
 
+#include "apps/desktop-qt/widgets/dialogs/GlobalSaveResultDialog.h"
 #include "apps/desktop-qt/widgets/ribbon/RibbonBarWidget.h"
 #include "apps/desktop-qt/widgets/vtk/RobotVtkView.h"
 #include "core/infrastructure/ProjectManager.h"
@@ -129,6 +130,175 @@ void MainWindow::CreateRibbonBar()
         &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToScheme,
         this,
         [this]() { HandleRibbonNavigateTo(m_schemeTreeItem, QStringLiteral("结果与导出")); });
+
+    const auto visibilityText = [](bool visible) {
+        return visible ? QStringLiteral("开启") : QStringLiteral("关闭");
+    };
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetSkeletonVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetSkeletonVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示骨架：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetVisualMeshVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetVisualMeshVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示 Visual Mesh：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetCollisionMeshVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetCollisionMeshVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示 Collision Mesh：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetJointAxesVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetJointAxesVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示关节轴：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetAxesVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetAxesVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示坐标系：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetLinkLabelsVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetLinkLabelsVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示 Link 标签：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetJointLabelsVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetJointLabelsVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示 Joint 标签：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalResetCameraRequested,
+        this,
+        [this]() {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->ResetCameraToCurrentScene();
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求重置三维相机"));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCameraFrontViewRequested,
+        this,
+        [this]() {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetFrontCameraView();
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至正视图"));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCameraSideViewRequested,
+        this,
+        [this]() {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetSideCameraView();
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至侧视图"));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCameraTopViewRequested,
+        this,
+        [this]() {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetTopCameraView();
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至俯视图"));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCameraIsometricViewRequested,
+        this,
+        [this]() {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetIsometricCameraView();
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至等轴测视图"));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetProjectTreeVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_projectTreeDock != nullptr)
+            {
+                m_projectTreeDock->setVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 项目树面板：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetPropertyPanelVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_propertyDock != nullptr)
+            {
+                m_propertyDock->setVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 属性面板：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetOutputPanelVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_logDock != nullptr)
+            {
+                m_logDock->setVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 输出信息面板：%1").arg(visibilityText(visible)));
+        });
 }
 
 void MainWindow::CreateCentralView()
@@ -140,20 +310,20 @@ void MainWindow::CreateCentralView()
 
 void MainWindow::CreateProjectTreeDock()
 {
-    auto* dock = new QDockWidget(QStringLiteral("项目树"), this);
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_projectTreeDock = new QDockWidget(QStringLiteral("项目树"), this);
+    m_projectTreeDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    m_projectTree = new QTreeWidget(dock);
-    m_projectTree->setHeaderLabel(QStringLiteral("项目骨架"));
+    m_projectTree = new QTreeWidget(m_projectTreeDock);
+    m_projectTree->setHeaderLabel(QStringLiteral("项目树"));
 
     m_projectRootTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("当前项目")});
-    m_requirementTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Requirement")});
-    m_topologyTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Topology")});
-    m_kinematicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Kinematics")});
-    m_dynamicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Dynamics")});
-    m_selectionTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Selection")});
-    m_planningTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Planning")});
-    m_schemeTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("Scheme")});
+    m_requirementTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("任务需求")});
+    m_topologyTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("构型设计")});
+    m_kinematicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("运动学分析")});
+    m_dynamicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("动力学分析")});
+    m_selectionTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("驱动选型")});
+    m_planningTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("规划与分析")});
+    m_schemeTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("结果与导出")});
     m_projectRootTreeItem->addChild(m_requirementTreeItem);
     m_projectRootTreeItem->addChild(m_topologyTreeItem);
     m_projectRootTreeItem->addChild(m_kinematicsTreeItem);
@@ -165,16 +335,16 @@ void MainWindow::CreateProjectTreeDock()
     m_projectTree->addTopLevelItem(m_projectRootTreeItem);
     m_projectRootTreeItem->setExpanded(true);
 
-    dock->setWidget(m_projectTree);
-    addDockWidget(Qt::LeftDockWidgetArea, dock);
+    m_projectTreeDock->setWidget(m_projectTree);
+    addDockWidget(Qt::LeftDockWidgetArea, m_projectTreeDock);
 }
 
 void MainWindow::CreatePropertyDock()
 {
-    auto* dock = new QDockWidget(QStringLiteral("属性面板"), this);
-    dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_propertyDock = new QDockWidget(QStringLiteral("属性面板"), this);
+    m_propertyDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
 
-    m_propertyStack = new QStackedWidget(dock);
+    m_propertyStack = new QStackedWidget(m_propertyDock);
 
     m_requirementWidget = new RoboSDP::Requirement::Ui::RequirementWidget(m_propertyStack);
     m_topologyWidget = new RoboSDP::Topology::Ui::TopologyWidget(m_propertyStack);
@@ -199,8 +369,8 @@ void MainWindow::CreatePropertyDock()
     m_propertyStack->addWidget(m_planningWidget);
     m_propertyStack->addWidget(m_schemeWidget);
     m_propertyStack->addWidget(m_placeholderPropertyPanel);
-    dock->setWidget(m_propertyStack);
-    addDockWidget(Qt::RightDockWidgetArea, dock);
+    m_propertyDock->setWidget(m_propertyStack);
+    addDockWidget(Qt::RightDockWidgetArea, m_propertyDock);
 
     // 中文说明：全局保存固定按主链顺序执行；协调器只保存接口指针，不接管 Widget 生命周期。
     m_projectSaveCoordinator.RegisterParticipant(m_requirementWidget);
@@ -312,14 +482,14 @@ void MainWindow::CreatePropertyDock()
 
 void MainWindow::CreateLogDock()
 {
-    auto* dock = new QDockWidget(QStringLiteral("输出信息"), this);
-    dock->setAllowedAreas(Qt::BottomDockWidgetArea);
+    m_logDock = new QDockWidget(QStringLiteral("输出信息"), this);
+    m_logDock->setAllowedAreas(Qt::BottomDockWidgetArea);
 
-    m_logPanel = new QPlainTextEdit(dock);
+    m_logPanel = new QPlainTextEdit(m_logDock);
     m_logPanel->setReadOnly(true);
 
-    dock->setWidget(m_logPanel);
-    addDockWidget(Qt::BottomDockWidgetArea, dock);
+    m_logDock->setWidget(m_logPanel);
+    addDockWidget(Qt::BottomDockWidgetArea, m_logDock);
 
     AppendLogLine(QStringLiteral("RoboSDP Desktop 启动完成。"));
     AppendLogLine(QStringLiteral("当前已接入 Requirement / Topology / Kinematics / Dynamics / Selection / Planning / Scheme 模块的最小页面。"));
@@ -482,11 +652,12 @@ void MainWindow::HandleGlobalSaveRequested()
 
     for (const RoboSDP::Infrastructure::ProjectSaveItemResult& itemResult : summary.item_results)
     {
+        const QString logLevel = itemResult.dependency_refresh_required
+            ? QStringLiteral("[WARN]")
+            : (itemResult.success ? QStringLiteral("[INFO]") : QStringLiteral("[ERROR]"));
         AppendLogLine(
             QStringLiteral("%1 [全局保存] %2：%3")
-                .arg(itemResult.success ? QStringLiteral("[INFO]") : QStringLiteral("[ERROR]"),
-                     itemResult.module_name,
-                     itemResult.message));
+                .arg(logLevel, itemResult.module_name, itemResult.message));
     }
 
     AppendLogLine(QStringLiteral("%1 [全局保存] %2")
@@ -496,6 +667,66 @@ void MainWindow::HandleGlobalSaveRequested()
             ? QStringLiteral("QStatusBar{color:#1b7f3b;}")
             : QStringLiteral("QStatusBar{color:#b54708;font-weight:600;}"));
     statusBar()->showMessage(summary.message);
+
+    // 中文说明：保存完成后只展示汇总结果，不在弹窗中再次触发任何写盘动作。
+    RoboSDP::Desktop::Dialogs::GlobalSaveResultDialog resultDialog(summary, this);
+    connect(
+        &resultDialog,
+        &RoboSDP::Desktop::Dialogs::GlobalSaveResultDialog::ModuleNavigationRequested,
+        this,
+        [this](const QString& moduleName) { HandleGlobalSaveResultNavigateRequested(moduleName); });
+    resultDialog.exec();
+}
+
+void MainWindow::HandleGlobalSaveResultNavigateRequested(const QString& moduleName)
+{
+    QTreeWidgetItem* targetItem = nullptr;
+    QString targetName;
+    if (moduleName == QStringLiteral("Requirement"))
+    {
+        targetItem = m_requirementTreeItem;
+        targetName = QStringLiteral("需求定义");
+    }
+    else if (moduleName == QStringLiteral("Topology"))
+    {
+        targetItem = m_topologyTreeItem;
+        targetName = QStringLiteral("构型设计");
+    }
+    else if (moduleName == QStringLiteral("Kinematics"))
+    {
+        targetItem = m_kinematicsTreeItem;
+        targetName = QStringLiteral("运动学建模");
+    }
+    else if (moduleName == QStringLiteral("Dynamics"))
+    {
+        targetItem = m_dynamicsTreeItem;
+        targetName = QStringLiteral("动力学分析");
+    }
+    else if (moduleName == QStringLiteral("Selection"))
+    {
+        targetItem = m_selectionTreeItem;
+        targetName = QStringLiteral("驱动选型");
+    }
+    else if (moduleName == QStringLiteral("Planning"))
+    {
+        targetItem = m_planningTreeItem;
+        targetName = QStringLiteral("规划与分析");
+    }
+    else if (moduleName == QStringLiteral("Scheme"))
+    {
+        targetItem = m_schemeTreeItem;
+        targetName = QStringLiteral("结果与导出");
+    }
+
+    if (m_projectTree == nullptr || targetItem == nullptr)
+    {
+        AppendLogLine(QStringLiteral("[WARN] [全局保存] 无法定位模块：%1").arg(moduleName));
+        return;
+    }
+
+    // 中文说明：定位只复用项目树当前页切换，不改变保存结果或模块 dirty 状态。
+    AppendLogLine(QStringLiteral("[INFO] [全局保存] 定位模块：%1").arg(targetName));
+    m_projectTree->setCurrentItem(targetItem);
 }
 
 void MainWindow::HandleProjectContextPathChanged(const QString& projectRootPath)

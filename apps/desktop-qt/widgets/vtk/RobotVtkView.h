@@ -6,9 +6,7 @@
 
 #include <map>
 
-class QCheckBox;
 class QLabel;
-class QHBoxLayout;
 class QVBoxLayout;
 
 #if defined(ROBOSDP_HAVE_VTK)
@@ -47,21 +45,67 @@ public:
     /// @brief 清空当前缓存的 Mesh Actor，通常在重新导入 URDF 或模型结构变化时调用。
     void ClearCache();
 
+    /// @brief 将相机重新对准当前 URDF/测试场景，便于导入后快速找回模型。
+    void ResetCameraToCurrentScene();
+
+    /// @brief 设置骨架层显示状态，供顶部视图页签统一控制。
+    void SetSkeletonVisible(bool visible);
+
+    /// @brief 设置 visual mesh 层显示状态，供顶部视图页签统一控制。
+    void SetVisualMeshVisible(bool visible);
+
+    /// @brief 设置 collision mesh 层显示状态，供顶部视图页签统一控制。
+    void SetCollisionMeshVisible(bool visible);
+
+    /// @brief 设置关节轴诊断层显示状态，供顶部视图页签统一控制。
+    void SetJointAxesVisible(bool visible);
+
+    /// @brief 设置世界坐标系显示状态，供顶部视图页签统一控制。
+    void SetAxesVisible(bool visible);
+
+    /// @brief 设置 Link 标签显示状态，供顶部视图页签统一控制。
+    void SetLinkLabelsVisible(bool visible);
+
+    /// @brief 设置 Joint 标签显示状态，供顶部视图页签统一控制。
+    void SetJointLabelsVisible(bool visible);
+
+    /// @brief 将相机切换到正视图，沿 -Y 方向观察，Z 轴向上。
+    void SetFrontCameraView();
+
+    /// @brief 将相机切换到侧视图，沿 +X 方向观察，Z 轴向上。
+    void SetSideCameraView();
+
+    /// @brief 将相机切换到俯视图，沿 +Z 方向观察，Y 轴向上。
+    void SetTopCameraView();
+
+    /// @brief 将相机切换到等轴测视图，从 (1, -1, 1) 方向观察。
+    void SetIsometricCameraView();
+
 private:
     void BuildLayout();
     void BuildControlBar();
     void BuildVtkView();
     void BuildFallbackView();
-    void RefreshScene();
+    void RefreshScene(bool resetCamera = true);
+    void ApplyCameraPreset(
+        double directionX,
+        double directionY,
+        double directionZ,
+        double upX,
+        double upY,
+        double upZ);
     QString BuildStatusText() const;
 
 private:
     QVBoxLayout* m_layout = nullptr;
     QLabel* m_statusLabel = nullptr;
-    QHBoxLayout* m_toggleLayout = nullptr;
-    QCheckBox* m_showAxesCheckBox = nullptr;
-    QCheckBox* m_showLinkLabelsCheckBox = nullptr;
-    QCheckBox* m_showJointLabelsCheckBox = nullptr;
+    bool m_showSkeleton = true;
+    bool m_showVisualMesh = true;
+    bool m_showCollisionMesh = false;
+    bool m_showJointAxes = true;
+    bool m_showAxes = true;
+    bool m_showLinkLabels = true;
+    bool m_showJointLabels = true;
     RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto m_currentScene;
 
 #if defined(ROBOSDP_HAVE_VTK)

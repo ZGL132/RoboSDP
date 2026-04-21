@@ -46,6 +46,9 @@ public:
     /// @brief 保存当前 Scheme 快照，供模块按钮和全局保存共用。
     RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
+    /// @brief 返回当前 Scheme 快照是否存在未保存变更。
+    bool HasUnsavedChanges() const override;
+
 signals:
     /// 向主窗口输出一条简短日志消息。
     void LogMessageGenerated(const QString& message);
@@ -59,6 +62,9 @@ private:
 
     /// 统一设置操作提示文本和颜色。
     void SetOperationMessage(const QString& message, bool success);
+    void ConnectDirtyTracking();
+    void MarkDirty();
+    void MarkClean();
 
     /// 生成一个跨模块聚合后的 SchemeSnapshot。
     void OnGenerateSnapshotClicked();
@@ -92,6 +98,7 @@ private:
     QString m_last_snapshot_file_path;
     QString m_last_export_file_path;
     bool m_has_snapshot = false;
+    bool m_has_unsaved_changes = false;
 
     QLineEdit* m_project_root_edit = nullptr;
     QPushButton* m_browse_button = nullptr;

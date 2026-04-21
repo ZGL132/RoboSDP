@@ -46,6 +46,9 @@ public:
     /// @brief 保存当前 Topology 草稿，供模块按钮和全局保存共用。
     RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
 
+    /// @brief 返回当前 Topology 表单是否存在未保存变更。
+    bool HasUnsavedChanges() const override;
+
 signals:
     /// 将 Topology 操作消息抛给主窗口底部日志面板。
     void LogMessageGenerated(const QString& message);
@@ -60,6 +63,9 @@ private:
 
     QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);
     void RegisterFieldWidget(const QString& fieldPath, QWidget* widget);
+    void ConnectDirtyTracking();
+    void MarkDirty();
+    void MarkClean();
 
     RoboSDP::Topology::Dto::RobotTopologyModelDto CollectModelFromForm() const;
     void PopulateForm(const RoboSDP::Topology::Dto::RobotTopologyModelDto& model);
@@ -88,6 +94,7 @@ private:
 
     RoboSDP::Topology::Dto::TopologyWorkspaceStateDto m_state;
     QHash<QString, QWidget*> m_field_widgets;
+    bool m_has_unsaved_changes = false;
 
     QLineEdit* m_project_root_edit = nullptr;
     QPushButton* m_browse_button = nullptr;

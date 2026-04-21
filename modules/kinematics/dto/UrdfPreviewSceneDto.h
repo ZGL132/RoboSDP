@@ -32,6 +32,8 @@ struct UrdfPreviewSegmentDto
     QString parent_link_name;
     /// @brief 子 link 名称。
     QString child_link_name;
+    /// @brief URDF joint 旋转轴，表达在 joint 局部坐标系中；fixed joint 保留默认 Z 轴。
+    std::array<double, 3> joint_axis_xyz {0.0, 0.0, 1.0};
     /// @brief 连杆段起点坐标，通常为父 link 参考点，单位 m。
     std::array<double, 3> start_position_m {0.0, 0.0, 0.0};
     /// @brief 连杆段终点坐标，通常为子 link 参考点，单位 m。
