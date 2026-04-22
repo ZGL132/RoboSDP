@@ -81,6 +81,7 @@ private:
     QGroupBox* CreateJointLimitGroup();
     QGroupBox* CreateSolverGroup();
     QGroupBox* CreateResultGroup();
+    QWidget* CreateScrollableTab(QWidget* contentWidget);
 
     QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);
     void SetupDhTableColumns();
@@ -108,7 +109,6 @@ private:
     std::vector<double> CollectJointInputs(const std::array<QDoubleSpinBox*, 6>& spinBoxes) const;
     void FillIkTargetFromFkResult();
 
-    void OnBrowseProjectRootClicked();
     void OnImportUrdfClicked();
     void OnBuildFromTopologyClicked();
     void OnRunFkClicked();
@@ -130,8 +130,6 @@ private:
     QTimer* m_preview_pose_update_timer = nullptr;
     bool m_has_unsaved_changes = false;
 
-    QLineEdit* m_project_root_edit = nullptr;
-    QPushButton* m_browse_button = nullptr;
     QPushButton* m_import_urdf_button = nullptr;
     QPushButton* m_build_from_topology_button = nullptr;
     QPushButton* m_run_fk_button = nullptr;

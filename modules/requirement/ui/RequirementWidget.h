@@ -57,6 +57,7 @@ private:
     QGroupBox* CreateAccuracyGroup();
     QGroupBox* CreateReliabilityGroup();
     QGroupBox* CreateValidationGroup();
+    QWidget* CreateScrollableTab(QWidget* contentWidget);
 
     QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);
     QSpinBox* CreateIntegerSpinBox(int minimum, int maximum, int step);
@@ -99,7 +100,6 @@ private:
     void OnValidateClicked();
     void OnSaveDraftClicked();
     void OnLoadClicked();
-    void OnBrowseProjectRootClicked();
     void OnAddKeyPoseClicked();
     void OnRemoveKeyPoseClicked();
     void OnKeyPoseSelectionChanged(int currentRow);
@@ -116,8 +116,6 @@ private:
     int m_current_key_pose_index = -1;
     bool m_has_unsaved_changes = false;
 
-    QLineEdit* m_project_root_edit = nullptr;
-    QPushButton* m_browse_button = nullptr;
     QPushButton* m_validate_button = nullptr;
     QPushButton* m_save_button = nullptr;
     QPushButton* m_load_button = nullptr;

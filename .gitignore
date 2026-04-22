@@ -66,6 +66,7 @@ __pycache__/
 # Generated / temp
 *.tmp
 *.log
+dist/
 
 # OS
 .DS_Store

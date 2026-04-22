@@ -3,9 +3,7 @@
 #include "apps/desktop-qt/third_party/qcustomplot/qcustomplot.h"
 #include "core/infrastructure/ProjectManager.h"
 
-#include <QDir>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -17,6 +15,7 @@
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QStringList>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVector>
@@ -115,19 +114,6 @@ DynamicsWidget::DynamicsWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
-    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
-    connect(
-        &projectManager,
-        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
-        this,
-        [this](const QString& newPath) {
-            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
-            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
-        });
-    if (!projectManager.getCurrentProjectPath().isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
-    }
     PopulateForm(m_state.current_model);
     RenderBackendStatus();
     RenderTorquePlot();
@@ -171,7 +157,7 @@ void DynamicsWidget::ConnectDirtyTracking()
 {
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
-        if (editor == m_project_root_edit || editor->isReadOnly())
+        if (editor->isReadOnly())
         {
             continue;
         }
@@ -211,19 +197,6 @@ void DynamicsWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* projectPathLayout = new QHBoxLayout();
-    auto* projectPathLabel = new QLabel(QStringLiteral("项目目录"), this);
-    m_project_root_edit = new QLineEdit(this);
-    m_project_root_edit->setObjectName(QStringLiteral("dynamics_project_root_edit"));
-    m_project_root_edit->setReadOnly(true);
-    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
-    m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
-    m_browse_button->setVisible(false);
-    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
-    projectPathLayout->addWidget(projectPathLabel);
-    projectPathLayout->addWidget(m_project_root_edit, 1);
-    projectPathLayout->addWidget(m_browse_button);
-
     auto* actionLayout = new QHBoxLayout();
     m_build_from_kinematics_button = new QPushButton(QStringLiteral("从 Kinematics 生成"), this);
     m_run_analysis_button = new QPushButton(QStringLiteral("执行逆动力学"), this);
@@ -241,27 +214,20 @@ void DynamicsWidget::BuildUi()
     m_operation_label->setObjectName(QStringLiteral("dynamics_operation_label"));
     m_operation_label->setWordWrap(true);
 
-    auto* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
+    auto* tabs = new QTabWidget(this);
+    tabs->setDocumentMode(true);
+    // 中文说明：Dynamics 页面按业务域拆为页签，表格校验、图表渲染和逆动力学调用链保持不变。
+    tabs->addTab(CreateScrollableTab(CreateModelGroup()), QStringLiteral("模型参数"));
+    tabs->addTab(CreateScrollableTab(CreateLinkTableGroup()), QStringLiteral("连杆惯量"));
+    tabs->addTab(CreateScrollableTab(CreateJointDriveTableGroup()), QStringLiteral("关节传动"));
+    tabs->addTab(CreateScrollableTab(CreateTrajectoryGroup()), QStringLiteral("基准轨迹"));
+    tabs->addTab(CreateScrollableTab(CreateBackendStatusGroup()), QStringLiteral("后端状态"));
+    tabs->addTab(CreateScrollableTab(CreatePlotGroup()), QStringLiteral("结果曲线"));
+    tabs->addTab(CreateScrollableTab(CreateResultGroup()), QStringLiteral("结果摘要"));
 
-    auto* scrollContent = new QWidget(scrollArea);
-    auto* contentLayout = new QVBoxLayout(scrollContent);
-    contentLayout->setContentsMargins(4, 4, 4, 4);
-    contentLayout->setSpacing(8);
-    contentLayout->addWidget(CreateModelGroup());
-    contentLayout->addWidget(CreateLinkTableGroup());
-    contentLayout->addWidget(CreateJointDriveTableGroup());
-    contentLayout->addWidget(CreateTrajectoryGroup());
-    contentLayout->addWidget(CreateBackendStatusGroup());
-    contentLayout->addWidget(CreatePlotGroup());
-    contentLayout->addWidget(CreateResultGroup());
-    contentLayout->addStretch();
-    scrollArea->setWidget(scrollContent);
-
-    rootLayout->addLayout(projectPathLayout);
     rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
-    rootLayout->addWidget(scrollArea, 1);
+    rootLayout->addWidget(tabs, 1);
 
     connect(m_build_from_kinematics_button, &QPushButton::clicked, this, [this]() { OnBuildFromKinematicsClicked(); });
     connect(m_run_analysis_button, &QPushButton::clicked, this, [this]() { OnRunAnalysisClicked(); });
@@ -270,6 +236,31 @@ void DynamicsWidget::BuildUi()
     connect(m_link_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateTablesAndHighlight(); });
     connect(m_joint_drive_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateTablesAndHighlight(); });
     connect(m_trajectory_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateTablesAndHighlight(); });
+}
+
+QWidget* DynamicsWidget::CreateScrollableTab(QWidget* contentWidget)
+{
+    auto* tabPage = new QWidget(this);
+    auto* tabLayout = new QVBoxLayout(tabPage);
+    tabLayout->setContentsMargins(0, 0, 0, 0);
+    tabLayout->setSpacing(0);
+
+    auto* scrollArea = new QScrollArea(tabPage);
+    scrollArea->setWidgetResizable(true);
+
+    auto* scrollContent = new QWidget(scrollArea);
+    auto* contentLayout = new QVBoxLayout(scrollContent);
+    contentLayout->setContentsMargins(4, 4, 4, 4);
+    contentLayout->setSpacing(8);
+    if (contentWidget != nullptr)
+    {
+        contentLayout->addWidget(contentWidget);
+    }
+    contentLayout->addStretch();
+    scrollArea->setWidget(scrollContent);
+
+    tabLayout->addWidget(scrollArea, 1);
+    return tabPage;
 }
 
 QGroupBox* DynamicsWidget::CreateModelGroup()
@@ -804,19 +795,6 @@ void DynamicsWidget::HighlightItem(QTableWidgetItem* item, bool isValid, const Q
 
     item->setBackground(isValid ? QColor(Qt::white) : QColor(QStringLiteral("#FEE4E2")));
     item->setToolTip(isValid ? QString() : tooltip);
-}
-
-void DynamicsWidget::OnBrowseProjectRootClicked()
-{
-    const QString selectedDirectory = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("选择 Dynamics 项目目录"),
-        m_project_root_edit->text().trimmed());
-
-    if (!selectedDirectory.isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(selectedDirectory));
-    }
 }
 
 void DynamicsWidget::OnBuildFromKinematicsClicked()

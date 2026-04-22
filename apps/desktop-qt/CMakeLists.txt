@@ -12,7 +12,12 @@ set(ROBOSDP_DESKTOP_SOURCES
     widgets/vtk/RobotVtkView.h
     widgets/vtk/VtkSceneBuilder.cpp
     widgets/vtk/VtkSceneBuilder.h
+    resources/desktop.qrc
 )
+
+if(WIN32)
+    list(APPEND ROBOSDP_DESKTOP_SOURCES RoboSDPDesktop.rc)
+endif()
 
 set(ROBOSDP_VTK_DIR "" CACHE PATH "可选：手动指定与当前 Qt/MinGW 工具链匹配的 VTK CMake 配置目录")
 

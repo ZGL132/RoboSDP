@@ -2,9 +2,7 @@
 
 #include "core/infrastructure/ProjectManager.h"
 
-#include <QDir>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -15,6 +13,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
@@ -64,19 +63,6 @@ PlanningWidget::PlanningWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
-    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
-    connect(
-        &projectManager,
-        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
-        this,
-        [this](const QString& newPath) {
-            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
-            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
-        });
-    if (!projectManager.getCurrentProjectPath().isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
-    }
     PopulateForm(m_state.current_scene);
     RenderResults();
     ConnectDirtyTracking();
@@ -118,7 +104,7 @@ void PlanningWidget::ConnectDirtyTracking()
 {
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
-        if (editor == m_project_root_edit || editor->isReadOnly())
+        if (editor->isReadOnly())
         {
             continue;
         }
@@ -152,17 +138,6 @@ void PlanningWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* projectPathLayout = new QHBoxLayout();
-    projectPathLayout->addWidget(new QLabel(QStringLiteral("项目目录"), this));
-    m_project_root_edit = new QLineEdit(this);
-    m_project_root_edit->setReadOnly(true);
-    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
-    m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
-    m_browse_button->setVisible(false);
-    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
-    projectPathLayout->addWidget(m_project_root_edit, 1);
-    projectPathLayout->addWidget(m_browse_button);
-
     auto* actionLayout = new QHBoxLayout();
     m_build_scene_button = new QPushButton(QStringLiteral("构建 PlanningScene"), this);
     m_run_verification_button = new QPushButton(QStringLiteral("执行点到点验证"), this);
@@ -177,13 +152,10 @@ void PlanningWidget::BuildUi()
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存上游草稿，再构建 PlanningScene 并执行验证。"), this);
     m_operation_label->setWordWrap(true);
 
-    auto* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
+    auto* tabs = new QTabWidget(this);
+    tabs->setDocumentMode(true);
 
-    auto* content = new QWidget(scrollArea);
-    auto* contentLayout = new QVBoxLayout(content);
-
-    auto* sceneGroup = new QGroupBox(QStringLiteral("场景与服务配置"), content);
+    auto* sceneGroup = new QGroupBox(QStringLiteral("场景与服务配置"), this);
     auto* sceneFormLayout = new QFormLayout(sceneGroup);
     m_kinematic_ref_edit = new QLineEdit(sceneGroup);
     m_kinematic_ref_edit->setReadOnly(true);
@@ -209,48 +181,71 @@ void PlanningWidget::BuildUi()
     sceneFormLayout->addRow(QStringLiteral("允许规划时间 [s]"), m_allowed_time_spin);
     sceneFormLayout->addRow(QStringLiteral("目标节拍 [s]"), m_target_cycle_time_spin);
 
-    auto* jointGroup = new QGroupBox(QStringLiteral("起点 / 终点关节表"), content);
+    auto* jointGroup = new QGroupBox(QStringLiteral("起点 / 终点关节表"), this);
     auto* jointLayout = new QVBoxLayout(jointGroup);
     m_joint_table = new QTableWidget(jointGroup);
     SetupJointTableColumns();
     jointLayout->addWidget(m_joint_table);
 
-    auto* collisionGroup = new QGroupBox(QStringLiteral("碰撞结果"), content);
+    auto* collisionGroup = new QGroupBox(QStringLiteral("碰撞结果"), this);
     auto* collisionLayout = new QVBoxLayout(collisionGroup);
     m_collision_table = new QTableWidget(collisionGroup);
     SetupCollisionTableColumns();
     collisionLayout->addWidget(m_collision_table);
 
-    auto* selfCollisionGroup = new QGroupBox(QStringLiteral("自碰撞结果"), content);
+    auto* selfCollisionGroup = new QGroupBox(QStringLiteral("自碰撞结果"), this);
     auto* selfCollisionLayout = new QVBoxLayout(selfCollisionGroup);
     m_self_collision_table = new QTableWidget(selfCollisionGroup);
     SetupSelfCollisionTableColumns();
     selfCollisionLayout->addWidget(m_self_collision_table);
 
-    auto* resultGroup = new QGroupBox(QStringLiteral("规划验证摘要"), content);
+    auto* resultGroup = new QGroupBox(QStringLiteral("规划验证摘要"), this);
     auto* resultLayout = new QVBoxLayout(resultGroup);
     m_result_summary_edit = new QPlainTextEdit(resultGroup);
     m_result_summary_edit->setReadOnly(true);
     resultLayout->addWidget(m_result_summary_edit);
 
-    contentLayout->addWidget(sceneGroup);
-    contentLayout->addWidget(jointGroup);
-    contentLayout->addWidget(collisionGroup);
-    contentLayout->addWidget(selfCollisionGroup);
-    contentLayout->addWidget(resultGroup);
-    contentLayout->addStretch();
-    scrollArea->setWidget(content);
+    // 中文说明：Planning 页面按验证流程拆为页签，场景收集、表格校验和结果渲染逻辑保持原有入口。
+    tabs->addTab(CreateScrollableTab(sceneGroup), QStringLiteral("场景配置"));
+    tabs->addTab(CreateScrollableTab(jointGroup), QStringLiteral("起止状态"));
+    tabs->addTab(CreateScrollableTab(collisionGroup), QStringLiteral("碰撞检测"));
+    tabs->addTab(CreateScrollableTab(selfCollisionGroup), QStringLiteral("自碰撞检测"));
+    tabs->addTab(CreateScrollableTab(resultGroup), QStringLiteral("验证摘要"));
 
-    rootLayout->addLayout(projectPathLayout);
     rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
-    rootLayout->addWidget(scrollArea, 1);
+    rootLayout->addWidget(tabs, 1);
 
     connect(m_build_scene_button, &QPushButton::clicked, this, [this]() { OnBuildSceneClicked(); });
     connect(m_run_verification_button, &QPushButton::clicked, this, [this]() { OnRunVerificationClicked(); });
     connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
     connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
     connect(m_joint_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateJointTableAndHighlight(); });
+}
+
+QWidget* PlanningWidget::CreateScrollableTab(QWidget* contentWidget)
+{
+    auto* tabPage = new QWidget(this);
+    auto* tabLayout = new QVBoxLayout(tabPage);
+    tabLayout->setContentsMargins(0, 0, 0, 0);
+    tabLayout->setSpacing(0);
+
+    auto* scrollArea = new QScrollArea(tabPage);
+    scrollArea->setWidgetResizable(true);
+
+    auto* scrollContent = new QWidget(scrollArea);
+    auto* contentLayout = new QVBoxLayout(scrollContent);
+    contentLayout->setContentsMargins(4, 4, 4, 4);
+    contentLayout->setSpacing(8);
+    if (contentWidget != nullptr)
+    {
+        contentLayout->addWidget(contentWidget);
+    }
+    contentLayout->addStretch();
+    scrollArea->setWidget(scrollContent);
+
+    tabLayout->addWidget(scrollArea, 1);
+    return tabPage;
 }
 
 void PlanningWidget::SetupJointTableColumns()
@@ -466,19 +461,6 @@ void PlanningWidget::HighlightItem(QTableWidgetItem* item, bool isValid, const Q
 
     item->setBackground(isValid ? QColor(Qt::white) : QColor(QStringLiteral("#FEE4E2")));
     item->setToolTip(isValid ? QString() : tooltip);
-}
-
-void PlanningWidget::OnBrowseProjectRootClicked()
-{
-    const QString selectedDirectory = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("选择 Planning 项目目录"),
-        m_project_root_edit->text().trimmed());
-
-    if (!selectedDirectory.isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(selectedDirectory));
-    }
 }
 
 void PlanningWidget::OnBuildSceneClicked()

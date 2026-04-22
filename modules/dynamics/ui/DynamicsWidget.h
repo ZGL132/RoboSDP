@@ -69,6 +69,7 @@ private:
     QGroupBox* CreateBackendStatusGroup();
     QGroupBox* CreatePlotGroup();
     QGroupBox* CreateResultGroup();
+    QWidget* CreateScrollableTab(QWidget* contentWidget);
 
     QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);
     void SetupLinkTableColumns();
@@ -88,7 +89,6 @@ private:
     void SetOperationMessage(const QString& message, bool success, bool warning = false);
     void EmitTelemetryStatus(const QString& engineName, const QString& message, bool warning);
 
-    void OnBrowseProjectRootClicked();
     void OnBuildFromKinematicsClicked();
     void OnRunAnalysisClicked();
     void OnSaveDraftClicked();
@@ -103,8 +103,6 @@ private:
     RoboSDP::Dynamics::Dto::DynamicsWorkspaceStateDto m_state;
     bool m_has_unsaved_changes = false;
 
-    QLineEdit* m_project_root_edit = nullptr;
-    QPushButton* m_browse_button = nullptr;
     QPushButton* m_build_from_kinematics_button = nullptr;
     QPushButton* m_run_analysis_button = nullptr;
     QPushButton* m_save_button = nullptr;

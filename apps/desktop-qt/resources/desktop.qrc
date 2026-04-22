@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/app">
+        <file alias="robosdp_256.png">../../../resources/app/robosdp_256.png</file>
+    </qresource>
+</RCC>

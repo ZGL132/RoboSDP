@@ -60,6 +60,7 @@ private:
     QGroupBox* CreateTopologyGroup();
     QGroupBox* CreateCandidateGroup();
     QGroupBox* CreateValidationGroup();
+    QWidget* CreateScrollableTab(QWidget* contentWidget);
 
     QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);
     void RegisterFieldWidget(const QString& fieldPath, QWidget* widget);
@@ -76,7 +77,6 @@ private:
     void ApplyValidationResult(const RoboSDP::Topology::Validation::TopologyValidationResult& result);
     void SetOperationMessage(const QString& message, bool success);
 
-    void OnBrowseProjectRootClicked();
     void OnRefreshTemplatesClicked();
     void OnGenerateClicked();
     void OnValidateClicked();
@@ -96,8 +96,6 @@ private:
     QHash<QString, QWidget*> m_field_widgets;
     bool m_has_unsaved_changes = false;
 
-    QLineEdit* m_project_root_edit = nullptr;
-    QPushButton* m_browse_button = nullptr;
     QComboBox* m_template_combo = nullptr;
     QPushButton* m_refresh_template_button = nullptr;
     QPushButton* m_generate_button = nullptr;

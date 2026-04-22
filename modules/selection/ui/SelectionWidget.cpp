@@ -74,19 +74,6 @@ SelectionWidget::SelectionWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
-    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
-    connect(
-        &projectManager,
-        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
-        this,
-        [this](const QString& newPath) {
-            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
-            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
-        });
-    if (!projectManager.getCurrentProjectPath().isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
-    }
     RenderState();
     ConnectDirtyTracking();
     MarkClean();
@@ -119,10 +106,6 @@ void SelectionWidget::ConnectDirtyTracking()
 {
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
-        if (editor == m_project_root_edit)
-        {
-            continue;
-        }
         connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
     }
 }
@@ -142,17 +125,6 @@ void SelectionWidget::BuildUi()
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
-
-    auto* projectLayout = new QHBoxLayout();
-    projectLayout->addWidget(new QLabel(QStringLiteral("项目目录"), this));
-    m_project_root_edit = new QLineEdit(this);
-    m_project_root_edit->setReadOnly(true);
-    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
-    m_browse_project_button = new QPushButton(QStringLiteral("选择项目"), this);
-    m_browse_project_button->setVisible(false);
-    m_browse_project_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
-    projectLayout->addWidget(m_project_root_edit, 1);
-    projectLayout->addWidget(m_browse_project_button);
 
     auto* catalogLayout = new QHBoxLayout();
     catalogLayout->addWidget(new QLabel(QStringLiteral("样例目录"), this));
@@ -195,7 +167,6 @@ void SelectionWidget::BuildUi()
     contentLayout->addStretch();
     scrollArea->setWidget(content);
 
-    rootLayout->addLayout(projectLayout);
     rootLayout->addLayout(catalogLayout);
     rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
@@ -284,18 +255,6 @@ void SelectionWidget::SetOperationMessage(const QString& message, bool success)
     m_operation_label->setText(message);
     m_operation_label->setStyleSheet(success ? QStringLiteral("color: #1b7f3b;")
                                              : QStringLiteral("color: #b42318;"));
-}
-
-void SelectionWidget::OnBrowseProjectRootClicked()
-{
-    const QString path = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("选择 Selection 项目目录"),
-        m_project_root_edit->text().trimmed());
-    if (!path.isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(path));
-    }
 }
 
 void SelectionWidget::OnBrowseCatalogRootClicked()

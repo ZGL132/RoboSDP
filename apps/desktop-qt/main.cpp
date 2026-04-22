@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QIcon>
 #include <QTimer>
 
 int main(int argc, char* argv[])
@@ -12,6 +13,8 @@ int main(int argc, char* argv[])
     bootstrap.ConfigureGraphicsSurfaceFormat();
 
     QApplication app(argc, argv);
+    // 中文说明：设置运行时窗口图标，确保标题栏和任务栏显示 RoboSDP 标识。
+    app.setWindowIcon(QIcon(QStringLiteral(":/app/robosdp_256.png")));
 
     const RoboSDP::Desktop::AppBootstrapResult bootstrapResult = bootstrap.Initialize();
     if (!bootstrapResult.IsSuccess())

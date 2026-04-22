@@ -19,6 +19,7 @@
 #include <QScrollArea>
 #include <QStringList>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimer>
@@ -198,19 +199,6 @@ KinematicsWidget::KinematicsWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
-    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
-    connect(
-        &projectManager,
-        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
-        this,
-        [this](const QString& newPath) {
-            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
-            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
-        });
-    if (!projectManager.getCurrentProjectPath().isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
-    }
     PopulateForm(m_state.current_model);
     RefreshBackendDiagnostics();
     RenderResults();
@@ -246,10 +234,6 @@ void KinematicsWidget::ConnectDirtyTracking()
 {
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
-        if (editor == m_project_root_edit)
-        {
-            continue;
-        }
         connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
     }
     for (QComboBox* editor : findChildren<QComboBox*>())
@@ -302,19 +286,6 @@ void KinematicsWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* projectPathLayout = new QHBoxLayout();
-    auto* projectPathLabel = new QLabel(QStringLiteral("项目目录"), this);
-    m_project_root_edit = new QLineEdit(this);
-    m_project_root_edit->setObjectName(QStringLiteral("kinematics_project_root_edit"));
-    m_project_root_edit->setReadOnly(true);
-    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
-    m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
-    m_browse_button->setVisible(false);
-    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
-    projectPathLayout->addWidget(projectPathLabel);
-    projectPathLayout->addWidget(m_project_root_edit, 1);
-    projectPathLayout->addWidget(m_browse_button);
-
     auto* actionLayout = new QHBoxLayout();
     m_import_urdf_button = new QPushButton(QStringLiteral("导入 URDF"), this);
     m_build_from_topology_button = new QPushButton(QStringLiteral("从 Topology 生成"), this);
@@ -340,25 +311,18 @@ void KinematicsWidget::BuildUi()
     m_operation_label->setObjectName(QStringLiteral("kinematics_operation_label"));
     m_operation_label->setWordWrap(true);
 
-    auto* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
+    auto* tabs = new QTabWidget(this);
+    tabs->setDocumentMode(true);
+    // 中文说明：Kinematics 页面按业务域拆为页签，底层模型收集、FK/IK 和 URDF 预览链路保持不变。
+    tabs->addTab(CreateScrollableTab(CreateModelGroup()), QStringLiteral("模型与坐标系"));
+    tabs->addTab(CreateScrollableTab(CreateDhTableGroup()), QStringLiteral("DH/MDH 参数"));
+    tabs->addTab(CreateScrollableTab(CreateJointLimitGroup()), QStringLiteral("关节限位"));
+    tabs->addTab(CreateScrollableTab(CreateSolverGroup()), QStringLiteral("FK / IK 求解"));
+    tabs->addTab(CreateScrollableTab(CreateResultGroup()), QStringLiteral("结果摘要"));
 
-    auto* scrollContent = new QWidget(scrollArea);
-    auto* contentLayout = new QVBoxLayout(scrollContent);
-    contentLayout->setContentsMargins(4, 4, 4, 4);
-    contentLayout->setSpacing(8);
-    contentLayout->addWidget(CreateModelGroup());
-    contentLayout->addWidget(CreateDhTableGroup());
-    contentLayout->addWidget(CreateJointLimitGroup());
-    contentLayout->addWidget(CreateSolverGroup());
-    contentLayout->addWidget(CreateResultGroup());
-    contentLayout->addStretch();
-    scrollArea->setWidget(scrollContent);
-
-    rootLayout->addLayout(projectPathLayout);
     rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
-    rootLayout->addWidget(scrollArea, 1);
+    rootLayout->addWidget(tabs, 1);
 
     m_preview_pose_update_timer = new QTimer(this);
     m_preview_pose_update_timer->setSingleShot(true);
@@ -375,6 +339,31 @@ void KinematicsWidget::BuildUi()
     connect(m_sample_workspace_button, &QPushButton::clicked, this, [this]() { OnSampleWorkspaceClicked(); });
     connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
     connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
+}
+
+QWidget* KinematicsWidget::CreateScrollableTab(QWidget* contentWidget)
+{
+    auto* tabPage = new QWidget(this);
+    auto* tabLayout = new QVBoxLayout(tabPage);
+    tabLayout->setContentsMargins(0, 0, 0, 0);
+    tabLayout->setSpacing(0);
+
+    auto* scrollArea = new QScrollArea(tabPage);
+    scrollArea->setWidgetResizable(true);
+
+    auto* scrollContent = new QWidget(scrollArea);
+    auto* contentLayout = new QVBoxLayout(scrollContent);
+    contentLayout->setContentsMargins(4, 4, 4, 4);
+    contentLayout->setSpacing(8);
+    if (contentWidget != nullptr)
+    {
+        contentLayout->addWidget(contentWidget);
+    }
+    contentLayout->addStretch();
+    scrollArea->setWidget(scrollContent);
+
+    tabLayout->addWidget(scrollArea, 1);
+    return tabPage;
 }
 
 QGroupBox* KinematicsWidget::CreateModelGroup()
@@ -950,19 +939,6 @@ void KinematicsWidget::FillIkTargetFromFkResult()
          ++index)
     {
         m_ik_seed_joint_spins[index]->setValue(m_state.last_fk_result.joint_positions_deg[index]);
-    }
-}
-
-void KinematicsWidget::OnBrowseProjectRootClicked()
-{
-    const QString selectedDirectory = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("选择 Kinematics 项目目录"),
-        m_project_root_edit->text().trimmed());
-
-    if (!selectedDirectory.isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(selectedDirectory));
     }
 }
 

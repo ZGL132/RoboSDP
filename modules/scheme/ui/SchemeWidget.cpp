@@ -3,8 +3,6 @@
 #include "core/infrastructure/ProjectManager.h"
 
 #include <QDateTime>
-#include <QDir>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -40,19 +38,6 @@ SchemeWidget::SchemeWidget(QWidget* parent)
     , m_snapshot(m_snapshot_service.CreateDefaultSnapshot())
 {
     BuildUi();
-    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
-    connect(
-        &projectManager,
-        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
-        this,
-        [this](const QString& newPath) {
-            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
-            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
-        });
-    if (!projectManager.getCurrentProjectPath().isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
-    }
     RenderSnapshotSummary();
     ConnectDirtyTracking();
     MarkClean();
@@ -104,7 +89,7 @@ void SchemeWidget::ConnectDirtyTracking()
 {
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
-        if (editor == m_project_root_edit || editor->isReadOnly())
+        if (editor->isReadOnly())
         {
             continue;
         }
@@ -134,17 +119,6 @@ void SchemeWidget::BuildUi()
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
-
-    auto* projectPathLayout = new QHBoxLayout();
-    projectPathLayout->addWidget(new QLabel(QStringLiteral("项目目录"), this));
-    m_project_root_edit = new QLineEdit(this);
-    m_project_root_edit->setReadOnly(true);
-    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
-    m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
-    m_browse_button->setVisible(false);
-    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
-    projectPathLayout->addWidget(m_project_root_edit, 1);
-    projectPathLayout->addWidget(m_browse_button);
 
     auto* actionLayout = new QHBoxLayout();
     m_generate_snapshot_button = new QPushButton(QStringLiteral("生成 Snapshot"), this);
@@ -213,7 +187,6 @@ void SchemeWidget::BuildUi()
     contentLayout->addStretch();
     scrollArea->setWidget(contentWidget);
 
-    rootLayout->addLayout(projectPathLayout);
     rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
@@ -370,19 +343,6 @@ void SchemeWidget::OnExportJsonClicked()
 
     SetOperationMessage(exportResult.message, exportResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Scheme] %1").arg(exportResult.message));
-}
-
-void SchemeWidget::OnBrowseProjectRootClicked()
-{
-    const QString selectedDirectory = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("选择 Scheme 项目目录"),
-        m_project_root_edit->text().trimmed());
-
-    if (!selectedDirectory.isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(selectedDirectory));
-    }
 }
 
 } // namespace RoboSDP::Scheme::Ui

@@ -78,9 +78,6 @@ private:
     /// 导出当前快照为 JSON 交付摘要。
     void OnExportJsonClicked();
 
-    /// 选择项目目录。
-    void OnBrowseProjectRootClicked();
-
 private:
     RoboSDP::Logging::ConsoleLogger m_logger;
     RoboSDP::Repository::LocalJsonRepository m_repository;
@@ -100,8 +97,6 @@ private:
     bool m_has_snapshot = false;
     bool m_has_unsaved_changes = false;
 
-    QLineEdit* m_project_root_edit = nullptr;
-    QPushButton* m_browse_button = nullptr;
     QPushButton* m_generate_snapshot_button = nullptr;
     QPushButton* m_regenerate_save_snapshot_button = nullptr;
     QPushButton* m_load_snapshot_button = nullptr;

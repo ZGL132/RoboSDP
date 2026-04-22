@@ -52,6 +52,7 @@ signals:
 
 private:
     void BuildUi();
+    QWidget* CreateScrollableTab(QWidget* contentWidget);
     void SetupJointTableColumns();
     void SetupCollisionTableColumns();
     void SetupSelfCollisionTableColumns();
@@ -65,7 +66,6 @@ private:
     bool ValidateJointTableAndHighlight(QString* message = nullptr);
     void HighlightItem(QTableWidgetItem* item, bool isValid, const QString& tooltip);
 
-    void OnBrowseProjectRootClicked();
     void OnBuildSceneClicked();
     void OnRunVerificationClicked();
     void OnSaveDraftClicked();
@@ -81,8 +81,6 @@ private:
     RoboSDP::Planning::Dto::PlanningWorkspaceStateDto m_state;
     bool m_has_unsaved_changes = false;
 
-    QLineEdit* m_project_root_edit = nullptr;
-    QPushButton* m_browse_button = nullptr;
     QPushButton* m_build_scene_button = nullptr;
     QPushButton* m_run_verification_button = nullptr;
     QPushButton* m_save_button = nullptr;

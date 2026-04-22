@@ -55,7 +55,6 @@ private:
     void MarkDirty();
     void MarkClean();
 
-    void OnBrowseProjectRootClicked();
     void OnBrowseCatalogRootClicked();
     void OnRunSelectionClicked();
     void OnSaveDraftClicked();
@@ -70,9 +69,7 @@ private:
     RoboSDP::Selection::Dto::SelectionWorkspaceStateDto m_state;
     bool m_has_unsaved_changes = false;
 
-    QLineEdit* m_project_root_edit = nullptr;
     QLineEdit* m_catalog_root_edit = nullptr;
-    QPushButton* m_browse_project_button = nullptr;
     QPushButton* m_browse_catalog_button = nullptr;
     QPushButton* m_run_button = nullptr;
     QPushButton* m_save_button = nullptr;

@@ -6,9 +6,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDir>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -20,6 +18,7 @@
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QVBoxLayout>
 
 namespace RoboSDP::Requirement::Ui
@@ -31,19 +30,6 @@ RequirementWidget::RequirementWidget(QWidget* parent)
     , m_service(m_storage, m_validator, &m_logger)
 {
     BuildUi();
-    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
-    connect(
-        &projectManager,
-        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
-        this,
-        [this](const QString& newPath) {
-            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
-            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
-        });
-    if (!projectManager.getCurrentProjectPath().isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
-    }
     PopulateForm(m_service.CreateDefaultModel());
     ConnectDirtyTracking();
     MarkClean();
@@ -86,10 +72,6 @@ void RequirementWidget::ConnectDirtyTracking()
 {
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
-        if (editor == m_project_root_edit)
-        {
-            continue;
-        }
         connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
     }
     for (QComboBox* editor : findChildren<QComboBox*>())
@@ -132,18 +114,6 @@ void RequirementWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* projectPathLayout = new QHBoxLayout();
-    auto* projectPathLabel = new QLabel(QStringLiteral("项目目录"), this);
-    m_project_root_edit = new QLineEdit(this);
-    m_project_root_edit->setReadOnly(true);
-    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
-    m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
-    m_browse_button->setVisible(false);
-    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
-    projectPathLayout->addWidget(projectPathLabel);
-    projectPathLayout->addWidget(m_project_root_edit, 1);
-    projectPathLayout->addWidget(m_browse_button);
-
     auto* actionLayout = new QHBoxLayout();
     m_validate_button = new QPushButton(QStringLiteral("校验"), this);
     m_save_button = new QPushButton(QStringLiteral("保存草稿"), this);
@@ -156,31 +126,49 @@ void RequirementWidget::BuildUi()
     m_operation_label = new QLabel(QStringLiteral("就绪：请录入 Requirement 基础字段。"), this);
     m_operation_label->setWordWrap(true);
 
-    auto* scrollArea = new QScrollArea(this);
+    auto* tabs = new QTabWidget(this);
+    tabs->setDocumentMode(true);
+    // 中文说明：Requirement 表单按业务域拆分，字段控件仍由原有分组函数创建，避免影响 DTO 收集和保存路径。
+    tabs->addTab(CreateScrollableTab(CreateProjectMetaGroup()), QStringLiteral("项目信息"));
+    tabs->addTab(CreateScrollableTab(CreateLoadRequirementsGroup()), QStringLiteral("负载需求"));
+    tabs->addTab(CreateScrollableTab(CreateWorkspaceGroup()), QStringLiteral("工作空间"));
+    tabs->addTab(CreateScrollableTab(CreateMotionGroup()), QStringLiteral("运动性能"));
+    tabs->addTab(CreateScrollableTab(CreateAccuracyGroup()), QStringLiteral("精度需求"));
+    tabs->addTab(CreateScrollableTab(CreateReliabilityGroup()), QStringLiteral("可靠性"));
+    tabs->addTab(CreateScrollableTab(CreateValidationGroup()), QStringLiteral("校验结果"));
+
+    rootLayout->addLayout(actionLayout);
+    rootLayout->addWidget(m_operation_label);
+    rootLayout->addWidget(tabs, 1);
+
+    connect(m_validate_button, &QPushButton::clicked, this, [this]() { OnValidateClicked(); });
+    connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
+    connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
+}
+
+QWidget* RequirementWidget::CreateScrollableTab(QWidget* contentWidget)
+{
+    auto* tabPage = new QWidget(this);
+    auto* tabLayout = new QVBoxLayout(tabPage);
+    tabLayout->setContentsMargins(0, 0, 0, 0);
+    tabLayout->setSpacing(0);
+
+    auto* scrollArea = new QScrollArea(tabPage);
     scrollArea->setWidgetResizable(true);
 
     auto* scrollContent = new QWidget(scrollArea);
     auto* contentLayout = new QVBoxLayout(scrollContent);
     contentLayout->setContentsMargins(4, 4, 4, 4);
     contentLayout->setSpacing(8);
-    contentLayout->addWidget(CreateProjectMetaGroup());
-    contentLayout->addWidget(CreateLoadRequirementsGroup());
-    contentLayout->addWidget(CreateWorkspaceGroup());
-    contentLayout->addWidget(CreateMotionGroup());
-    contentLayout->addWidget(CreateAccuracyGroup());
-    contentLayout->addWidget(CreateReliabilityGroup());
-    contentLayout->addWidget(CreateValidationGroup());
+    if (contentWidget != nullptr)
+    {
+        contentLayout->addWidget(contentWidget);
+    }
     contentLayout->addStretch();
     scrollArea->setWidget(scrollContent);
 
-    rootLayout->addLayout(projectPathLayout);
-    rootLayout->addLayout(actionLayout);
-    rootLayout->addWidget(m_operation_label);
-    rootLayout->addWidget(scrollArea, 1);
-
-    connect(m_validate_button, &QPushButton::clicked, this, [this]() { OnValidateClicked(); });
-    connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
-    connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
+    tabLayout->addWidget(scrollArea, 1);
+    return tabPage;
 }
 
 QGroupBox* RequirementWidget::CreateProjectMetaGroup()
@@ -907,19 +895,6 @@ void RequirementWidget::OnLoadClicked()
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Requirement] %1").arg(loadResult.message));
-}
-
-void RequirementWidget::OnBrowseProjectRootClicked()
-{
-    const QString selectedDirectory = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("选择 Requirement 项目目录"),
-        m_project_root_edit->text().trimmed());
-
-    if (!selectedDirectory.isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(selectedDirectory));
-    }
 }
 
 void RequirementWidget::OnAddKeyPoseClicked()

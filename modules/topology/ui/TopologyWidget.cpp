@@ -5,9 +5,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDir>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -19,6 +17,7 @@
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QStringList>
+#include <QTabWidget>
 #include <QVBoxLayout>
 
 namespace RoboSDP::Topology::Ui
@@ -128,19 +127,6 @@ TopologyWidget::TopologyWidget(QWidget* parent)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
-    auto& projectManager = RoboSDP::Infrastructure::ProjectManager::instance();
-    connect(
-        &projectManager,
-        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
-        this,
-        [this](const QString& newPath) {
-            // 中文说明：项目目录只展示全局 ProjectManager 的当前路径，不作为模块私有状态。
-            m_project_root_edit->setText(QDir::toNativeSeparators(newPath));
-        });
-    if (!projectManager.getCurrentProjectPath().isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(projectManager.getCurrentProjectPath()));
-    }
     PopulateForm(m_state.current_model);
     RefreshTemplateOptions();
     RenderCandidates();
@@ -178,10 +164,6 @@ void TopologyWidget::ConnectDirtyTracking()
 {
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
-        if (editor == m_project_root_edit)
-        {
-            continue;
-        }
         connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
     }
     for (QComboBox* editor : findChildren<QComboBox*>())
@@ -225,18 +207,6 @@ void TopologyWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* projectPathLayout = new QHBoxLayout();
-    auto* projectPathLabel = new QLabel(QStringLiteral("项目目录"), this);
-    m_project_root_edit = new QLineEdit(this);
-    m_project_root_edit->setReadOnly(true);
-    m_project_root_edit->setPlaceholderText(QStringLiteral("请先通过顶部功能区新建或打开项目"));
-    m_browse_button = new QPushButton(QStringLiteral("选择目录"), this);
-    m_browse_button->setVisible(false);
-    m_browse_button->setToolTip(QStringLiteral("项目目录已改由顶部功能区统一管理。"));
-    projectPathLayout->addWidget(projectPathLabel);
-    projectPathLayout->addWidget(m_project_root_edit, 1);
-    projectPathLayout->addWidget(m_browse_button);
-
     auto* templateLayout = new QHBoxLayout();
     auto* templateLabel = new QLabel(QStringLiteral("构型模板"), this);
     m_template_combo = new QComboBox(this);
@@ -261,24 +231,17 @@ void TopologyWidget::BuildUi()
         this);
     m_operation_label->setWordWrap(true);
 
-    auto* scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
+    auto* tabs = new QTabWidget(this);
+    tabs->setDocumentMode(true);
+    // 中文说明：Topology 页面按业务域拆为页签，具体字段控件仍由原有分组函数创建，避免影响保存和校验路径。
+    tabs->addTab(CreateScrollableTab(CreateTopologyGroup()), QStringLiteral("构型骨架"));
+    tabs->addTab(CreateScrollableTab(CreateCandidateGroup()), QStringLiteral("候选方案"));
+    tabs->addTab(CreateScrollableTab(CreateValidationGroup()), QStringLiteral("校验结果"));
 
-    auto* scrollContent = new QWidget(scrollArea);
-    auto* contentLayout = new QVBoxLayout(scrollContent);
-    contentLayout->setContentsMargins(4, 4, 4, 4);
-    contentLayout->setSpacing(8);
-    contentLayout->addWidget(CreateTopologyGroup());
-    contentLayout->addWidget(CreateCandidateGroup());
-    contentLayout->addWidget(CreateValidationGroup());
-    contentLayout->addStretch();
-    scrollArea->setWidget(scrollContent);
-
-    rootLayout->addLayout(projectPathLayout);
     rootLayout->addLayout(templateLayout);
     rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
-    rootLayout->addWidget(scrollArea, 1);
+    rootLayout->addWidget(tabs, 1);
 
     connect(
         m_refresh_template_button,
@@ -289,6 +252,31 @@ void TopologyWidget::BuildUi()
     connect(m_validate_button, &QPushButton::clicked, this, [this]() { OnValidateClicked(); });
     connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
     connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
+}
+
+QWidget* TopologyWidget::CreateScrollableTab(QWidget* contentWidget)
+{
+    auto* tabPage = new QWidget(this);
+    auto* tabLayout = new QVBoxLayout(tabPage);
+    tabLayout->setContentsMargins(0, 0, 0, 0);
+    tabLayout->setSpacing(0);
+
+    auto* scrollArea = new QScrollArea(tabPage);
+    scrollArea->setWidgetResizable(true);
+
+    auto* scrollContent = new QWidget(scrollArea);
+    auto* contentLayout = new QVBoxLayout(scrollContent);
+    contentLayout->setContentsMargins(4, 4, 4, 4);
+    contentLayout->setSpacing(8);
+    if (contentWidget != nullptr)
+    {
+        contentLayout->addWidget(contentWidget);
+    }
+    contentLayout->addStretch();
+    scrollArea->setWidget(scrollContent);
+
+    tabLayout->addWidget(scrollArea, 1);
+    return tabPage;
 }
 
 void TopologyWidget::RefreshTemplateOptions()
@@ -666,19 +654,6 @@ void TopologyWidget::SetOperationMessage(const QString& message, bool success)
     m_operation_label->setText(message);
     m_operation_label->setStyleSheet(success ? QStringLiteral("color: #1b7f3b;")
                                              : QStringLiteral("color: #b42318;"));
-}
-
-void TopologyWidget::OnBrowseProjectRootClicked()
-{
-    const QString selectedDirectory = QFileDialog::getExistingDirectory(
-        this,
-        QStringLiteral("选择 Topology 项目目录"),
-        m_project_root_edit->text().trimmed());
-
-    if (!selectedDirectory.isEmpty())
-    {
-        m_project_root_edit->setText(QDir::toNativeSeparators(selectedDirectory));
-    }
 }
 
 void TopologyWidget::OnRefreshTemplatesClicked()
