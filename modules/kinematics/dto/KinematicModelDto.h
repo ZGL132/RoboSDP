@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include "modules/kinematics/dto/UnifiedRobotModelSnapshotDto.h"
+
 #include <QString>
 
 #include <array>
@@ -80,6 +82,27 @@ struct KinematicModelDto
 {
     KinematicMetaDto meta;
 
+    /// @brief 当前草稿的主模型类型：dh_mdh 表示参数化设计主链，urdf 表示工程模型主链。
+    QString master_model_type = QStringLiteral("dh_mdh");
+
+    /// @brief 派生模型状态：fresh=已同步，stale=待刷新，not_available=当前尚未生成。
+    QString derived_model_state = QStringLiteral("fresh");
+
+    /// @brief 标记 DH/MDH 参数表当前是否允许编辑，供 UI 显示当前主链归属。
+    bool dh_editable = true;
+
+    /// @brief 标记 URDF 语义当前是否允许编辑；第一阶段先用于状态表达，不开放复杂编辑入口。
+    bool urdf_editable = false;
+
+    /// @brief 记录主模型与派生模型之间的转换诊断摘要，供 UI 和日志提示用户当前同步语义。
+    QString conversion_diagnostics = QStringLiteral("当前草稿以 DH/MDH 参数为主模型。");
+
+    /// @brief 当主模型为 URDF 且页面展示 DH/MDH 草案时，标记提取可信度：full / partial / diagnostic_only。
+    QString dh_draft_extraction_level;
+
+    /// @brief 当 DH/MDH 草案只读时，向 UI 提供明确原因，避免用户误以为参数修改会直接反写 URDF 主模型。
+    QString dh_draft_readonly_reason;
+
     /// @brief 当前模型采用的建模语义模式，用于区分 DH、MDH 还是 URDF 导入模型。
     QString modeling_mode = QStringLiteral("DH");
 
@@ -98,6 +121,12 @@ struct KinematicModelDto
     /// @brief 当建模模式为 URDF 时，记录原始 URDF 文件路径，便于重新导入和问题定位。
     QString urdf_source_path;
 
+    /// @brief 记录用户最初导入的外部 URDF 文件路径，供后续从 DH/MDH 主模型回切时区分“原始导入”与“项目派生”来源。
+    QString original_imported_urdf_path;
+
+    /// @brief 标记当前 URDF 主模型来源类型：original_imported / project_derived / none。
+    QString urdf_master_source_type = QStringLiteral("none");
+
     /// @brief 标记共享 Pinocchio 内部模型是否已准备完成，防止上层流程误判后端已切换。
     bool pinocchio_model_ready = false;
 
@@ -106,6 +135,9 @@ struct KinematicModelDto
 
     /// @brief 记录当前关节顺序签名，后续用于 Jacobian、状态量映射和跨模块关节顺序一致性校验。
     QString joint_order_signature;
+
+    /// @brief 当前统一工程主链快照，供 Dynamics / Planning / Scheme 读取统一模型语义。
+    UnifiedRobotModelSnapshotDto unified_robot_snapshot;
 
     /// @brief URDF 外部 Mesh 的搜索目录列表，用于解析 package://、相对路径或工作空间中的资源文件。
     std::vector<QString> mesh_search_directories;
@@ -162,6 +194,25 @@ struct KinematicModelDto
             signature.append(dto.joint_limits[index].joint_id);
         }
         dto.joint_order_signature = signature;
+        dto.unified_robot_snapshot.unified_robot_model_ref = dto.unified_robot_model_ref;
+        dto.unified_robot_snapshot.source_kinematic_id = dto.meta.kinematic_id;
+        dto.unified_robot_snapshot.master_model_type = dto.master_model_type;
+        dto.unified_robot_snapshot.modeling_mode = dto.modeling_mode;
+        dto.unified_robot_snapshot.parameter_convention = dto.parameter_convention;
+        dto.unified_robot_snapshot.backend_type = dto.backend_type;
+        dto.unified_robot_snapshot.joint_order_signature = dto.joint_order_signature;
+        dto.unified_robot_snapshot.pinocchio_model_ready = dto.pinocchio_model_ready;
+        dto.unified_robot_snapshot.frame_semantics_version = dto.frame_semantics_version;
+        dto.unified_robot_snapshot.model_source_mode = dto.model_source_mode;
+        dto.unified_robot_snapshot.conversion_diagnostics = dto.conversion_diagnostics;
+        dto.unified_robot_snapshot.derived_artifact_relative_path =
+            QStringLiteral("kinematics/derived/%1.urdf").arg(dto.meta.kinematic_id);
+        dto.unified_robot_snapshot.derived_artifact_version = QStringLiteral("logical_v1");
+        dto.unified_robot_snapshot.derived_artifact_state_code = QStringLiteral("logical_only");
+        dto.unified_robot_snapshot.derived_artifact_exists = false;
+        dto.unified_robot_snapshot.derived_artifact_fresh = false;
+        dto.dh_draft_extraction_level.clear();
+        dto.dh_draft_readonly_reason.clear();
 
         return dto;
     }

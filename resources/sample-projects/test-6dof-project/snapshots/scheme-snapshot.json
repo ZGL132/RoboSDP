@@ -1,0 +1,89 @@
+﻿{
+    "aggregate": {
+        "available_module_count": 6,
+        "completeness_summary": "宸茶仛鍚堝叏閮?6 涓笂娓告ā鍧楃粨鏋溿€?,
+        "dynamics_summary": {
+            "available": true,
+            "dynamic_id": "dynamic_test_6dof",
+            "envelope_joint_count": 6,
+            "max_peak_torque_nm": 13.962104761471252,
+            "peak_stat_count": 12,
+            "rms_stat_count": 12,
+            "summary_text": "杞ㄨ抗 2 鏉?/ 鍖呯粶鍏宠妭 6 涓?/ 鏈€澶у嘲鍊?13.96 Nm",
+            "trajectory_count": 2
+        },
+        "export_meta": {
+            "default_export_format": "json",
+            "default_export_relative_path": "exports/scheme-export.json",
+            "last_export_relative_path": "",
+            "last_exported_at": ""
+        },
+        "kinematics_summary": {
+            "available": true,
+            "joint_count": 6,
+            "kinematic_id": "kinematic_test_6dof",
+            "last_fk_success": false,
+            "last_ik_success": false,
+            "parameter_convention": "DH",
+            "summary_text": "DH / 鍙揪鏍锋湰 0 / 鏈€澶у崐寰?0.000 m",
+            "workspace_max_radius_m": 0,
+            "workspace_reachable_sample_count": 0
+        },
+        "planning_summary": {
+            "available": true,
+            "collision_issue_count": 0,
+            "cycle_time_within_target": true,
+            "request_count": 1,
+            "self_collision_issue_count": 0,
+            "success": true,
+            "summary_text": "楠岃瘉 1 鏉?/ 纰版挒闂 0 / 鑷鎾為棶棰?0",
+            "verification_count": 1
+        },
+        "refs": {
+            "dynamic_ref": "dynamic_test_6dof",
+            "kinematic_ref": "kinematic_test_6dof",
+            "planning_result_ref": "planning_verification_test_6dof_001",
+            "planning_scene_ref": "planning_scene_test_6dof",
+            "requirement_ref": "requirements/requirement-model.json",
+            "selection_ref": "selection/drivetrain-selection.json",
+            "topology_ref": "topology_test_6dof"
+        },
+        "requirement_summary": {
+            "available": true,
+            "key_pose_count": 2,
+            "max_payload_kg": 10,
+            "project_name": "6DOF Test Project",
+            "rated_payload_kg": 8.5,
+            "scenario_type": "handling",
+            "summary_text": "handling / 棰濆畾璐熻浇 8.50 kg / 鑺傛媿 4.20 s",
+            "takt_time_s": 4.2
+        },
+        "selection_summary": {
+            "available": true,
+            "joint_selection_count": 6,
+            "recommended_joint_count": 6,
+            "success": true,
+            "summary_text": "鑱斿悎椹卞姩閾?鎴愬姛 / 鎺ㄨ崘瑕嗙洊 6 涓叧鑺?
+        },
+        "topology_summary": {
+            "available": true,
+            "candidate_count": 1,
+            "joint_count": 6,
+            "recommended_candidate_id": "candidate_test_6dof_001",
+            "robot_type": "6R_serial",
+            "summary_text": "6R_serial / 6 杞?/ 鎺ㄨ崘鍊欓€?candidate_test_6dof_001",
+            "template_id": "tpl_6r_floor_general",
+            "topology_id": "topology_test_6dof",
+            "topology_name": "6DOF Test 6R 涓茶仈鏋勫瀷"
+        }
+    },
+    "meta": {
+        "created_at": "2026-04-13T06:23:33Z",
+        "name": "闃舵 1 鏂规蹇収锛?锛?,
+        "scheme_id": "scheme_snapshot_1776061413",
+        "source_project_root": "D:/10_Source_Repos/21_robot/RoboSDP_v1.0/resources/sample-projects/test-6dof-project",
+        "status": "draft",
+        "updated_at": "2026-04-13T06:23:33Z",
+        "version": 1
+    }
+}

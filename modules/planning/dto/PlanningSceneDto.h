@@ -1,5 +1,7 @@
 #pragma once
 
+#include "modules/kinematics/dto/UnifiedRobotModelSnapshotDto.h"
+
 #include <QString>
 
 #include <array>
@@ -20,6 +22,14 @@ struct PlanningSceneMetaDto
     QString dynamic_ref;
     QString selection_ref;
     QString requirement_ref;
+    /// @brief 记录当前 Planning 场景依赖的统一机器人模型逻辑引用，便于确认是否与 Kinematics 主链对齐。
+    QString unified_robot_model_ref;
+    /// @brief 标记上游 Kinematics 是否已经进入共享 Pinocchio 内核，供本模块判断任务验证是否站在统一主链上。
+    bool kinematic_kernel_ready = false;
+    /// @brief 记录从 Kinematics 透传下来的主链诊断摘要，便于规划失败时快速定位是否是上游主链未就绪。
+    QString kinematic_conversion_diagnostics;
+    /// @brief 保存一份来自 Kinematics 的统一工程主链快照，作为规划与验证依赖的统一机器人模型摘要入口。
+    RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto unified_robot_snapshot;
 };
 
 /// 规划场景中的环境障碍物 DTO。

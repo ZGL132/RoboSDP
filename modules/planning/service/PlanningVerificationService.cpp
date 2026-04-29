@@ -1,6 +1,8 @@
 #include "modules/planning/service/PlanningVerificationService.h"
 
 #include <QDateTime>
+#include <QDir>
+#include <QFileInfo>
 
 #include <algorithm>
 #include <array>
@@ -31,6 +33,61 @@ QString BuildVerificationId()
 {
     return QStringLiteral("planning_verification_%1")
         .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddhhmmsszzz")));
+}
+
+QString BuildSnapshotSummary(const RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto& snapshot)
+{
+    const QString ref = snapshot.unified_robot_model_ref.trimmed().isEmpty()
+        ? QStringLiteral("not_generated")
+        : snapshot.unified_robot_model_ref.trimmed();
+    const QString mode = QStringLiteral("%1/%2")
+        .arg(snapshot.master_model_type.trimmed().isEmpty() ? QStringLiteral("unknown") : snapshot.master_model_type.trimmed())
+        .arg(snapshot.modeling_mode.trimmed().isEmpty() ? QStringLiteral("unknown") : snapshot.modeling_mode.trimmed());
+    const QString readiness = snapshot.pinocchio_model_ready
+        ? QStringLiteral("ready")
+        : QStringLiteral("not_ready");
+    const QString artifactState = snapshot.derived_artifact_state_code.trimmed().isEmpty()
+        ? QStringLiteral("unknown_artifact")
+        : snapshot.derived_artifact_state_code.trimmed();
+    const QString freshness = snapshot.derived_artifact_fresh
+        ? QStringLiteral("fresh")
+        : (snapshot.derived_artifact_exists ? QStringLiteral("stale") : QStringLiteral("missing"));
+    return QStringLiteral("%1 | %2 | %3 | %4/%5").arg(ref, mode, readiness, artifactState, freshness);
+}
+
+void RefreshArtifactRuntimeState(
+    const QString& projectRootPath,
+    RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto& snapshot)
+{
+    if (snapshot.derived_artifact_relative_path.trimmed().isEmpty())
+    {
+        return;
+    }
+
+    const QString absoluteArtifactPath =
+        QDir(projectRootPath).absoluteFilePath(snapshot.derived_artifact_relative_path);
+    const QFileInfo artifactInfo(absoluteArtifactPath);
+    snapshot.derived_artifact_exists = artifactInfo.exists();
+
+    if (!artifactInfo.exists())
+    {
+        if (snapshot.derived_artifact_state_code == QStringLiteral("file_generated"))
+        {
+            snapshot.derived_artifact_state_code = QStringLiteral("artifact_missing_on_disk");
+        }
+        snapshot.derived_artifact_fresh = false;
+        return;
+    }
+
+    const QString actualGeneratedAtUtc = artifactInfo.lastModified().toUTC().toString(Qt::ISODateWithMs);
+    const bool timestampMatches =
+        snapshot.derived_artifact_generated_at_utc.trimmed().isEmpty() ||
+        snapshot.derived_artifact_generated_at_utc == actualGeneratedAtUtc;
+    snapshot.derived_artifact_fresh = timestampMatches;
+    if (!timestampMatches)
+    {
+        snapshot.derived_artifact_state_code = QStringLiteral("artifact_stale");
+    }
 }
 
 } // namespace
@@ -83,9 +140,39 @@ PlanningSceneBuildResult PlanningVerificationService::BuildPlanningScene(const Q
     result.state.current_scene = BuildSceneFromUpstream(
         kinematicState,
         hasSelection ? &selectionState : nullptr);
-    result.message = hasSelection
-        ? QStringLiteral("已根据 Kinematics / Selection 草稿生成 PlanningScene。")
-        : QStringLiteral("已根据 Kinematics 草稿生成 PlanningScene，当前未读取到 Selection 草稿。");
+    RefreshArtifactRuntimeState(projectRootPath, result.state.current_scene.meta.unified_robot_snapshot);
+    result.upstream_snapshot_ready =
+        result.state.current_scene.meta.unified_robot_snapshot.pinocchio_model_ready;
+    result.upstream_derived_artifact_exists =
+        result.state.current_scene.meta.unified_robot_snapshot.derived_artifact_exists;
+    result.upstream_derived_artifact_fresh =
+        result.state.current_scene.meta.unified_robot_snapshot.derived_artifact_fresh;
+    result.upstream_snapshot_summary =
+        BuildSnapshotSummary(result.state.current_scene.meta.unified_robot_snapshot);
+    if (!result.upstream_snapshot_ready)
+    {
+        result.message = hasSelection
+            ? QStringLiteral("已根据 Kinematics / Selection 草稿生成 PlanningScene，但上游统一主链快照尚未就绪。")
+            : QStringLiteral("已根据 Kinematics 草稿生成 PlanningScene，但上游统一主链快照尚未就绪，当前未读取到 Selection 草稿。");
+    }
+    else if (!result.upstream_derived_artifact_exists)
+    {
+        result.message = hasSelection
+            ? QStringLiteral("已根据 Kinematics / Selection 草稿生成 PlanningScene，但上游派生 URDF 文件缺失。")
+            : QStringLiteral("已根据 Kinematics 草稿生成 PlanningScene，但上游派生 URDF 文件缺失，当前未读取到 Selection 草稿。");
+    }
+    else if (!result.upstream_derived_artifact_fresh)
+    {
+        result.message = hasSelection
+            ? QStringLiteral("已根据 Kinematics / Selection 草稿生成 PlanningScene，但上游派生 URDF 文件不是最新版本。")
+            : QStringLiteral("已根据 Kinematics 草稿生成 PlanningScene，但上游派生 URDF 文件不是最新版本，当前未读取到 Selection 草稿。");
+    }
+    else
+    {
+        result.message = hasSelection
+            ? QStringLiteral("已根据 Kinematics / Selection 草稿生成 PlanningScene，上游统一主链与派生 URDF 文件均已就绪。")
+            : QStringLiteral("已根据 Kinematics 草稿生成 PlanningScene，上游统一主链与派生 URDF 文件均已就绪，当前未读取到 Selection 草稿。");
+    }
     return result;
 }
 
@@ -164,10 +251,30 @@ RoboSDP::Planning::Dto::PlanningSceneDto PlanningVerificationService::BuildScene
     const RoboSDP::Selection::Dto::SelectionWorkspaceStateDto* selectionState) const
 {
     RoboSDP::Planning::Dto::PlanningSceneDto scene = RoboSDP::Planning::Dto::PlanningSceneDto::CreateDefault();
+    const auto& kinematicModel = kinematicState.current_model;
+    auto upstreamSnapshot = kinematicModel.unified_robot_snapshot;
+    if (upstreamSnapshot.unified_robot_model_ref.trimmed().isEmpty())
+    {
+        upstreamSnapshot.unified_robot_model_ref = kinematicModel.unified_robot_model_ref;
+        upstreamSnapshot.source_kinematic_id = kinematicModel.meta.kinematic_id;
+        upstreamSnapshot.master_model_type = kinematicModel.master_model_type;
+        upstreamSnapshot.modeling_mode = kinematicModel.modeling_mode;
+        upstreamSnapshot.parameter_convention = kinematicModel.parameter_convention;
+        upstreamSnapshot.backend_type = kinematicModel.backend_type;
+        upstreamSnapshot.joint_order_signature = kinematicModel.joint_order_signature;
+        upstreamSnapshot.pinocchio_model_ready = kinematicModel.pinocchio_model_ready;
+        upstreamSnapshot.frame_semantics_version = kinematicModel.frame_semantics_version;
+        upstreamSnapshot.model_source_mode = kinematicModel.model_source_mode;
+        upstreamSnapshot.conversion_diagnostics = kinematicModel.conversion_diagnostics;
+    }
     scene.meta.planning_scene_id = BuildSceneId(kinematicState.current_model.meta.kinematic_id);
     scene.meta.name = QStringLiteral("%1 点到点规划场景").arg(kinematicState.current_model.meta.name);
     scene.meta.kinematic_ref = kinematicState.current_model.meta.kinematic_id;
     scene.meta.requirement_ref = kinematicState.current_model.meta.requirement_ref;
+    scene.meta.unified_robot_model_ref = upstreamSnapshot.unified_robot_model_ref;
+    scene.meta.kinematic_kernel_ready = upstreamSnapshot.pinocchio_model_ready;
+    scene.meta.kinematic_conversion_diagnostics = upstreamSnapshot.conversion_diagnostics;
+    scene.meta.unified_robot_snapshot = upstreamSnapshot;
     scene.robot_collision_model_ref =
         QStringLiteral("robot_collision_model_%1").arg(kinematicState.current_model.meta.kinematic_id);
 

@@ -1,0 +1,143 @@
+#pragma once
+
+#include "core/infrastructure/ProjectSaveCoordinator.h"
+#include "core/logging/ConsoleLogger.h"
+#include "core/repository/LocalJsonRepository.h"
+#include "modules/requirement/persistence/RequirementJsonStorage.h"
+#include "modules/topology/persistence/TopologyJsonStorage.h"
+#include "modules/topology/service/TopologyService.h"
+#include "modules/topology/service/TopologyTemplateLoader.h"
+// 1. 顶部引入预览场景 DTO (放在其他 include 下方)
+#include "modules/kinematics/dto/UrdfPreviewSceneDto.h"
+
+#include <QHash>
+#include <QString>
+#include <QWidget>
+
+#include <array>
+
+class QCheckBox;
+class QComboBox;
+class QDoubleSpinBox;
+class QGroupBox;
+class QLabel;
+class QLineEdit;
+class QListWidget;
+class QPlainTextEdit;
+class QPushButton;
+
+namespace RoboSDP::Topology::Ui
+{
+
+/**
+ * @brief Topology 最小可用页面。
+ *
+ * 页面负责模板选择、候选生成、推荐展示以及保存/加载，
+ * 不承载真实三维实体、复杂对比窗口和二期结构设计能力。
+ */
+class TopologyWidget : public QWidget, public RoboSDP::Infrastructure::IProjectSaveParticipant
+{
+    Q_OBJECT
+
+public:
+    explicit TopologyWidget(QWidget* parent = nullptr);
+
+    /// @brief 返回全局保存日志使用的模块名称。
+    QString ModuleName() const override;
+
+    /// @brief 保存当前 Topology 草稿，供模块按钮和全局保存共用。
+    RoboSDP::Infrastructure::ProjectSaveItemResult SaveCurrentDraft() override;
+
+    /// @brief 返回当前 Topology 表单是否存在未保存变更。
+    bool HasUnsavedChanges() const override;
+public:
+    void ForceEmitPreview() { UpdateLivePreview(); }
+signals:
+    /// 将 Topology 操作消息抛给主窗口底部日志面板。
+    void LogMessageGenerated(const QString& message);
+// --- 新增：向外广播当前的拓扑骨架预览场景 ---
+    void TopologyPreviewGenerated(const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene);
+
+private:
+    void BuildUi();
+    void RefreshTemplateOptions();
+
+    QGroupBox* CreateTopologyGroup();
+    QGroupBox* CreateCandidateGroup();
+    QGroupBox* CreateValidationGroup();
+    QWidget* CreateScrollableTab(QWidget* contentWidget);
+
+    QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);
+    void RegisterFieldWidget(const QString& fieldPath, QWidget* widget);
+    void ConnectDirtyTracking();
+    void MarkDirty();
+    void MarkClean();
+
+    RoboSDP::Topology::Dto::RobotTopologyModelDto CollectModelFromForm() const;
+    void PopulateForm(const RoboSDP::Topology::Dto::RobotTopologyModelDto& model);
+    void RenderCandidates();
+    void RenderRecommendation();
+
+    void ClearValidationState();
+    void ApplyValidationResult(const RoboSDP::Topology::Validation::TopologyValidationResult& result);
+    void SetOperationMessage(const QString& message, bool success);
+
+    void OnRefreshTemplatesClicked();
+    void OnGenerateClicked();
+    void OnValidateClicked();
+    void OnSaveDraftClicked();
+    void OnLoadClicked();
+// --- 新增：生成并更新实时预览 ---
+    void UpdateLivePreview();
+
+private:
+    RoboSDP::Logging::ConsoleLogger m_logger;
+    RoboSDP::Repository::LocalJsonRepository m_repository;
+    RoboSDP::Requirement::Persistence::RequirementJsonStorage m_requirement_storage;
+    RoboSDP::Topology::Persistence::TopologyJsonStorage m_topology_storage;
+    RoboSDP::Topology::Validation::TopologyValidator m_validator;
+    RoboSDP::Topology::Service::TopologyTemplateLoader m_template_loader;
+    RoboSDP::Topology::Service::TopologyService m_service;
+
+    RoboSDP::Topology::Dto::TopologyWorkspaceStateDto m_state;
+    QHash<QString, QWidget*> m_field_widgets;
+    bool m_has_unsaved_changes = false;
+
+    QComboBox* m_template_combo = nullptr;
+    QPushButton* m_refresh_template_button = nullptr;
+    QPushButton* m_generate_button = nullptr;
+    QPushButton* m_validate_button = nullptr;
+    QPushButton* m_save_button = nullptr;
+    QPushButton* m_load_button = nullptr;
+    QLabel* m_operation_label = nullptr;
+
+    QLineEdit* m_topology_name_edit = nullptr;
+    QComboBox* m_base_mount_combo = nullptr;
+    QDoubleSpinBox* m_base_height_spin = nullptr;
+    QDoubleSpinBox* m_base_orientation_x_spin = nullptr;
+    QDoubleSpinBox* m_base_orientation_y_spin = nullptr;
+    QDoubleSpinBox* m_base_orientation_z_spin = nullptr;
+    QDoubleSpinBox* m_j1_range_min_spin = nullptr;
+    QDoubleSpinBox* m_j1_range_max_spin = nullptr;
+
+    // 新增：运动学 DH 尺寸输入控件
+    QDoubleSpinBox* m_shoulder_offset_spin = nullptr;
+    QDoubleSpinBox* m_upper_arm_length_spin = nullptr;
+    QDoubleSpinBox* m_forearm_length_spin = nullptr;
+    QDoubleSpinBox* m_wrist_offset_spin = nullptr;
+    QCheckBox* m_internal_routing_check = nullptr;
+    QCheckBox* m_hollow_wrist_check = nullptr;
+    QDoubleSpinBox* m_reserved_channel_spin = nullptr;
+    QCheckBox* m_seventh_axis_reserved_check = nullptr;
+    QLineEdit* m_hollow_joint_ids_edit = nullptr;
+
+    QLabel* m_candidate_summary_label = nullptr;
+    QListWidget* m_candidate_list = nullptr;
+    QLabel* m_recommendation_summary_label = nullptr;
+    QListWidget* m_recommendation_reason_list = nullptr;
+
+    QLabel* m_validation_summary_label = nullptr;
+    QListWidget* m_validation_issue_list = nullptr;
+};
+
+} // namespace RoboSDP::Topology::Ui

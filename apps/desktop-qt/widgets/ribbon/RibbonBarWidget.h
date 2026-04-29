@@ -25,6 +25,12 @@ public:
     explicit RibbonBarWidget(QWidget* parent = nullptr);
 
 signals:
+    /// @brief 请求设置中央三维视图中的地面网格显示状态。
+    void signalSetGroundGridVisible(bool visible);
+
+    /// @brief 请求设置中央三维视图中的屏幕角落方向坐标轴显示状态。
+    void signalSetCornerAxesVisible(bool visible);
+
     /// @brief 请求主窗口启动项目级新建流程。
     void signalCreateNewProject();
 

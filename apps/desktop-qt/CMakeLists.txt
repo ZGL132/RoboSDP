@@ -6,6 +6,8 @@ set(ROBOSDP_DESKTOP_SOURCES
     MainWindow.h
     widgets/dialogs/GlobalSaveResultDialog.cpp
     widgets/dialogs/GlobalSaveResultDialog.h
+    widgets/empty/ProjectEmptyStateWidget.cpp
+    widgets/empty/ProjectEmptyStateWidget.h
     widgets/ribbon/RibbonBarWidget.cpp
     widgets/ribbon/RibbonBarWidget.h
     widgets/vtk/RobotVtkView.cpp
@@ -54,6 +56,7 @@ find_package(VTK QUIET COMPONENTS
     FiltersSources
     GUISupportQt
     InteractionStyle
+    InteractionWidgets
     RenderingAnnotation
     RenderingCore
     RenderingOpenGL2

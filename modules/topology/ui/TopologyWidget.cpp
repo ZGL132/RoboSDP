@@ -20,6 +20,9 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 
+// 引入 KinematicsService 以使用其数学引擎将 Topology 转为可视化的预览场景
+#include "modules/kinematics/service/KinematicsService.h"
+
 namespace RoboSDP::Topology::Ui
 {
 
@@ -27,12 +30,13 @@ namespace
 {
 
 /**
- * @brief 将逗号分隔的中空关节字符串整理为数组。
- * 保持 UI 只负责轻量字符串编辑，DTO 中仍保存结构化关节 ID 集合。
+ * @brief 将用户输入的逗号分隔的中空关节字符串（例如 "joint_1, joint_2"）整理并拆分为字符串数组。
+ * 这样做可以让 UI 保持轻量的单行文本输入，但在底层 DTO 中存储严谨的集合结构。
  */
 std::vector<QString> ParseJointIdList(const QString& text)
 {
     std::vector<QString> values;
+    // 使用正则支持逗号、分号和空格分隔符
     const QStringList tokens =
         text.split(QRegularExpression(QStringLiteral("[,，;；\\s]+")), Qt::SkipEmptyParts);
     values.reserve(static_cast<std::size_t>(tokens.size()));
@@ -48,7 +52,9 @@ std::vector<QString> ParseJointIdList(const QString& text)
     return values;
 }
 
-/// 将关节 ID 集合回填到单行编辑器，方便最小骨架阶段快速编辑。
+/**
+ * @brief 将关节 ID 集合重新拼接为单行字符串，方便在 UI 输入框中显示和二次编辑。
+ */
 QString JoinJointIdList(const std::vector<QString>& values)
 {
     QStringList tokens;
@@ -66,8 +72,7 @@ QString JoinJointIdList(const std::vector<QString>& values)
 }
 
 /**
- * @brief 解析轴线关系文本。
- * 每行格式固定为 `joint_a,joint_b,relation_type`，便于最小增量阶段快速录入。
+ * @brief 解析多行轴线关系文本。每行按逗号拆分成 `joint_a`, `joint_b`, `relation_type`。
  */
 std::vector<RoboSDP::Topology::Dto::TopologyAxisRelationDto> ParseAxisRelationsText(const QString& text)
 {
@@ -102,7 +107,9 @@ std::vector<RoboSDP::Topology::Dto::TopologyAxisRelationDto> ParseAxisRelationsT
     return values;
 }
 
-/// 将轴线关系列表回填为多行文本，方便最小骨架阶段编辑与审查。
+/**
+ * @brief 将轴线关系对象集合还原为多行文本，供 UI QPlainTextEdit 展示。
+ */
 QString BuildAxisRelationsText(const std::vector<RoboSDP::Topology::Dto::TopologyAxisRelationDto>& values)
 {
     QStringList lines;
@@ -119,6 +126,8 @@ QString BuildAxisRelationsText(const std::vector<RoboSDP::Topology::Dto::Topolog
 
 } // namespace
 
+// ==================== 生命周期与初始化 ====================
+
 TopologyWidget::TopologyWidget(QWidget* parent)
     : QWidget(parent)
     , m_requirement_storage(m_repository)
@@ -126,12 +135,18 @@ TopologyWidget::TopologyWidget(QWidget* parent)
     , m_service(m_topology_storage, m_validator, m_template_loader, m_requirement_storage, &m_logger)
     , m_state(m_service.CreateDefaultState())
 {
+    // 1. 搭建 UI 组件树
     BuildUi();
+    // 2. 将默认状态/加载的状态填充至表单
     PopulateForm(m_state.current_model);
+    // 3. 加载可用模板下拉框
     RefreshTemplateOptions();
+    // 4. 渲染生成的候选和推荐面板
     RenderCandidates();
     RenderRecommendation();
+    // 5. 挂载数据变动监听
     ConnectDirtyTracking();
+    // 6. 初始状态标记为干净
     MarkClean();
 }
 
@@ -147,12 +162,16 @@ bool TopologyWidget::HasUnsavedChanges() const
 
 RoboSDP::Infrastructure::ProjectSaveItemResult TopologyWidget::SaveCurrentDraft()
 {
+    // 从表单收集最新数据并保存到磁盘
     m_state.current_model = CollectModelFromForm();
     const QString projectRootPath =
         RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto saveResult = m_service.SaveDraft(projectRootPath, m_state);
+    
+    // 保存时附带校验逻辑，如果数据不合法，表单会亮红框提示
     ApplyValidationResult(saveResult.validation_result);
     SetOperationMessage(saveResult.message, saveResult.IsSuccess());
+    
     if (saveResult.IsSuccess())
     {
         MarkClean();
@@ -160,8 +179,11 @@ RoboSDP::Infrastructure::ProjectSaveItemResult TopologyWidget::SaveCurrentDraft(
     return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
 }
 
+// ==================== 脏检查与实时事件追踪 ====================
+
 void TopologyWidget::ConnectDirtyTracking()
 {
+    // 遍历所有特定类型的输入控件，一旦内容改变，就将标记设为 Dirty
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
         connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
@@ -176,6 +198,9 @@ void TopologyWidget::ConnectDirtyTracking()
     {
         connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
             MarkDirty();
+            // 【核心特性】：由于 SpinBox 主要控制机器人的物理尺寸（DH参数），
+            // 当尺寸发生任何滑动或改变时，立即触发 UpdateLivePreview() 更新 3D 骨架模型。
+            UpdateLivePreview();
         });
     }
     for (QCheckBox* editor : findChildren<QCheckBox*>())
@@ -201,12 +226,15 @@ void TopologyWidget::MarkClean()
     m_has_unsaved_changes = false;
 }
 
+// ==================== UI 树构建逻辑 ====================
+
 void TopologyWidget::BuildUi()
 {
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
+    // 1. 顶部：模板选择区
     auto* templateLayout = new QHBoxLayout();
     auto* templateLabel = new QLabel(QStringLiteral("构型模板"), this);
     m_template_combo = new QComboBox(this);
@@ -215,6 +243,7 @@ void TopologyWidget::BuildUi()
     templateLayout->addWidget(m_template_combo, 1);
     templateLayout->addWidget(m_refresh_template_button);
 
+    // 2. 次顶部：核心操作按钮区
     auto* actionLayout = new QHBoxLayout();
     m_generate_button = new QPushButton(QStringLiteral("生成候选"), this);
     m_validate_button = new QPushButton(QStringLiteral("校验"), this);
@@ -226,23 +255,27 @@ void TopologyWidget::BuildUi()
     actionLayout->addWidget(m_load_button);
     actionLayout->addStretch();
 
+    // 状态提示条
     m_operation_label = new QLabel(
         QStringLiteral("就绪：请先保存 Requirement，再生成或编辑 Topology 草稿。"),
         this);
     m_operation_label->setWordWrap(true);
 
+    // 3. 中部：多页签面板区
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
-    // 中文说明：Topology 页面按业务域拆为页签，具体字段控件仍由原有分组函数创建，避免影响保存和校验路径。
+    // 按业务域拆分页面视图，将长表单放进 ScrollArea 中
     tabs->addTab(CreateScrollableTab(CreateTopologyGroup()), QStringLiteral("构型骨架"));
     tabs->addTab(CreateScrollableTab(CreateCandidateGroup()), QStringLiteral("候选方案"));
     tabs->addTab(CreateScrollableTab(CreateValidationGroup()), QStringLiteral("校验结果"));
 
+    // 将所有布局添加到主根布局
     rootLayout->addLayout(templateLayout);
     rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 
+    // 4. 绑定按钮信号与槽
     connect(
         m_refresh_template_button,
         &QPushButton::clicked,
@@ -256,6 +289,7 @@ void TopologyWidget::BuildUi()
 
 QWidget* TopologyWidget::CreateScrollableTab(QWidget* contentWidget)
 {
+    // 将普通 Widget 包装为带滚动条的视图，防止输入项过多时撑出屏幕外部
     auto* tabPage = new QWidget(this);
     auto* tabLayout = new QVBoxLayout(tabPage);
     tabLayout->setContentsMargins(0, 0, 0, 0);
@@ -281,6 +315,7 @@ QWidget* TopologyWidget::CreateScrollableTab(QWidget* contentWidget)
 
 void TopologyWidget::RefreshTemplateOptions()
 {
+    // 刷新模板下拉框的内容
     const QString previousTemplateId = m_template_combo->currentData().toString();
     m_template_combo->clear();
     m_template_combo->addItem(QStringLiteral("全部模板（推荐）"), QStringLiteral("__all__"));
@@ -290,9 +325,11 @@ void TopologyWidget::RefreshTemplateOptions()
     {
         m_template_combo->addItem(templateSummary.display_name, templateSummary.template_id);
         const int index = m_template_combo->count() - 1;
+        // 将模板描述设为 tooltip 方便提示
         m_template_combo->setItemData(index, templateSummary.description, Qt::ToolTipRole);
     }
 
+    // 尝试恢复之前选中的模板
     const int previousIndex = m_template_combo->findData(previousTemplateId);
     if (previousIndex >= 0)
     {
@@ -306,92 +343,79 @@ QGroupBox* TopologyWidget::CreateTopologyGroup()
     auto* layout = new QFormLayout(groupBox);
 
     m_topology_name_edit = new QLineEdit(groupBox);
+    
+    // --- DH 运动学关键尺寸 (负责决定机器人在 3D 视图中的形状) ---
+    m_base_height_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
+    m_shoulder_offset_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
+    m_upper_arm_length_spin = CreateDoubleSpinBox(0.001, 10.0, 4, 0.001);
+    m_forearm_length_spin = CreateDoubleSpinBox(0.001, 10.0, 4, 0.001);
+    m_wrist_offset_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
+
+    // --- 机械与安装配置 ---
     m_base_mount_combo = new QComboBox(groupBox);
     m_base_mount_combo->addItem(QStringLiteral("落地"), QStringLiteral("floor"));
     m_base_mount_combo->addItem(QStringLiteral("壁挂"), QStringLiteral("wall"));
     m_base_mount_combo->addItem(QStringLiteral("顶装"), QStringLiteral("ceiling"));
     m_base_mount_combo->addItem(QStringLiteral("立柱"), QStringLiteral("pedestal"));
-    m_base_height_spin = CreateDoubleSpinBox(0.0, 1.0e6, 4, 0.01);
     m_base_orientation_x_spin = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
     m_base_orientation_y_spin = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
     m_base_orientation_z_spin = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
     m_j1_range_min_spin = CreateDoubleSpinBox(-720.0, 720.0, 3, 1.0);
     m_j1_range_max_spin = CreateDoubleSpinBox(-720.0, 720.0, 3, 1.0);
-    m_shoulder_type_edit = new QLineEdit(groupBox);
-    m_elbow_type_edit = new QLineEdit(groupBox);
-    m_wrist_type_edit = new QLineEdit(groupBox);
-    m_wrist_intersection_check = new QCheckBox(QStringLiteral("启用腕部交点"), groupBox);
-    m_wrist_offset_check = new QCheckBox(QStringLiteral("启用腕部偏置"), groupBox);
+    
+    // --- 走线与扩展配置 ---
     m_internal_routing_check = new QCheckBox(QStringLiteral("需要内部走线"), groupBox);
     m_hollow_wrist_check = new QCheckBox(QStringLiteral("需要中空腕"), groupBox);
     m_reserved_channel_spin = CreateDoubleSpinBox(0.0, 1.0e6, 2, 1.0);
     m_seventh_axis_reserved_check = new QCheckBox(QStringLiteral("预留第七轴"), groupBox);
     m_hollow_joint_ids_edit = new QLineEdit(groupBox);
-    m_axis_relations_edit = new QPlainTextEdit(groupBox);
-    m_axis_relations_edit->setPlaceholderText(
-        QStringLiteral("joint_2, joint_3, parallel\njoint_4, joint_5, perpendicular"));
-    m_axis_relations_edit->setMinimumHeight(84);
+    m_hollow_joint_ids_edit->setPlaceholderText(QStringLiteral("例如: joint_4, joint_5, joint_6"));
 
-    /**
-     * @brief 最小骨架阶段使用固定 6 轴角色编辑器承接 joint_roles。
-     * 先保证关节功能分配可编辑、可保存、可回读，不提前引入复杂表格。
-     */
-    for (int index = 0; index < static_cast<int>(m_joint_role_edits.size()); ++index)
-    {
-        m_joint_role_edits[static_cast<std::size_t>(index)] = new QLineEdit(groupBox);
-    }
-
+    // 将上面创建的控件添加到表单布局中，并使用 QLabel 作为分隔区域的标题
     layout->addRow(QStringLiteral("构型名称"), m_topology_name_edit);
+    
+    auto* labelDH = new QLabel(QStringLiteral("--- 运动学关键尺寸 (DH) ---"), groupBox);
+    labelDH->setStyleSheet(QStringLiteral("color: #0284c7; font-weight: bold; margin-top: 10px;"));
+    layout->addRow(labelDH);
+    layout->addRow(QStringLiteral("基座高度 (d1) [m]"), m_base_height_spin);
+    layout->addRow(QStringLiteral("肩部偏置 (a1) [m]"), m_shoulder_offset_spin);
+    layout->addRow(QStringLiteral("大臂长度 (a2) [m]"), m_upper_arm_length_spin);
+    layout->addRow(QStringLiteral("小臂长度 (d4) [m]"), m_forearm_length_spin);
+    layout->addRow(QStringLiteral("腕法兰偏置 (d6) [m]"), m_wrist_offset_spin);
+
+    auto* labelMech = new QLabel(QStringLiteral("--- 附加机械与安装配置 ---"), groupBox);
+    labelMech->setStyleSheet(QStringLiteral("color: #4b5563; font-weight: bold; margin-top: 10px;"));
+    layout->addRow(labelMech);
     layout->addRow(QStringLiteral("基座安装方式"), m_base_mount_combo);
-    layout->addRow(QStringLiteral("基座高度 [m]"), m_base_height_spin);
     layout->addRow(QStringLiteral("基座 RX [deg]"), m_base_orientation_x_spin);
     layout->addRow(QStringLiteral("基座 RY [deg]"), m_base_orientation_y_spin);
     layout->addRow(QStringLiteral("基座 RZ [deg]"), m_base_orientation_z_spin);
     layout->addRow(QStringLiteral("J1 行程最小 [deg]"), m_j1_range_min_spin);
     layout->addRow(QStringLiteral("J1 行程最大 [deg]"), m_j1_range_max_spin);
-    layout->addRow(QStringLiteral("肩部形式"), m_shoulder_type_edit);
-    layout->addRow(QStringLiteral("肘部形式"), m_elbow_type_edit);
-    layout->addRow(QStringLiteral("腕部形式"), m_wrist_type_edit);
-    layout->addRow(QStringLiteral("腕部交点"), m_wrist_intersection_check);
-    layout->addRow(QStringLiteral("腕部偏置"), m_wrist_offset_check);
+    
+    auto* labelWiring = new QLabel(QStringLiteral("--- 走线预留与扩展 ---"), groupBox);
+    labelWiring->setStyleSheet(QStringLiteral("color: #4b5563; font-weight: bold; margin-top: 10px;"));
+    layout->addRow(labelWiring);
     layout->addRow(QStringLiteral("内部走线"), m_internal_routing_check);
     layout->addRow(QStringLiteral("中空腕"), m_hollow_wrist_check);
     layout->addRow(QStringLiteral("预留通道直径 [mm]"), m_reserved_channel_spin);
-    layout->addRow(QStringLiteral("预留第七轴"), m_seventh_axis_reserved_check);
     layout->addRow(QStringLiteral("中空关节 ID"), m_hollow_joint_ids_edit);
-    layout->addRow(QStringLiteral("轴线关系"), m_axis_relations_edit);
-    layout->addRow(QStringLiteral("J1 功能角色"), m_joint_role_edits[0]);
-    layout->addRow(QStringLiteral("J2 功能角色"), m_joint_role_edits[1]);
-    layout->addRow(QStringLiteral("J3 功能角色"), m_joint_role_edits[2]);
-    layout->addRow(QStringLiteral("J4 功能角色"), m_joint_role_edits[3]);
-    layout->addRow(QStringLiteral("J5 功能角色"), m_joint_role_edits[4]);
-    layout->addRow(QStringLiteral("J6 功能角色"), m_joint_role_edits[5]);
+    layout->addRow(QStringLiteral("预留第七轴"), m_seventh_axis_reserved_check);
 
+    // 注册字段路径（JSON路径）与 UI 控件的映射关系。
+    // 这一步非常重要：当后台校验（Validate）发现某个参数（如 d1 越界）出错时，
+    // UI 可以通过这个映射表找到对应的控件，将其边框变红。
     RegisterFieldWidget(QStringLiteral("meta.name"), m_topology_name_edit);
-    RegisterFieldWidget(QStringLiteral("robot_definition.base_mount_type"), m_base_mount_combo);
     RegisterFieldWidget(QStringLiteral("robot_definition.base_height_m"), m_base_height_spin);
-    RegisterFieldWidget(QStringLiteral("robot_definition.base_orientation[0]"), m_base_orientation_x_spin);
-    RegisterFieldWidget(QStringLiteral("robot_definition.base_orientation[1]"), m_base_orientation_y_spin);
-    RegisterFieldWidget(QStringLiteral("robot_definition.base_orientation[2]"), m_base_orientation_z_spin);
+    RegisterFieldWidget(QStringLiteral("robot_definition.shoulder_offset_m"), m_shoulder_offset_spin);
+    RegisterFieldWidget(QStringLiteral("robot_definition.upper_arm_length_m"), m_upper_arm_length_spin);
+    RegisterFieldWidget(QStringLiteral("robot_definition.forearm_length_m"), m_forearm_length_spin);
+    RegisterFieldWidget(QStringLiteral("robot_definition.wrist_offset_m"), m_wrist_offset_spin);
+    RegisterFieldWidget(QStringLiteral("robot_definition.base_mount_type"), m_base_mount_combo);
     RegisterFieldWidget(QStringLiteral("robot_definition.j1_rotation_range_deg[0]"), m_j1_range_min_spin);
     RegisterFieldWidget(QStringLiteral("robot_definition.j1_rotation_range_deg[1]"), m_j1_range_max_spin);
-    RegisterFieldWidget(QStringLiteral("layout.shoulder_type"), m_shoulder_type_edit);
-    RegisterFieldWidget(QStringLiteral("layout.elbow_type"), m_elbow_type_edit);
-    RegisterFieldWidget(QStringLiteral("layout.wrist_type"), m_wrist_type_edit);
-    RegisterFieldWidget(QStringLiteral("layout.wrist_intersection"), m_wrist_intersection_check);
-    RegisterFieldWidget(QStringLiteral("layout.wrist_offset"), m_wrist_offset_check);
-    RegisterFieldWidget(QStringLiteral("layout.internal_routing_required"), m_internal_routing_check);
-    RegisterFieldWidget(QStringLiteral("layout.hollow_wrist_required"), m_hollow_wrist_check);
     RegisterFieldWidget(QStringLiteral("layout.reserved_channel_diameter_mm"), m_reserved_channel_spin);
-    RegisterFieldWidget(QStringLiteral("layout.seventh_axis_reserved"), m_seventh_axis_reserved_check);
     RegisterFieldWidget(QStringLiteral("layout.hollow_joint_ids"), m_hollow_joint_ids_edit);
-    RegisterFieldWidget(QStringLiteral("axis_relations"), m_axis_relations_edit);
-    for (int index = 0; index < static_cast<int>(m_joint_role_edits.size()); ++index)
-    {
-        RegisterFieldWidget(
-            QStringLiteral("joints[%1].role").arg(index),
-            m_joint_role_edits[static_cast<std::size_t>(index)]);
-    }
 
     return groupBox;
 }
@@ -401,11 +425,13 @@ QGroupBox* TopologyWidget::CreateCandidateGroup()
     auto* groupBox = new QGroupBox(QStringLiteral("候选与推荐"), this);
     auto* layout = new QVBoxLayout(groupBox);
 
+    // 候选配置的展示面板
     m_candidate_summary_label = new QLabel(QStringLiteral("尚未生成候选构型。"), groupBox);
     m_candidate_summary_label->setWordWrap(true);
     m_candidate_list = new QListWidget(groupBox);
     m_candidate_list->setSelectionMode(QAbstractItemView::NoSelection);
 
+    // 推荐理由的展示面板
     m_recommendation_summary_label = new QLabel(QStringLiteral("尚未生成推荐结果。"), groupBox);
     m_recommendation_summary_label->setWordWrap(true);
     m_recommendation_reason_list = new QListWidget(groupBox);
@@ -421,6 +447,7 @@ QGroupBox* TopologyWidget::CreateCandidateGroup()
 
 QGroupBox* TopologyWidget::CreateValidationGroup()
 {
+    // 用于展示表单填写是否合规的错误信息面板
     auto* groupBox = new QGroupBox(QStringLiteral("基础校验结果"), this);
     auto* layout = new QVBoxLayout(groupBox);
 
@@ -441,11 +468,12 @@ QDoubleSpinBox* TopologyWidget::CreateDoubleSpinBox(
     int decimals,
     double step)
 {
+    // 工具方法：快速实例化带有统一行为的浮点数输入框
     auto* spinBox = new QDoubleSpinBox(this);
     spinBox->setRange(minimum, maximum);
     spinBox->setDecimals(decimals);
     spinBox->setSingleStep(step);
-    spinBox->setAccelerated(true);
+    spinBox->setAccelerated(true); // 支持长按键盘箭头加速增减
     return spinBox;
 }
 
@@ -454,13 +482,22 @@ void TopologyWidget::RegisterFieldWidget(const QString& fieldPath, QWidget* widg
     m_field_widgets.insert(fieldPath, widget);
 }
 
+// ==================== 数据流转逻辑 (DTO <-> UI) ====================
+
 RoboSDP::Topology::Dto::RobotTopologyModelDto TopologyWidget::CollectModelFromForm() const
 {
+    // 将界面上控件里的值抽取出来，赋给内存中的模型 DTO
     RoboSDP::Topology::Dto::RobotTopologyModelDto model = m_state.current_model;
 
     model.meta.name = m_topology_name_edit->text().trimmed();
+    
     model.robot_definition.base_mount_type = m_base_mount_combo->currentData().toString();
     model.robot_definition.base_height_m = m_base_height_spin->value();
+    model.robot_definition.shoulder_offset_m = m_shoulder_offset_spin->value();
+    model.robot_definition.upper_arm_length_m = m_upper_arm_length_spin->value();
+    model.robot_definition.forearm_length_m = m_forearm_length_spin->value();
+    model.robot_definition.wrist_offset_m = m_wrist_offset_spin->value();
+
     model.robot_definition.base_orientation = {
         m_base_orientation_x_spin->value(),
         m_base_orientation_y_spin->value(),
@@ -469,63 +506,46 @@ RoboSDP::Topology::Dto::RobotTopologyModelDto TopologyWidget::CollectModelFromFo
         m_j1_range_min_spin->value(),
         m_j1_range_max_spin->value()};
 
-    model.layout.shoulder_type = m_shoulder_type_edit->text().trimmed();
-    model.layout.elbow_type = m_elbow_type_edit->text().trimmed();
-    model.layout.wrist_type = m_wrist_type_edit->text().trimmed();
-    model.layout.wrist_intersection = m_wrist_intersection_check->isChecked();
-    model.layout.wrist_offset = m_wrist_offset_check->isChecked();
     model.layout.internal_routing_required = m_internal_routing_check->isChecked();
     model.layout.hollow_wrist_required = m_hollow_wrist_check->isChecked();
     model.layout.reserved_channel_diameter_mm = m_reserved_channel_spin->value();
     model.layout.seventh_axis_reserved = m_seventh_axis_reserved_check->isChecked();
     model.layout.hollow_joint_ids = ParseJointIdList(m_hollow_joint_ids_edit->text());
-    model.axis_relations = ParseAxisRelationsText(m_axis_relations_edit->toPlainText());
-
-    for (int index = 0; index < static_cast<int>(m_joint_role_edits.size()) &&
-                        index < static_cast<int>(model.joints.size());
-         ++index)
-    {
-        model.joints[static_cast<std::size_t>(index)].role =
-            m_joint_role_edits[static_cast<std::size_t>(index)]->text().trimmed();
-    }
 
     return model;
 }
 
 void TopologyWidget::PopulateForm(const RoboSDP::Topology::Dto::RobotTopologyModelDto& model)
 {
+    // 将内存模型 DTO 的值，反向填充回 UI 的控件中（主要用于加载草稿或生成候选后）
     m_topology_name_edit->setText(model.meta.name);
 
     const int baseMountIndex = m_base_mount_combo->findData(model.robot_definition.base_mount_type);
     m_base_mount_combo->setCurrentIndex(baseMountIndex >= 0 ? baseMountIndex : 0);
 
     m_base_height_spin->setValue(model.robot_definition.base_height_m);
+    m_shoulder_offset_spin->setValue(model.robot_definition.shoulder_offset_m);
+    m_upper_arm_length_spin->setValue(model.robot_definition.upper_arm_length_m);
+    m_forearm_length_spin->setValue(model.robot_definition.forearm_length_m);
+    m_wrist_offset_spin->setValue(model.robot_definition.wrist_offset_m);
+
     m_base_orientation_x_spin->setValue(model.robot_definition.base_orientation[0]);
     m_base_orientation_y_spin->setValue(model.robot_definition.base_orientation[1]);
     m_base_orientation_z_spin->setValue(model.robot_definition.base_orientation[2]);
     m_j1_range_min_spin->setValue(model.robot_definition.j1_rotation_range_deg[0]);
     m_j1_range_max_spin->setValue(model.robot_definition.j1_rotation_range_deg[1]);
 
-    m_shoulder_type_edit->setText(model.layout.shoulder_type);
-    m_elbow_type_edit->setText(model.layout.elbow_type);
-    m_wrist_type_edit->setText(model.layout.wrist_type);
-    m_wrist_intersection_check->setChecked(model.layout.wrist_intersection);
-    m_wrist_offset_check->setChecked(model.layout.wrist_offset);
     m_internal_routing_check->setChecked(model.layout.internal_routing_required);
     m_hollow_wrist_check->setChecked(model.layout.hollow_wrist_required);
     m_reserved_channel_spin->setValue(model.layout.reserved_channel_diameter_mm);
     m_seventh_axis_reserved_check->setChecked(model.layout.seventh_axis_reserved);
     m_hollow_joint_ids_edit->setText(JoinJointIdList(model.layout.hollow_joint_ids));
-    m_axis_relations_edit->setPlainText(BuildAxisRelationsText(model.axis_relations));
-
-    for (int index = 0; index < static_cast<int>(m_joint_role_edits.size()); ++index)
-    {
-        const QString role = index < static_cast<int>(model.joints.size())
-            ? model.joints[static_cast<std::size_t>(index)].role
-            : QString();
-        m_joint_role_edits[static_cast<std::size_t>(index)]->setText(role);
-    }
+    
+    // --- 新增：表单从数据层填充完毕后，立刻发送一次初始的三维预览请求 ---
+    UpdateLivePreview();
 }
+
+// ==================== UI 渲染与更新 ====================
 
 void TopologyWidget::RenderCandidates()
 {
@@ -540,6 +560,7 @@ void TopologyWidget::RenderCandidates()
     m_candidate_summary_label->setText(
         QStringLiteral("已生成 %1 个模板化 6R 串联候选构型。").arg(m_state.candidates.size()));
 
+    // 遍历所有生成的构型候选方案，在列表中展示标题、评分等信息
     for (const auto& candidate : m_state.candidates)
     {
         QString itemText = QStringLiteral("%1 | 模板=%2 | 评分=%3")
@@ -552,6 +573,8 @@ void TopologyWidget::RenderCandidates()
         }
 
         auto* item = new QListWidgetItem(itemText, m_candidate_list);
+        
+        // 将推荐理由拼接到 Tooltip 中，鼠标悬浮时可查看详情
         QString toolTip;
         for (const QString& reason : candidate.recommendation_reason)
         {
@@ -581,6 +604,7 @@ void TopologyWidget::RenderRecommendation()
             .arg(m_state.recommendation.recommended_template_id)
             .arg(m_state.recommendation.combined_score, 0, 'f', 1));
 
+    // 逐条写入评分和推荐理由
     for (const QString& reason : m_state.recommendation.recommendation_reason)
     {
         new QListWidgetItem(reason, m_recommendation_reason_list);
@@ -589,6 +613,7 @@ void TopologyWidget::RenderRecommendation()
 
 void TopologyWidget::ClearValidationState()
 {
+    // 清空所有控件的红色错误边框和错误提示
     for (QWidget* widget : m_field_widgets)
     {
         if (widget != nullptr)
@@ -614,6 +639,7 @@ void TopologyWidget::ApplyValidationResult(
         return;
     }
 
+    // 校验失败处理：显示错误汇总
     m_validation_summary_label->setStyleSheet(QStringLiteral("color: #b42318;"));
     m_validation_summary_label->setText(
         QStringLiteral("Topology 基础校验发现 %1 条问题，其中错误 %2 条，警告 %3 条。")
@@ -621,6 +647,7 @@ void TopologyWidget::ApplyValidationResult(
             .arg(result.ErrorCount())
             .arg(result.WarningCount()));
 
+    // 遍历每条问题记录
     for (const auto& issue : result.issues)
     {
         auto* item = new QListWidgetItem(
@@ -629,21 +656,21 @@ void TopologyWidget::ApplyValidationResult(
             m_validation_issue_list);
         item->setToolTip(issue.code);
 
+        // 查找映射表，给对应的出错控件画上红框/黄框
         QWidget* fieldWidget = m_field_widgets.value(issue.field, nullptr);
+        
+        // 特殊处理数组字段的报错兜底
         if (fieldWidget == nullptr && issue.field.startsWith(QStringLiteral("layout.hollow_joint_ids[")))
         {
             fieldWidget = m_hollow_joint_ids_edit;
         }
-        if (fieldWidget == nullptr && issue.field.startsWith(QStringLiteral("axis_relations[")))
-        {
-            fieldWidget = m_axis_relations_edit;
-        }
+
         if (fieldWidget != nullptr)
         {
             fieldWidget->setStyleSheet(
                 issue.severity == RoboSDP::Topology::Validation::ValidationSeverity::Warning
-                    ? QStringLiteral("border: 1px solid #d97706;")
-                    : QStringLiteral("border: 1px solid #dc2626;"));
+                    ? QStringLiteral("border: 1px solid #d97706;")  // 警告用橙色
+                    : QStringLiteral("border: 1px solid #dc2626;")); // 错误用红色
             fieldWidget->setToolTip(issue.message_zh);
         }
     }
@@ -656,6 +683,8 @@ void TopologyWidget::SetOperationMessage(const QString& message, bool success)
                                              : QStringLiteral("color: #b42318;"));
 }
 
+// ==================== 事件响应槽函数 (Slots) ====================
+
 void TopologyWidget::OnRefreshTemplatesClicked()
 {
     RefreshTemplateOptions();
@@ -665,6 +694,7 @@ void TopologyWidget::OnRefreshTemplatesClicked()
 
 void TopologyWidget::OnGenerateClicked()
 {
+    // 调用后台服务，根据上游的 Requirement 生成适合的 Topology 候选方案
     const QString projectRootPath =
         RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
     const auto generateResult = m_service.GenerateCandidatesFromRequirement(
@@ -674,7 +704,7 @@ void TopologyWidget::OnGenerateClicked()
     if (generateResult.IsSuccess())
     {
         m_state = generateResult.state;
-        PopulateForm(m_state.current_model);
+        PopulateForm(m_state.current_model); // 方案生成后自动填入表单
         RenderCandidates();
         RenderRecommendation();
         ApplyValidationResult(generateResult.validation_result);
@@ -687,6 +717,7 @@ void TopologyWidget::OnGenerateClicked()
 
 void TopologyWidget::OnValidateClicked()
 {
+    // 用户手动触发校验
     m_state.current_model = CollectModelFromForm();
     const auto validationResult = m_service.Validate(m_state.current_model);
     ApplyValidationResult(validationResult);
@@ -726,6 +757,25 @@ void TopologyWidget::OnLoadClicked()
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Topology] %1").arg(loadResult.message));
+}
+
+
+// ==================== 实时 3D 预览更新 ====================
+// 在文件末尾实现 UpdateLivePreview() 方法
+void TopologyWidget::UpdateLivePreview()
+{
+    // 1. 直接从当前 UI 表单收集最新填写的物理尺寸和配置，生成临时的 Topology 数据结构
+    auto currentTopologyModel = CollectModelFromForm();
+
+    // 2. 调用 KinematicsService (运动学服务) 的静态/独立纯数学接口。
+    // 该接口会将 Topology 中的简单距离参数（如肩部偏置、大小臂长度）转换为
+    // 标准的可供 3D 渲染的连杆和节点描述 (UrdfPreviewSceneDto)。
+    auto scene = RoboSDP::Kinematics::Service::KinematicsService::GenerateSkeletonPreview(currentTopologyModel);
+
+    // 3. 将生成的 3D 骨架场景通过 Qt 信号广播出去。
+    // MainWindow 监听到此信号后，会指派中央的三维视图区（VTK 引擎）重新绘制这些几何体，
+    // 从而实现“在左侧调节参数，右侧立刻看到机器人长短变化”的联动交互。
+    emit TopologyPreviewGenerated(scene);
 }
 
 } // namespace RoboSDP::Topology::Ui

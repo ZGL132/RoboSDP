@@ -14,6 +14,7 @@
 #include <vtkArrowSource.h>
 #include <vtkAxesActor.h>
 #include <vtkBillboardTextActor3D.h>
+#include <vtkCaptionActor2D.h>
 #include <vtkLineSource.h>
 #include <vtkMatrix4x4.h>
 #include <vtkNamedColors.h>
@@ -131,13 +132,126 @@ double ComputeLabelOffset(double nodeRadius)
     return std::max(nodeRadius * 1.8, 0.03);
 }
 
+double ComputeSceneMaxSpan(const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& previewScene)
+{
+    if (previewScene.nodes.empty())
+    {
+        return 1.0;
+    }
+
+    const auto minBounds = ComputeSceneMinBounds(previewScene);
+    const auto maxBounds = ComputeSceneMaxBounds(previewScene);
+    return std::max({
+        maxBounds[0] - minBounds[0],
+        maxBounds[1] - minBounds[1],
+        maxBounds[2] - minBounds[2],
+        1.0});
+}
+
 void AddAxes(vtkRenderer* renderer, double axisLength)
 {
     vtkNew<vtkAxesActor> axesActor;
-    axesActor->SetTotalLength(axisLength, axisLength, axisLength);
+    const double displayLength = axisLength * 0.62;
+    axesActor->SetTotalLength(displayLength, displayLength, displayLength);
     axesActor->SetShaftTypeToCylinder();
-    axesActor->SetCylinderRadius(0.02);
+    axesActor->SetCylinderRadius(0.006);
+    axesActor->SetConeRadius(0.025);
+    axesActor->SetSphereRadius(0.018);
+
+    // 中文说明：坐标轴是空间参考层，降低亮度和线宽，避免遮挡机械臂主体几何。
+    axesActor->GetXAxisShaftProperty()->SetColor(0.58, 0.24, 0.24);
+    axesActor->GetXAxisTipProperty()->SetColor(0.68, 0.32, 0.32);
+    axesActor->GetYAxisShaftProperty()->SetColor(0.28, 0.50, 0.30);
+    axesActor->GetYAxisTipProperty()->SetColor(0.34, 0.60, 0.36);
+    axesActor->GetZAxisShaftProperty()->SetColor(0.24, 0.36, 0.62);
+    axesActor->GetZAxisTipProperty()->SetColor(0.30, 0.44, 0.72);
+
+    auto tuneCaption = [](vtkCaptionActor2D* captionActor) {
+        if (captionActor == nullptr || captionActor->GetCaptionTextProperty() == nullptr)
+        {
+            return;
+        }
+
+        captionActor->GetCaptionTextProperty()->SetFontSize(8);
+        captionActor->GetCaptionTextProperty()->SetBold(false);
+        captionActor->GetCaptionTextProperty()->SetItalic(false);
+        captionActor->GetCaptionTextProperty()->SetColor(0.72, 0.76, 0.80);
+    };
+    tuneCaption(axesActor->GetXAxisCaptionActor2D());
+    tuneCaption(axesActor->GetYAxisCaptionActor2D());
+    tuneCaption(axesActor->GetZAxisCaptionActor2D());
     renderer->AddActor(axesActor);
+}
+
+void AddGroundGrid(vtkRenderer* renderer, double halfSize, double spacing)
+{
+    if (renderer == nullptr)
+    {
+        return;
+    }
+
+    const double safeHalfSize = std::max(halfSize, 0.5);
+    double safeSpacing = std::max(spacing, 0.05);
+    int lineCountPerSide = static_cast<int>(std::ceil(safeHalfSize / safeSpacing));
+    if (lineCountPerSide > 60)
+    {
+        lineCountPerSide = 60;
+        safeSpacing = safeHalfSize / static_cast<double>(lineCountPerSide);
+    }
+    const double gridLimit = static_cast<double>(lineCountPerSide) * safeSpacing;
+
+    const auto isMajorGridCoordinate = [safeSpacing](double coordinate) {
+        const double nearestMeter = std::round(coordinate);
+        return std::abs(coordinate - nearestMeter) <= std::max(safeSpacing * 0.25, 1.0e-6);
+    };
+
+    auto addLine = [renderer](double x1, double y1, double x2, double y2, bool majorLine) {
+        vtkNew<vtkLineSource> lineSource;
+        lineSource->SetPoint1(x1, y1, 0.0);
+        lineSource->SetPoint2(x2, y2, 0.0);
+
+        vtkNew<vtkPolyDataMapper> lineMapper;
+        lineMapper->SetInputConnection(lineSource->GetOutputPort());
+
+        vtkNew<vtkActor> lineActor;
+        lineActor->SetMapper(lineMapper);
+        if (majorLine)
+        {
+            // 中文说明：每 1m 主刻度线略亮略粗，帮助快速判断机械臂空间尺度。
+            lineActor->GetProperty()->SetColor(0.42, 0.47, 0.52);
+            lineActor->GetProperty()->SetOpacity(0.48);
+            lineActor->GetProperty()->SetLineWidth(1.25);
+        }
+        else
+        {
+            // 中文说明：副网格保持低亮度细线，只作为背景尺度参考，避免抢占主体视觉层级。
+            lineActor->GetProperty()->SetColor(0.30, 0.34, 0.38);
+            lineActor->GetProperty()->SetOpacity(0.34);
+            lineActor->GetProperty()->SetLineWidth(1.0);
+        }
+        renderer->AddActor(lineActor);
+    };
+
+    for (int index = -lineCountPerSide; index <= lineCountPerSide; ++index)
+    {
+        const double coordinate = static_cast<double>(index) * safeSpacing;
+        const bool majorLine = isMajorGridCoordinate(coordinate);
+        addLine(-gridLimit, coordinate, gridLimit, coordinate, majorLine);
+        addLine(coordinate, -gridLimit, coordinate, gridLimit, majorLine);
+    }
+}
+
+void ApplyStableViewportBackground(vtkRenderer* renderer)
+{
+    if (renderer == nullptr)
+    {
+        return;
+    }
+
+    // 中文说明：中央三维主视图区统一使用稳定的工程软件渐变背景，避免导入模型或刷新图层时背景色跳变。
+    renderer->SetGradientBackground(true);
+    renderer->SetBackground(0.075, 0.090, 0.110);
+    renderer->SetBackground2(0.300, 0.340, 0.380);
 }
 
 /**
@@ -405,19 +519,52 @@ void AddStaticMeshActor(
 
 void AddNodeLabel(
     vtkRenderer* renderer,
+    const QString& linkName,
+    const std::array<double, 3>& position)
+{
+    vtkNew<vtkBillboardTextActor3D> labelActor;
+    labelActor->SetInput(linkName.toStdString().c_str());
+    labelActor->SetPosition(position[0], position[1], position[2]);
+    labelActor->GetTextProperty()->SetFontSize(13);
+    labelActor->GetTextProperty()->SetColor(0.74, 0.84, 0.92);
+    labelActor->GetTextProperty()->SetBold(false);
+    renderer->AddActor(labelActor);
+}
+
+std::array<double, 3> ComputeLinkLabelPosition(
+    const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& previewScene,
     const RoboSDP::Kinematics::Dto::UrdfPreviewNodeDto& node,
     double labelOffset)
 {
-    vtkNew<vtkBillboardTextActor3D> labelActor;
-    labelActor->SetInput(node.link_name.toStdString().c_str());
-    labelActor->SetPosition(
-        node.position_m[0] + labelOffset,
-        node.position_m[1] + labelOffset * 0.35,
-        node.position_m[2] + labelOffset);
-    labelActor->GetTextProperty()->SetFontSize(18);
-    labelActor->GetTextProperty()->SetColor(0.96, 0.98, 1.0);
-    labelActor->GetTextProperty()->SetBold(true);
-    renderer->AddActor(labelActor);
+    for (const auto& segment : previewScene.segments)
+    {
+        if (segment.child_link_name != node.link_name)
+        {
+            continue;
+        }
+
+        const std::array<double, 3> linkDirection = NormalizeVector(
+            {
+                segment.end_position_m[0] - segment.start_position_m[0],
+                segment.end_position_m[1] - segment.start_position_m[1],
+                segment.end_position_m[2] - segment.start_position_m[2]},
+            {1.0, 0.0, 0.0});
+        const std::array<double, 3> helper =
+            std::abs(linkDirection[2]) < 0.9 ? std::array<double, 3>{0.0, 0.0, 1.0}
+                                             : std::array<double, 3>{0.0, 1.0, 0.0};
+        const std::array<double, 3> sideOffset = NormalizeVector(CrossVector(linkDirection, helper), {0.0, 1.0, 0.0});
+
+        // 中文说明：Link 标签放在父子 link 线段中点附近，并轻微侧向偏移，避免与关节端点标签重叠。
+        return {
+            (segment.start_position_m[0] + segment.end_position_m[0]) * 0.5 + sideOffset[0] * labelOffset * 0.45,
+            (segment.start_position_m[1] + segment.end_position_m[1]) * 0.5 + sideOffset[1] * labelOffset * 0.45,
+            (segment.start_position_m[2] + segment.end_position_m[2]) * 0.5 + sideOffset[2] * labelOffset * 0.45};
+    }
+
+    return {
+        node.position_m[0] + labelOffset * 0.35,
+        node.position_m[1] - labelOffset * 0.35,
+        node.position_m[2] + labelOffset * 0.35};
 }
 
 void AddJointLabel(
@@ -431,9 +578,9 @@ void AddJointLabel(
         segment.end_position_m[0] - labelOffset * 0.9,
         segment.end_position_m[1] + labelOffset * 0.25,
         segment.end_position_m[2] + labelOffset * 0.55);
-    labelActor->GetTextProperty()->SetFontSize(16);
-    labelActor->GetTextProperty()->SetColor(1.0, 0.95, 0.55);
-    labelActor->GetTextProperty()->SetBold(true);
+    labelActor->GetTextProperty()->SetFontSize(12);
+    labelActor->GetTextProperty()->SetColor(0.84, 0.78, 0.42);
+    labelActor->GetTextProperty()->SetBold(false);
     renderer->AddActor(labelActor);
 }
 
@@ -536,7 +683,7 @@ void AddJointAxisArrow(
 
 } // namespace
 
-void VtkSceneBuilder::BuildMinimalTestScene(vtkRenderer* renderer, bool showAxes)
+void VtkSceneBuilder::BuildMinimalTestScene(vtkRenderer* renderer, bool showAxes, bool showGroundGrid)
 {
     if (renderer == nullptr)
     {
@@ -546,27 +693,19 @@ void VtkSceneBuilder::BuildMinimalTestScene(vtkRenderer* renderer, bool showAxes
     renderer->RemoveAllViewProps();
 
     vtkNew<vtkNamedColors> colors;
-    renderer->SetBackground(colors->GetColor3d("SlateGray").GetData());
+    ApplyStableViewportBackground(renderer);
+
+    if (showGroundGrid)
+    {
+        // 中文说明：地面网格是独立空间参考层，由顶部“视图”页签单独控制。
+        AddGroundGrid(renderer, 1.5, 0.25);
+    }
 
     if (showAxes)
     {
-        // 中文说明：坐标系只作为空间参考层，由 UI 开关控制，不影响主体几何和相机逻辑。
+        // 中文说明：世界坐标系仅表达模型空间原点方向，不再捆绑地面网格显示。
         AddAxes(renderer, 1.5);
     }
-
-    vtkNew<vtkSphereSource> sphereSource;
-    sphereSource->SetRadius(0.35);
-    sphereSource->SetThetaResolution(48);
-    sphereSource->SetPhiResolution(48);
-    sphereSource->SetCenter(0.45, 0.2, 0.25);
-
-    vtkNew<vtkPolyDataMapper> sphereMapper;
-    sphereMapper->SetInputConnection(sphereSource->GetOutputPort());
-
-    vtkNew<vtkActor> sphereActor;
-    sphereActor->SetMapper(sphereMapper);
-    sphereActor->GetProperty()->SetColor(colors->GetColor3d("Orange").GetData());
-    renderer->AddActor(sphereActor);
 
     renderer->ResetCamera();
 }
@@ -584,6 +723,7 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
     displayOptions.show_link_labels = showLinkLabels;
     displayOptions.show_joint_labels = showJointLabels;
     displayOptions.show_axes = showAxes;
+    displayOptions.show_ground_grid = showAxes;
     BuildUrdfPreviewScene(
         renderer,
         previewScene,
@@ -615,6 +755,7 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
     displayOptions.show_link_labels = showLinkLabels;
     displayOptions.show_joint_labels = showJointLabels;
     displayOptions.show_axes = showAxes;
+    displayOptions.show_ground_grid = showAxes;
     BuildUrdfPreviewScene(renderer, previewScene, displayOptions, linkActors, linkGeometries);
 }
 
@@ -632,14 +773,14 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
 
     if (previewScene.IsEmpty())
     {
-        BuildMinimalTestScene(renderer, displayOptions.show_axes);
+        BuildMinimalTestScene(renderer, displayOptions.show_axes, displayOptions.show_ground_grid);
         return;
     }
 
     renderer->RemoveAllViewProps();
 
     vtkNew<vtkNamedColors> colors;
-    renderer->SetBackground(colors->GetColor3d("MidnightBlue").GetData());
+    ApplyStableViewportBackground(renderer);
 
     const bool hasVisualMeshes = displayOptions.show_visual_meshes && !previewScene.visual_geometries.empty();
     const double skeletonNodeOpacity = hasVisualMeshes ? 0.42 : 1.0;
@@ -647,9 +788,17 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
     const double jointHighlightOpacity = hasVisualMeshes ? 0.18 : 0.30;
     const double nodeRadius = ComputeNodeRadius(previewScene);
     const double labelOffset = ComputeLabelOffset(nodeRadius);
+    if (displayOptions.show_ground_grid)
+    {
+        // 中文说明：URDF 场景中的地面网格是辅助尺度参考，不参与 Mesh/骨架 Actor 缓存。
+        const double gridHalfSize = std::max(ComputeSceneMaxSpan(previewScene) * 0.9, 1.0);
+        const double gridSpacing = gridHalfSize <= 1.5 ? 0.1 : 0.2;
+        AddGroundGrid(renderer, gridHalfSize, gridSpacing);
+    }
+
     if (displayOptions.show_axes)
     {
-        // 中文说明：URDF 场景中的坐标系是辅助参考，不参与 Mesh/骨架 Actor 缓存。
+        // 中文说明：世界坐标系与地面网格拆分控制，便于用户保留网格但隐藏大坐标轴。
         AddAxes(renderer, std::max(nodeRadius * 8.0, 0.4));
     }
 
@@ -737,8 +886,8 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
 
             if (displayOptions.show_link_labels && !node.link_name.trimmed().isEmpty())
             {
-                // 中文说明：节点标签直接显示 link 名称，减少导入后需要回到文本区对照的成本。
-                AddNodeLabel(renderer, node, labelOffset);
+                // 中文说明：Link 标签放到连杆中段附近，避免与关节端点标签在同一位置堆叠。
+                AddNodeLabel(renderer, node.link_name, ComputeLinkLabelPosition(previewScene, node, labelOffset));
             }
         }
 

@@ -1,0 +1,19 @@
+{
+    "max_position_m": [
+        0,
+        0,
+        0
+    ],
+    "max_radius_m": 0,
+    "message": "",
+    "min_position_m": [
+        0,
+        0,
+        0
+    ],
+    "reachable_sample_count": 0,
+    "requested_sample_count": 0,
+    "sampled_points": [
+    ],
+    "success": false
+}

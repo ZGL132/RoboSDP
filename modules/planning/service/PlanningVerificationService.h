@@ -10,13 +10,21 @@
 namespace RoboSDP::Planning::Service
 {
 
-/// 构建 PlanningScene 的结果。
+/// @brief 构建 PlanningScene 的结果。
 struct PlanningSceneBuildResult
 {
     RoboSDP::Errors::ErrorCode error_code = RoboSDP::Errors::ErrorCode::Ok;
     QString message;
     QString kinematic_file_path;
     QString selection_file_path;
+    /// @brief 标记本次场景构建时上游统一工程主链快照是否已经就绪。
+    bool upstream_snapshot_ready = false;
+    /// @brief 保存本次场景构建读取到的统一主链摘要，便于 UI 与日志使用。
+    QString upstream_snapshot_summary;
+    /// @brief 标记当前依赖的派生产物是否物理存在。
+    bool upstream_derived_artifact_exists = false;
+    /// @brief 标记当前依赖的派生产物是否与上游主链快照新鲜对齐。
+    bool upstream_derived_artifact_fresh = false;
     RoboSDP::Planning::Dto::PlanningWorkspaceStateDto state;
 
     bool IsSuccess() const
@@ -25,7 +33,7 @@ struct PlanningSceneBuildResult
     }
 };
 
-/// 执行规划验证的结果。
+/// @brief 执行规划验证的结果。
 struct PlanningRunResult
 {
     RoboSDP::Errors::ErrorCode error_code = RoboSDP::Errors::ErrorCode::Ok;
@@ -40,7 +48,7 @@ struct PlanningRunResult
     }
 };
 
-/// 保存 Planning 草稿的结果。
+/// @brief 保存 Planning 草稿的结果。
 struct PlanningSaveResult
 {
     RoboSDP::Errors::ErrorCode error_code = RoboSDP::Errors::ErrorCode::Ok;
@@ -55,7 +63,7 @@ struct PlanningSaveResult
     }
 };
 
-/// 加载 Planning 草稿的结果。
+/// @brief 加载 Planning 草稿的结果。
 struct PlanningLoadResult
 {
     RoboSDP::Errors::ErrorCode error_code = RoboSDP::Errors::ErrorCode::Ok;

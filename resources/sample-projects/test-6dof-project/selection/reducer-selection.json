@@ -1,0 +1,296 @@
+﻿{
+    "reducer_results": [
+        {
+            "candidates": [
+                {
+                    "peak_torque_margin_nm": 634.4513706165119,
+                    "rated_torque_margin_nm": 316.4210055711276,
+                    "ratio_deviation": 0,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 7,
+                        "efficiency": 0.91,
+                        "max_input_speed_rpm": 4000,
+                        "name": "精密减速器 120",
+                        "peak_output_torque_nm": 640,
+                        "rated_output_torque_nm": 320,
+                        "ratio": 120,
+                        "reducer_id": "reducer_120",
+                        "vendor": "Stage1Vendor"
+                    }
+                },
+                {
+                    "peak_torque_margin_nm": 474.45137061651195,
+                    "rated_torque_margin_nm": 236.42100557112755,
+                    "ratio_deviation": 20,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 7,
+                        "efficiency": 0.92,
+                        "max_input_speed_rpm": 4000,
+                        "name": "精密减速器 100",
+                        "peak_output_torque_nm": 480,
+                        "rated_output_torque_nm": 240,
+                        "ratio": 100,
+                        "reducer_id": "reducer_100",
+                        "vendor": "Stage1Vendor"
+                    }
+                }
+            ],
+            "dynamic_ref": "dynamic_test_6dof",
+            "has_recommendation": true,
+            "joint_id": "joint_1",
+            "kinematic_ref": "kinematic_test_6dof",
+            "message": "已生成减速器候选并给出最小推荐结果。",
+            "motor_speed_limit_rpm": 359.9423169363884,
+            "peak_output_speed_deg_s": 14.997596539016184,
+            "peak_output_torque_nm": 5.548629383488074,
+            "requirement_ref": "requirement_test_6dof",
+            "rms_output_torque_nm": 3.5789944288724365,
+            "target_ratio": 120,
+            "target_ratio_max": 144,
+            "target_ratio_min": 96,
+            "topology_ref": "topology_test_6dof"
+        },
+        {
+            "candidates": [
+                {
+                    "peak_torque_margin_nm": 466.03789523852873,
+                    "rated_torque_margin_nm": 230.69339268161096,
+                    "ratio_deviation": 10,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 7,
+                        "efficiency": 0.92,
+                        "max_input_speed_rpm": 4000,
+                        "name": "精密减速器 100",
+                        "peak_output_torque_nm": 480,
+                        "rated_output_torque_nm": 240,
+                        "ratio": 100,
+                        "reducer_id": "reducer_100",
+                        "vendor": "Stage1Vendor"
+                    }
+                },
+                {
+                    "peak_torque_margin_nm": 626.0378952385288,
+                    "rated_torque_margin_nm": 310.69339268161093,
+                    "ratio_deviation": 10,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 7,
+                        "efficiency": 0.91,
+                        "max_input_speed_rpm": 4000,
+                        "name": "精密减速器 120",
+                        "peak_output_torque_nm": 640,
+                        "rated_output_torque_nm": 320,
+                        "ratio": 120,
+                        "reducer_id": "reducer_120",
+                        "vendor": "Stage1Vendor"
+                    }
+                }
+            ],
+            "dynamic_ref": "dynamic_test_6dof",
+            "has_recommendation": true,
+            "joint_id": "joint_2",
+            "kinematic_ref": "kinematic_test_6dof",
+            "message": "已生成减速器候选并给出最小推荐结果。",
+            "motor_speed_limit_rpm": 989.7155989658146,
+            "peak_output_speed_deg_s": 44.9870726802643,
+            "peak_output_torque_nm": 13.962104761471252,
+            "requirement_ref": "requirement_test_6dof",
+            "rms_output_torque_nm": 9.306607318389043,
+            "target_ratio": 110,
+            "target_ratio_max": 132,
+            "target_ratio_min": 88,
+            "topology_ref": "topology_test_6dof"
+        },
+        {
+            "candidates": [
+                {
+                    "peak_torque_margin_nm": 474.24080463077826,
+                    "rated_torque_margin_nm": 236.33566850363096,
+                    "ratio_deviation": 0,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 7,
+                        "efficiency": 0.92,
+                        "max_input_speed_rpm": 4000,
+                        "name": "精密减速器 100",
+                        "peak_output_torque_nm": 480,
+                        "rated_output_torque_nm": 240,
+                        "ratio": 100,
+                        "reducer_id": "reducer_100",
+                        "vendor": "Stage1Vendor"
+                    }
+                },
+                {
+                    "peak_torque_margin_nm": 354.24080463077826,
+                    "rated_torque_margin_nm": 176.33566850363096,
+                    "ratio_deviation": 20,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 8,
+                        "efficiency": 0.93,
+                        "max_input_speed_rpm": 4500,
+                        "name": "精密减速器 080",
+                        "peak_output_torque_nm": 360,
+                        "rated_output_torque_nm": 180,
+                        "ratio": 80,
+                        "reducer_id": "reducer_080",
+                        "vendor": "Stage1Vendor"
+                    }
+                },
+                {
+                    "peak_torque_margin_nm": 634.2408046307783,
+                    "rated_torque_margin_nm": 316.3356685036309,
+                    "ratio_deviation": 20,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 7,
+                        "efficiency": 0.91,
+                        "max_input_speed_rpm": 4000,
+                        "name": "精密减速器 120",
+                        "peak_output_torque_nm": 640,
+                        "rated_output_torque_nm": 320,
+                        "ratio": 120,
+                        "reducer_id": "reducer_120",
+                        "vendor": "Stage1Vendor"
+                    }
+                }
+            ],
+            "dynamic_ref": "dynamic_test_6dof",
+            "has_recommendation": true,
+            "joint_id": "joint_3",
+            "kinematic_ref": "kinematic_test_6dof",
+            "message": "已生成减速器候选并给出最小推荐结果。",
+            "motor_speed_limit_rpm": 374.93991347540464,
+            "peak_output_speed_deg_s": 18.746995673770233,
+            "peak_output_torque_nm": 5.759195369221758,
+            "requirement_ref": "requirement_test_6dof",
+            "rms_output_torque_nm": 3.6643314963690496,
+            "target_ratio": 100,
+            "target_ratio_max": 120,
+            "target_ratio_min": 80,
+            "topology_ref": "topology_test_6dof"
+        },
+        {
+            "candidates": [
+                {
+                    "peak_torque_margin_nm": 359.4886705038175,
+                    "rated_torque_margin_nm": 179.65216512219376,
+                    "ratio_deviation": 0,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 8,
+                        "efficiency": 0.93,
+                        "max_input_speed_rpm": 4500,
+                        "name": "精密减速器 080",
+                        "peak_output_torque_nm": 360,
+                        "rated_output_torque_nm": 180,
+                        "ratio": 80,
+                        "reducer_id": "reducer_080",
+                        "vendor": "Stage1Vendor"
+                    }
+                }
+            ],
+            "dynamic_ref": "dynamic_test_6dof",
+            "has_recommendation": true,
+            "joint_id": "joint_4",
+            "kinematic_ref": "kinematic_test_6dof",
+            "message": "已生成减速器候选并给出最小推荐结果。",
+            "motor_speed_limit_rpm": 119.98077231212946,
+            "peak_output_speed_deg_s": 7.498798269508092,
+            "peak_output_torque_nm": 0.5113294961824965,
+            "requirement_ref": "requirement_test_6dof",
+            "rms_output_torque_nm": 0.3478348778062217,
+            "target_ratio": 80,
+            "target_ratio_max": 96,
+            "target_ratio_min": 64,
+            "topology_ref": "topology_test_6dof"
+        },
+        {
+            "candidates": [
+                {
+                    "peak_torque_margin_nm": 359.5634947288719,
+                    "rated_torque_margin_nm": 179.70357158820585,
+                    "ratio_deviation": 10,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 8,
+                        "efficiency": 0.93,
+                        "max_input_speed_rpm": 4500,
+                        "name": "精密减速器 080",
+                        "peak_output_torque_nm": 360,
+                        "rated_output_torque_nm": 180,
+                        "ratio": 80,
+                        "reducer_id": "reducer_080",
+                        "vendor": "Stage1Vendor"
+                    }
+                }
+            ],
+            "dynamic_ref": "dynamic_test_6dof",
+            "has_recommendation": true,
+            "joint_id": "joint_5",
+            "kinematic_ref": "kinematic_test_6dof",
+            "message": "已生成减速器候选并给出最小推荐结果。",
+            "motor_speed_limit_rpm": 157.47476365966995,
+            "peak_output_speed_deg_s": 11.248197404262138,
+            "peak_output_torque_nm": 0.43650527112810655,
+            "requirement_ref": "requirement_test_6dof",
+            "rms_output_torque_nm": 0.2964284117941557,
+            "target_ratio": 70,
+            "target_ratio_max": 84,
+            "target_ratio_min": 56,
+            "topology_ref": "topology_test_6dof"
+        },
+        {
+            "candidates": [
+                {
+                    "peak_torque_margin_nm": 239.42895754207626,
+                    "rated_torque_margin_nm": 119.61774730620947,
+                    "ratio_deviation": 10,
+                    "ratio_rule_passed": true,
+                    "recommendation_reason": "满足输出扭矩、输入转速与目标减速比区间。",
+                    "reducer": {
+                        "backlash_arcmin": 8,
+                        "efficiency": 0.94,
+                        "max_input_speed_rpm": 5000,
+                        "name": "精密减速器 050",
+                        "peak_output_torque_nm": 240,
+                        "rated_output_torque_nm": 120,
+                        "ratio": 50,
+                        "reducer_id": "reducer_050",
+                        "vendor": "Stage1Vendor"
+                    }
+                }
+            ],
+            "dynamic_ref": "dynamic_test_6dof",
+            "has_recommendation": true,
+            "joint_id": "joint_6",
+            "kinematic_ref": "kinematic_test_6dof",
+            "message": "已生成减速器候选并给出最小推荐结果。",
+            "motor_speed_limit_rpm": 314.94952731933984,
+            "peak_output_speed_deg_s": 26.245793943278322,
+            "peak_output_torque_nm": 0.5710424579237507,
+            "requirement_ref": "requirement_test_6dof",
+            "rms_output_torque_nm": 0.38225269379053645,
+            "target_ratio": 60,
+            "target_ratio_max": 72,
+            "target_ratio_min": 48,
+            "topology_ref": "topology_test_6dof"
+        }
+    ]
+}
+
+
+
+

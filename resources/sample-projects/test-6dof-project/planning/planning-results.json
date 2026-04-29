@@ -1,0 +1,55 @@
+﻿{
+  "results": [
+    {
+      "verification_id": "planning_verification_test_6dof_001",
+      "planning_scene_ref": "planning_scene_test_6dof",
+      "request_id": "planning_request_test_6dof_001",
+      "success": true,
+      "message": "最小点到点规划验证通过。",
+      "feasibility_summary": "当前场景未发现碰撞与自碰撞，且节拍满足目标。",
+      "cycle_time_result": {
+        "request_id": "planning_request_test_6dof_001",
+        "trajectory_duration_s": 0.90,
+        "target_cycle_time_s": 4.0,
+        "within_target": true,
+        "margin_s": 3.10,
+        "message": "轨迹总时长满足目标节拍。"
+      },
+      "trajectory_results": [
+        {
+          "request_id": "planning_request_test_6dof_001",
+          "planner_id": "RRTConnect",
+          "success": true,
+          "message": "Python MoveIt gRPC 最小服务返回点到点规划结果。",
+          "planning_time_s": 0.25,
+          "trajectory_duration_s": 0.90,
+          "waypoint_count": 3,
+          "waypoints": [
+            {"time_from_start_s": 0.0, "joint_values_deg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]},
+            {"time_from_start_s": 0.45, "joint_values_deg": [7.5, -17.5, 22.5, 5.0, 7.5, 10.0]},
+            {"time_from_start_s": 0.90, "joint_values_deg": [15.0, -35.0, 45.0, 10.0, 15.0, 20.0]}
+          ]
+        }
+      ],
+      "collision_results": [
+        {
+          "request_id": "planning_request_test_6dof_001",
+          "object_id": "table_box",
+          "in_collision": false,
+          "message": "未发现环境碰撞。"
+        }
+      ],
+      "self_collision_results": [
+        {
+          "request_id": "planning_request_test_6dof_001",
+          "link_a": "link_2",
+          "link_b": "link_4",
+          "in_self_collision": false,
+          "message": "未发现机械臂自碰撞。"
+        }
+      ]
+    }
+  ]
+}
+
+

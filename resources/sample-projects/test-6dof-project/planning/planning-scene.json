@@ -1,0 +1,53 @@
+﻿{
+  "meta": {
+    "planning_scene_id": "planning_scene_test_6dof",
+    "name": "6DOF Test 点到点规划场景",
+    "version": 1,
+    "source": "planning",
+    "status": "draft",
+    "kinematic_ref": "kinematic_test_6dof",
+    "dynamic_ref": "dynamic_test_6dof",
+    "selection_ref": "selection/drivetrain-selection.json",
+    "requirement_ref": "requirements/requirement-model.json"
+  },
+  "robot_collision_model_ref": "robot_collision_model_test_6dof",
+  "joint_limits": [
+    {"joint_id": "joint_1", "lower_deg": -175.0, "upper_deg": 175.0},
+    {"joint_id": "joint_2", "lower_deg": -130.0, "upper_deg": 80.0},
+    {"joint_id": "joint_3", "lower_deg": -145.0, "upper_deg": 145.0},
+    {"joint_id": "joint_4", "lower_deg": -190.0, "upper_deg": 190.0},
+    {"joint_id": "joint_5", "lower_deg": -120.0, "upper_deg": 120.0},
+    {"joint_id": "joint_6", "lower_deg": -350.0, "upper_deg": 350.0}
+  ],
+  "start_state": {
+    "joint_ids": ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"],
+    "joint_values_deg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  },
+  "goal_state": {
+    "joint_ids": ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"],
+    "joint_values_deg": [15.0, -35.0, 45.0, 10.0, 15.0, 20.0]
+  },
+  "environment_objects": [
+    {
+      "object_id": "table_box",
+      "name": "工作台占位盒",
+      "shape_type": "box",
+      "size_m": [0.8, 0.8, 0.2],
+      "position_m": [0.6, 0.0, -0.15],
+      "rpy_deg": [0.0, 0.0, 0.0],
+      "enabled": true
+    }
+  ],
+  "planning_config": {
+    "motion_group": "manipulator",
+    "planner_id": "RRTConnect",
+    "service_endpoint": "127.0.0.1:50051",
+    "allowed_planning_time_s": 1.0,
+    "max_planning_attempts": 1,
+    "target_cycle_time_s": 4.0,
+    "check_collision": true,
+    "check_self_collision": true
+  }
+}
+
+

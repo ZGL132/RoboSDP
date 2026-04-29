@@ -1,0 +1,270 @@
+{
+    "backend_summary": {
+        "active_backend_type": "pinocchio_kinematic_backend",
+        "default_backend_type": "pinocchio_kinematic_backend",
+        "shared_kernel_stage": "pinocchio_primary",
+        "shared_robot_kernel_ready": false,
+        "status_message": "当前默认使用 Pinocchio 共享运动学后端。"
+    },
+    "backend_type": "pinocchio_kinematic_backend",
+    "base_frame": {
+        "position_m": [
+            0,
+            0,
+            0
+        ],
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ]
+    },
+    "conversion_diagnostics": "当前草稿以 DH/MDH 参数为主模型。",
+    "derived_model_state": "fresh",
+    "dh_editable": true,
+    "flange_frame": {
+        "position_m": [
+            0,
+            0,
+            0
+        ],
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ]
+    },
+    "frame_semantics_version": 1,
+    "ik_solver_config": {
+        "branch_policy": "nearest_seed",
+        "max_iterations": 200,
+        "orientation_tolerance_deg": 1,
+        "position_tolerance_mm": 1,
+        "solver_type": "numeric_jacobian_transpose",
+        "step_gain": 0.35
+    },
+    "joint_count": 6,
+    "joint_limits": [
+        {
+            "hard_limit": [
+                -185,
+                185
+            ],
+            "joint_id": "joint_1",
+            "max_acceleration": 360,
+            "max_velocity": 180,
+            "soft_limit": [
+                -180,
+                180
+            ]
+        },
+        {
+            "hard_limit": [
+                -135,
+                85
+            ],
+            "joint_id": "joint_2",
+            "max_acceleration": 360,
+            "max_velocity": 180,
+            "soft_limit": [
+                -130,
+                80
+            ]
+        },
+        {
+            "hard_limit": [
+                -150,
+                150
+            ],
+            "joint_id": "joint_3",
+            "max_acceleration": 360,
+            "max_velocity": 180,
+            "soft_limit": [
+                -145,
+                145
+            ]
+        },
+        {
+            "hard_limit": [
+                -200,
+                200
+            ],
+            "joint_id": "joint_4",
+            "max_acceleration": 520,
+            "max_velocity": 260,
+            "soft_limit": [
+                -195,
+                195
+            ]
+        },
+        {
+            "hard_limit": [
+                -125,
+                125
+            ],
+            "joint_id": "joint_5",
+            "max_acceleration": 520,
+            "max_velocity": 260,
+            "soft_limit": [
+                -120,
+                120
+            ]
+        },
+        {
+            "hard_limit": [
+                -360,
+                360
+            ],
+            "joint_id": "joint_6",
+            "max_acceleration": 520,
+            "max_velocity": 260,
+            "soft_limit": [
+                -355,
+                355
+            ]
+        }
+    ],
+    "joint_order_signature": "joint_1|joint_2|joint_3|joint_4|joint_5|joint_6",
+    "last_fk_result": {
+        "joint_positions_deg": [
+        ],
+        "link_poses": [
+        ],
+        "message": "",
+        "success": false,
+        "tcp_pose": {
+            "position_m": [
+                0,
+                0,
+                0
+            ],
+            "rpy_deg": [
+                0,
+                0,
+                0
+            ]
+        },
+        "tcp_transform_matrix": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1
+        ]
+    },
+    "last_ik_result": {
+        "iteration_count": 0,
+        "joint_positions_deg": [
+        ],
+        "message": "",
+        "orientation_error_deg": 0,
+        "position_error_mm": 0,
+        "success": false
+    },
+    "links": [
+        {
+            "a": 100,
+            "alpha": 90,
+            "d": 0.35,
+            "link_id": "link_1",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.3,
+            "alpha": 0,
+            "d": 0,
+            "link_id": "link_2",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.25,
+            "alpha": 0,
+            "d": 0,
+            "link_id": "link_3",
+            "theta_offset": 0
+        },
+        {
+            "a": 0,
+            "alpha": 90,
+            "d": 0.12,
+            "link_id": "link_4",
+            "theta_offset": 0
+        },
+        {
+            "a": 0,
+            "alpha": -90,
+            "d": 0.1,
+            "link_id": "link_5",
+            "theta_offset": 0
+        },
+        {
+            "a": 0,
+            "alpha": 0,
+            "d": 0.08,
+            "link_id": "link_6",
+            "theta_offset": 0
+        }
+    ],
+    "master_model_type": "dh_mdh",
+    "meta": {
+        "kinematic_id": "kinematic_topology_tpl_6r_floor_general",
+        "name": "通用落地式 6R 串联 运动学模型",
+        "requirement_ref": "6DOF Test Project",
+        "source": "topology",
+        "status": "ready",
+        "topology_ref": "topology_tpl_6r_floor_general",
+        "version": 1
+    },
+    "model_source_mode": "topology_derived",
+    "modeling_mode": "DH",
+    "parameter_convention": "DH",
+    "pinocchio_model_ready": true,
+    "tcp_frame": {
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ],
+        "translation_m": [
+            0,
+            0,
+            0.1
+        ]
+    },
+    "tool_frame": null,
+    "unified_robot_model_ref": "dh_preview::kinematic_topology_tpl_6r_floor_general",
+    "unified_robot_snapshot": {
+        "backend_type": "pinocchio_kinematic_backend",
+        "conversion_diagnostics": "当前草稿以 DH/MDH 参数为主模型，统一工程主链已同步到共享 Pinocchio 内核。",
+        "derived_artifact_exists": false,
+        "derived_artifact_fresh": false,
+        "derived_artifact_generated_at_utc": "2026-04-26T12:56:45.541Z",
+        "derived_artifact_relative_path": "kinematics/derived/kinematic_topology_tpl_6r_floor_general.urdf",
+        "derived_artifact_state_code": "logical_only",
+        "derived_artifact_version": "logical_v2",
+        "frame_semantics_version": 1,
+        "joint_order_signature": "joint_1|joint_2|joint_3|joint_4|joint_5|joint_6",
+        "master_model_type": "dh_mdh",
+        "model_source_mode": "topology_derived",
+        "modeling_mode": "DH",
+        "parameter_convention": "DH",
+        "pinocchio_model_ready": true,
+        "snapshot_version": 2,
+        "source_kinematic_id": "kinematic_topology_tpl_6r_floor_general",
+        "unified_robot_model_ref": "dh_preview::kinematic_topology_tpl_6r_floor_general"
+    },
+    "urdf_editable": false,
+    "urdf_source_path": "",
+    "workpiece_frame": null
+}

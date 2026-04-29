@@ -1,6 +1,7 @@
 #include "modules/kinematics/persistence/KinematicJsonStorage.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
 
@@ -229,6 +230,73 @@ QString InferBackendType(const QString& explicitBackendType)
     return explicitBackendType.trimmed().isEmpty()
         ? QStringLiteral("pinocchio_kinematic_backend")
         : explicitBackendType.trimmed();
+}
+
+QJsonObject ToUnifiedRobotSnapshotObject(
+    const RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto& snapshot)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("unified_robot_model_ref"), snapshot.unified_robot_model_ref);
+    object.insert(QStringLiteral("snapshot_version"), snapshot.snapshot_version);
+    object.insert(QStringLiteral("source_kinematic_id"), snapshot.source_kinematic_id);
+    object.insert(QStringLiteral("master_model_type"), snapshot.master_model_type);
+    object.insert(QStringLiteral("modeling_mode"), snapshot.modeling_mode);
+    object.insert(QStringLiteral("parameter_convention"), snapshot.parameter_convention);
+    object.insert(QStringLiteral("backend_type"), snapshot.backend_type);
+    object.insert(QStringLiteral("joint_order_signature"), snapshot.joint_order_signature);
+    object.insert(QStringLiteral("pinocchio_model_ready"), snapshot.pinocchio_model_ready);
+    object.insert(QStringLiteral("frame_semantics_version"), snapshot.frame_semantics_version);
+    object.insert(QStringLiteral("model_source_mode"), snapshot.model_source_mode);
+    object.insert(QStringLiteral("conversion_diagnostics"), snapshot.conversion_diagnostics);
+    object.insert(QStringLiteral("derived_artifact_relative_path"), snapshot.derived_artifact_relative_path);
+    object.insert(QStringLiteral("derived_artifact_version"), snapshot.derived_artifact_version);
+    object.insert(QStringLiteral("derived_artifact_generated_at_utc"), snapshot.derived_artifact_generated_at_utc);
+    object.insert(QStringLiteral("derived_artifact_state_code"), snapshot.derived_artifact_state_code);
+    object.insert(QStringLiteral("derived_artifact_exists"), snapshot.derived_artifact_exists);
+    object.insert(QStringLiteral("derived_artifact_fresh"), snapshot.derived_artifact_fresh);
+    return object;
+}
+
+RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto FromUnifiedRobotSnapshotObject(const QJsonObject& object)
+{
+    RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto snapshot;
+    snapshot.unified_robot_model_ref =
+        ReadString(object, QStringLiteral("unified_robot_model_ref"), snapshot.unified_robot_model_ref);
+    snapshot.snapshot_version =
+        std::max(1, ReadInt(object, QStringLiteral("snapshot_version"), snapshot.snapshot_version));
+    snapshot.source_kinematic_id =
+        ReadString(object, QStringLiteral("source_kinematic_id"), snapshot.source_kinematic_id);
+    snapshot.master_model_type =
+        ReadString(object, QStringLiteral("master_model_type"), snapshot.master_model_type);
+    snapshot.modeling_mode =
+        ReadString(object, QStringLiteral("modeling_mode"), snapshot.modeling_mode);
+    snapshot.parameter_convention =
+        ReadString(object, QStringLiteral("parameter_convention"), snapshot.parameter_convention);
+    snapshot.backend_type =
+        ReadString(object, QStringLiteral("backend_type"), snapshot.backend_type);
+    snapshot.joint_order_signature =
+        ReadString(object, QStringLiteral("joint_order_signature"), snapshot.joint_order_signature);
+    snapshot.pinocchio_model_ready =
+        ReadBool(object, QStringLiteral("pinocchio_model_ready"), snapshot.pinocchio_model_ready);
+    snapshot.frame_semantics_version =
+        std::max(1, ReadInt(object, QStringLiteral("frame_semantics_version"), snapshot.frame_semantics_version));
+    snapshot.model_source_mode =
+        ReadString(object, QStringLiteral("model_source_mode"), snapshot.model_source_mode);
+    snapshot.conversion_diagnostics =
+        ReadString(object, QStringLiteral("conversion_diagnostics"), snapshot.conversion_diagnostics);
+    snapshot.derived_artifact_relative_path =
+        ReadString(object, QStringLiteral("derived_artifact_relative_path"), snapshot.derived_artifact_relative_path);
+    snapshot.derived_artifact_version =
+        ReadString(object, QStringLiteral("derived_artifact_version"), snapshot.derived_artifact_version);
+    snapshot.derived_artifact_generated_at_utc =
+        ReadString(object, QStringLiteral("derived_artifact_generated_at_utc"), snapshot.derived_artifact_generated_at_utc);
+    snapshot.derived_artifact_state_code =
+        ReadString(object, QStringLiteral("derived_artifact_state_code"), snapshot.derived_artifact_state_code);
+    snapshot.derived_artifact_exists =
+        ReadBool(object, QStringLiteral("derived_artifact_exists"), snapshot.derived_artifact_exists);
+    snapshot.derived_artifact_fresh =
+        ReadBool(object, QStringLiteral("derived_artifact_fresh"), snapshot.derived_artifact_fresh);
+    return snapshot;
 }
 
 QJsonObject ToPoseObject(const RoboSDP::Kinematics::Dto::CartesianPoseDto& pose)
@@ -503,6 +571,87 @@ QJsonObject KinematicJsonStorage::ToModelJsonObject(
         : state.current_model.joint_order_signature.trimmed();
     const int normalizedFrameSemanticsVersion =
         state.current_model.frame_semantics_version <= 0 ? 1 : state.current_model.frame_semantics_version;
+    RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto normalizedSnapshot =
+        state.current_model.unified_robot_snapshot;
+    if (normalizedSnapshot.unified_robot_model_ref.trimmed().isEmpty())
+    {
+        normalizedSnapshot.unified_robot_model_ref = state.current_model.unified_robot_model_ref;
+        normalizedSnapshot.source_kinematic_id = state.current_model.meta.kinematic_id;
+        normalizedSnapshot.master_model_type = state.current_model.master_model_type;
+        normalizedSnapshot.modeling_mode = normalizedModelingMode;
+        normalizedSnapshot.parameter_convention = normalizedParameterConvention;
+        normalizedSnapshot.backend_type = normalizedBackendType;
+        normalizedSnapshot.joint_order_signature = normalizedJointOrderSignature;
+        normalizedSnapshot.pinocchio_model_ready = state.current_model.pinocchio_model_ready;
+        normalizedSnapshot.frame_semantics_version = normalizedFrameSemanticsVersion;
+        normalizedSnapshot.model_source_mode = normalizedModelSourceMode;
+        normalizedSnapshot.conversion_diagnostics = state.current_model.conversion_diagnostics;
+        if (!state.current_model.urdf_source_path.trimmed().isEmpty())
+        {
+            const QFileInfo urdfFileInfo(state.current_model.urdf_source_path);
+            normalizedSnapshot.derived_artifact_state_code = urdfFileInfo.exists()
+                ? QStringLiteral("external_master")
+                : QStringLiteral("external_missing");
+            normalizedSnapshot.derived_artifact_exists = urdfFileInfo.exists();
+            normalizedSnapshot.derived_artifact_fresh =
+                urdfFileInfo.exists() && state.current_model.pinocchio_model_ready;
+            normalizedSnapshot.derived_artifact_version = urdfFileInfo.exists()
+                ? urdfFileInfo.lastModified().toUTC().toString(Qt::ISODateWithMs)
+                : QStringLiteral("external_missing");
+            normalizedSnapshot.derived_artifact_generated_at_utc = urdfFileInfo.exists()
+                ? urdfFileInfo.lastModified().toUTC().toString(Qt::ISODateWithMs)
+                : QString();
+        }
+        else
+        {
+            normalizedSnapshot.derived_artifact_relative_path =
+                QStringLiteral("kinematics/derived/%1.urdf").arg(
+                    state.current_model.meta.kinematic_id.trimmed().isEmpty()
+                        ? QStringLiteral("default")
+                        : state.current_model.meta.kinematic_id.trimmed());
+            normalizedSnapshot.derived_artifact_version =
+                QStringLiteral("logical_v%1").arg(normalizedSnapshot.snapshot_version);
+            normalizedSnapshot.derived_artifact_state_code = state.current_model.pinocchio_model_ready
+                ? QStringLiteral("logical_only")
+                : QStringLiteral("logical_not_ready");
+            normalizedSnapshot.derived_artifact_exists = false;
+            normalizedSnapshot.derived_artifact_fresh = false;
+        }
+    }
+    if (normalizedSnapshot.derived_artifact_state_code.trimmed().isEmpty())
+    {
+        if (!state.current_model.urdf_source_path.trimmed().isEmpty())
+        {
+            const QFileInfo urdfFileInfo(state.current_model.urdf_source_path);
+            normalizedSnapshot.derived_artifact_state_code = urdfFileInfo.exists()
+                ? QStringLiteral("external_master")
+                : QStringLiteral("external_missing");
+            normalizedSnapshot.derived_artifact_exists = urdfFileInfo.exists();
+            normalizedSnapshot.derived_artifact_fresh =
+                urdfFileInfo.exists() && state.current_model.pinocchio_model_ready;
+            normalizedSnapshot.derived_artifact_version = urdfFileInfo.exists()
+                ? urdfFileInfo.lastModified().toUTC().toString(Qt::ISODateWithMs)
+                : QStringLiteral("external_missing");
+            normalizedSnapshot.derived_artifact_generated_at_utc = urdfFileInfo.exists()
+                ? urdfFileInfo.lastModified().toUTC().toString(Qt::ISODateWithMs)
+                : QString();
+        }
+        else
+        {
+            normalizedSnapshot.derived_artifact_relative_path =
+                QStringLiteral("kinematics/derived/%1.urdf").arg(
+                    state.current_model.meta.kinematic_id.trimmed().isEmpty()
+                        ? QStringLiteral("default")
+                        : state.current_model.meta.kinematic_id.trimmed());
+            normalizedSnapshot.derived_artifact_version =
+                QStringLiteral("logical_v%1").arg(normalizedSnapshot.snapshot_version);
+            normalizedSnapshot.derived_artifact_state_code = state.current_model.pinocchio_model_ready
+                ? QStringLiteral("logical_only")
+                : QStringLiteral("logical_not_ready");
+            normalizedSnapshot.derived_artifact_exists = false;
+            normalizedSnapshot.derived_artifact_fresh = false;
+        }
+    }
 
     QJsonObject metaObject;
     metaObject.insert(QStringLiteral("kinematic_id"), state.current_model.meta.kinematic_id);
@@ -515,15 +664,27 @@ QJsonObject KinematicJsonStorage::ToModelJsonObject(
     rootObject.insert(QStringLiteral("meta"), metaObject);
 
     rootObject.insert(QStringLiteral("modeling_mode"), normalizedModelingMode);
+    rootObject.insert(QStringLiteral("master_model_type"), state.current_model.master_model_type);
+    rootObject.insert(QStringLiteral("derived_model_state"), state.current_model.derived_model_state);
+    rootObject.insert(QStringLiteral("dh_editable"), state.current_model.dh_editable);
+    rootObject.insert(QStringLiteral("urdf_editable"), state.current_model.urdf_editable);
+    rootObject.insert(QStringLiteral("conversion_diagnostics"), state.current_model.conversion_diagnostics);
+    rootObject.insert(QStringLiteral("dh_draft_extraction_level"), state.current_model.dh_draft_extraction_level);
+    rootObject.insert(QStringLiteral("dh_draft_readonly_reason"), state.current_model.dh_draft_readonly_reason);
     rootObject.insert(QStringLiteral("unified_robot_model_ref"), state.current_model.unified_robot_model_ref);
     rootObject.insert(QStringLiteral("model_source_mode"), normalizedModelSourceMode);
     rootObject.insert(QStringLiteral("backend_type"), normalizedBackendType);
     rootObject.insert(QStringLiteral("parameter_convention"), normalizedParameterConvention);
     rootObject.insert(QStringLiteral("joint_count"), state.current_model.joint_count);
     rootObject.insert(QStringLiteral("urdf_source_path"), state.current_model.urdf_source_path);
+    rootObject.insert(QStringLiteral("original_imported_urdf_path"), state.current_model.original_imported_urdf_path);
+    rootObject.insert(QStringLiteral("urdf_master_source_type"), state.current_model.urdf_master_source_type);
     rootObject.insert(QStringLiteral("pinocchio_model_ready"), state.current_model.pinocchio_model_ready);
     rootObject.insert(QStringLiteral("frame_semantics_version"), normalizedFrameSemanticsVersion);
     rootObject.insert(QStringLiteral("joint_order_signature"), normalizedJointOrderSignature);
+    rootObject.insert(
+        QStringLiteral("unified_robot_snapshot"),
+        ToUnifiedRobotSnapshotObject(normalizedSnapshot));
     rootObject.insert(QStringLiteral("base_frame"), ToPoseObject(state.current_model.base_frame));
     rootObject.insert(QStringLiteral("flange_frame"), ToPoseObject(state.current_model.flange_frame));
     rootObject.insert(
@@ -614,10 +775,28 @@ RoboSDP::Kinematics::Dto::KinematicsWorkspaceStateDto KinematicJsonStorage::From
     const QString explicitModelingMode = ReadString(jsonObject, QStringLiteral("modeling_mode"));
     state.current_model.urdf_source_path =
         ReadString(jsonObject, QStringLiteral("urdf_source_path"), state.current_model.urdf_source_path);
+    state.current_model.original_imported_urdf_path =
+        ReadString(jsonObject, QStringLiteral("original_imported_urdf_path"), state.current_model.original_imported_urdf_path);
+    state.current_model.urdf_master_source_type =
+        ReadString(jsonObject, QStringLiteral("urdf_master_source_type"), state.current_model.urdf_master_source_type);
     state.current_model.parameter_convention = InferParameterConvention(
         ReadString(jsonObject, QStringLiteral("parameter_convention")),
         explicitModelingMode,
         state.current_model.urdf_source_path);
+    state.current_model.master_model_type =
+        ReadString(jsonObject, QStringLiteral("master_model_type"), state.current_model.master_model_type);
+    state.current_model.derived_model_state =
+        ReadString(jsonObject, QStringLiteral("derived_model_state"), state.current_model.derived_model_state);
+    state.current_model.dh_editable =
+        ReadBool(jsonObject, QStringLiteral("dh_editable"), state.current_model.dh_editable);
+    state.current_model.urdf_editable =
+        ReadBool(jsonObject, QStringLiteral("urdf_editable"), state.current_model.urdf_editable);
+    state.current_model.conversion_diagnostics =
+        ReadString(jsonObject, QStringLiteral("conversion_diagnostics"), state.current_model.conversion_diagnostics);
+    state.current_model.dh_draft_extraction_level =
+        ReadString(jsonObject, QStringLiteral("dh_draft_extraction_level"), state.current_model.dh_draft_extraction_level);
+    state.current_model.dh_draft_readonly_reason =
+        ReadString(jsonObject, QStringLiteral("dh_draft_readonly_reason"), state.current_model.dh_draft_readonly_reason);
     state.current_model.joint_count =
         ReadInt(jsonObject, QStringLiteral("joint_count"), state.current_model.joint_count);
     state.current_model.unified_robot_model_ref =
@@ -636,6 +815,8 @@ RoboSDP::Kinematics::Dto::KinematicsWorkspaceStateDto KinematicJsonStorage::From
         explicitModelingMode,
         state.current_model.parameter_convention,
         state.current_model.urdf_source_path);
+    state.current_model.unified_robot_snapshot = FromUnifiedRobotSnapshotObject(
+        jsonObject.value(QStringLiteral("unified_robot_snapshot")).toObject());
     state.current_model.base_frame =
         FromPoseObject(jsonObject.value(QStringLiteral("base_frame")).toObject());
     state.current_model.flange_frame =
@@ -708,6 +889,134 @@ RoboSDP::Kinematics::Dto::KinematicsWorkspaceStateDto KinematicJsonStorage::From
         // 某些老项目既没有 joint_order_signature，也可能把字段写成空串；
         // 这里再次兜底生成，避免后续共享内核把合法老项目误判为顺序签名缺失。
         state.current_model.joint_order_signature = BuildJointOrderSignature(state.current_model);
+    }
+    if (state.current_model.unified_robot_snapshot.unified_robot_model_ref.trimmed().isEmpty())
+    {
+        // 中文说明：旧项目没有独立快照时，用当前主模型字段即时补齐一份统一主链摘要。
+        state.current_model.unified_robot_snapshot.unified_robot_model_ref =
+            state.current_model.unified_robot_model_ref;
+        state.current_model.unified_robot_snapshot.source_kinematic_id =
+            state.current_model.meta.kinematic_id;
+        state.current_model.unified_robot_snapshot.master_model_type =
+            state.current_model.master_model_type;
+        state.current_model.unified_robot_snapshot.modeling_mode =
+            state.current_model.modeling_mode;
+        state.current_model.unified_robot_snapshot.parameter_convention =
+            state.current_model.parameter_convention;
+        state.current_model.unified_robot_snapshot.backend_type =
+            state.current_model.backend_type;
+        state.current_model.unified_robot_snapshot.joint_order_signature =
+            state.current_model.joint_order_signature;
+        state.current_model.unified_robot_snapshot.pinocchio_model_ready =
+            state.current_model.pinocchio_model_ready;
+        state.current_model.unified_robot_snapshot.frame_semantics_version =
+            state.current_model.frame_semantics_version;
+        state.current_model.unified_robot_snapshot.model_source_mode =
+            state.current_model.model_source_mode;
+        state.current_model.unified_robot_snapshot.conversion_diagnostics =
+            state.current_model.conversion_diagnostics;
+        if (!state.current_model.urdf_source_path.trimmed().isEmpty())
+        {
+            const QFileInfo urdfFileInfo(state.current_model.urdf_source_path);
+            state.current_model.unified_robot_snapshot.derived_artifact_state_code = urdfFileInfo.exists()
+                ? QStringLiteral("external_master")
+                : QStringLiteral("external_missing");
+            state.current_model.unified_robot_snapshot.derived_artifact_exists = urdfFileInfo.exists();
+            state.current_model.unified_robot_snapshot.derived_artifact_fresh =
+                urdfFileInfo.exists() && state.current_model.pinocchio_model_ready;
+            state.current_model.unified_robot_snapshot.derived_artifact_version = urdfFileInfo.exists()
+                ? urdfFileInfo.lastModified().toUTC().toString(Qt::ISODateWithMs)
+                : QStringLiteral("external_missing");
+            state.current_model.unified_robot_snapshot.derived_artifact_generated_at_utc = urdfFileInfo.exists()
+                ? urdfFileInfo.lastModified().toUTC().toString(Qt::ISODateWithMs)
+                : QString();
+        }
+        else
+        {
+            state.current_model.unified_robot_snapshot.derived_artifact_relative_path =
+                QStringLiteral("kinematics/derived/%1.urdf").arg(
+                    state.current_model.meta.kinematic_id.trimmed().isEmpty()
+                        ? QStringLiteral("default")
+                        : state.current_model.meta.kinematic_id.trimmed());
+            state.current_model.unified_robot_snapshot.derived_artifact_version =
+                QStringLiteral("legacy_snapshot_v%1").arg(state.current_model.unified_robot_snapshot.snapshot_version);
+            state.current_model.unified_robot_snapshot.derived_artifact_state_code =
+                state.current_model.pinocchio_model_ready
+                ? QStringLiteral("logical_only")
+                : QStringLiteral("logical_not_ready");
+            state.current_model.unified_robot_snapshot.derived_artifact_exists = false;
+            state.current_model.unified_robot_snapshot.derived_artifact_fresh = false;
+        }
+    }
+    if (state.current_model.unified_robot_snapshot.derived_artifact_state_code.trimmed().isEmpty())
+    {
+        if (!state.current_model.urdf_source_path.trimmed().isEmpty())
+        {
+            const QFileInfo urdfFileInfo(state.current_model.urdf_source_path);
+            state.current_model.unified_robot_snapshot.derived_artifact_state_code = urdfFileInfo.exists()
+                ? QStringLiteral("external_master")
+                : QStringLiteral("external_missing");
+            state.current_model.unified_robot_snapshot.derived_artifact_exists = urdfFileInfo.exists();
+            state.current_model.unified_robot_snapshot.derived_artifact_fresh =
+                urdfFileInfo.exists() && state.current_model.pinocchio_model_ready;
+            state.current_model.unified_robot_snapshot.derived_artifact_version = urdfFileInfo.exists()
+                ? urdfFileInfo.lastModified().toUTC().toString(Qt::ISODateWithMs)
+                : QStringLiteral("external_missing");
+            state.current_model.unified_robot_snapshot.derived_artifact_generated_at_utc = urdfFileInfo.exists()
+                ? urdfFileInfo.lastModified().toUTC().toString(Qt::ISODateWithMs)
+                : QString();
+        }
+        else
+        {
+            state.current_model.unified_robot_snapshot.derived_artifact_relative_path =
+                QStringLiteral("kinematics/derived/%1.urdf").arg(
+                    state.current_model.meta.kinematic_id.trimmed().isEmpty()
+                        ? QStringLiteral("default")
+                        : state.current_model.meta.kinematic_id.trimmed());
+            state.current_model.unified_robot_snapshot.derived_artifact_version =
+                QStringLiteral("legacy_snapshot_v%1").arg(state.current_model.unified_robot_snapshot.snapshot_version);
+            state.current_model.unified_robot_snapshot.derived_artifact_state_code =
+                state.current_model.pinocchio_model_ready
+                ? QStringLiteral("logical_only")
+                : QStringLiteral("logical_not_ready");
+            state.current_model.unified_robot_snapshot.derived_artifact_exists = false;
+            state.current_model.unified_robot_snapshot.derived_artifact_fresh = false;
+        }
+    }
+    if (state.current_model.master_model_type == QStringLiteral("urdf"))
+    {
+        if (state.current_model.urdf_master_source_type.trimmed().isEmpty() ||
+            state.current_model.urdf_master_source_type == QStringLiteral("none"))
+        {
+            state.current_model.urdf_master_source_type =
+                state.current_model.original_imported_urdf_path.trimmed().isEmpty()
+                    ? QStringLiteral("project_derived")
+                    : QStringLiteral("original_imported");
+        }
+        if (state.current_model.original_imported_urdf_path.trimmed().isEmpty() &&
+            state.current_model.urdf_master_source_type == QStringLiteral("original_imported") &&
+            !state.current_model.urdf_source_path.trimmed().isEmpty())
+        {
+            state.current_model.original_imported_urdf_path = state.current_model.urdf_source_path;
+        }
+        if (state.current_model.dh_draft_extraction_level.trimmed().isEmpty())
+        {
+            state.current_model.dh_draft_extraction_level = QStringLiteral("diagnostic_only");
+        }
+        if (state.current_model.dh_draft_readonly_reason.trimmed().isEmpty())
+        {
+            state.current_model.dh_draft_readonly_reason =
+                QStringLiteral("当前 DH/MDH 参数表由 URDF 主模型提取，仅用于诊断展示。若需继续参数化设计，请显式切换为 DH/MDH 主模型模式。");
+        }
+    }
+    else
+    {
+        if (state.current_model.urdf_master_source_type.trimmed().isEmpty())
+        {
+            state.current_model.urdf_master_source_type = QStringLiteral("none");
+        }
+        state.current_model.dh_draft_extraction_level.clear();
+        state.current_model.dh_draft_readonly_reason.clear();
     }
     state.last_fk_result = FromFkResultObject(jsonObject.value(QStringLiteral("last_fk_result")).toObject());
     state.last_ik_result = FromIkResultObject(jsonObject.value(QStringLiteral("last_ik_result")).toObject());

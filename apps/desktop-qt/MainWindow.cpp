@@ -1,6 +1,7 @@
 ﻿#include "apps/desktop-qt/MainWindow.h"
 
 #include "apps/desktop-qt/widgets/dialogs/GlobalSaveResultDialog.h"
+#include "apps/desktop-qt/widgets/empty/ProjectEmptyStateWidget.h"
 #include "apps/desktop-qt/widgets/ribbon/RibbonBarWidget.h"
 #include "apps/desktop-qt/widgets/vtk/RobotVtkView.h"
 #include "core/infrastructure/ProjectManager.h"
@@ -61,12 +62,7 @@ void MainWindow::BuildUi()
         this,
         [this](QTreeWidgetItem* current, QTreeWidgetItem*) { HandleProjectTreeSelectionChanged(current); });
 
-    if (m_requirementTreeItem != nullptr)
-    {
-        m_projectTree->setCurrentItem(m_requirementTreeItem);
-    }
-
-    statusBar()->showMessage(QStringLiteral("中央区域：最小 VTK 三维测试场景已接入。"));
+    ShowEmptyProjectState();
 }
 
 void MainWindow::CreateRibbonBar()
@@ -188,6 +184,28 @@ void MainWindow::CreateRibbonBar()
                 m_robotVtkView->SetAxesVisible(visible);
             }
             AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示坐标系：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetGroundGridVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetGroundGridVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示地面网格：%1").arg(visibilityText(visible)));
+        });
+    connect(
+        m_ribbonBar,
+        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetCornerAxesVisible,
+        this,
+        [this, visibilityText](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetCornerAxesVisible(visible);
+            }
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示角落坐标轴：%1").arg(visibilityText(visible)));
         });
     connect(
         m_ribbonBar,
@@ -316,25 +334,6 @@ void MainWindow::CreateProjectTreeDock()
     m_projectTree = new QTreeWidget(m_projectTreeDock);
     m_projectTree->setHeaderLabel(QStringLiteral("项目树"));
 
-    m_projectRootTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("当前项目")});
-    m_requirementTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("任务需求")});
-    m_topologyTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("构型设计")});
-    m_kinematicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("运动学分析")});
-    m_dynamicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("动力学分析")});
-    m_selectionTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("驱动选型")});
-    m_planningTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("规划与分析")});
-    m_schemeTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("结果与导出")});
-    m_projectRootTreeItem->addChild(m_requirementTreeItem);
-    m_projectRootTreeItem->addChild(m_topologyTreeItem);
-    m_projectRootTreeItem->addChild(m_kinematicsTreeItem);
-    m_projectRootTreeItem->addChild(m_dynamicsTreeItem);
-    m_projectRootTreeItem->addChild(m_selectionTreeItem);
-    m_projectRootTreeItem->addChild(m_planningTreeItem);
-    m_projectRootTreeItem->addChild(m_schemeTreeItem);
-
-    m_projectTree->addTopLevelItem(m_projectRootTreeItem);
-    m_projectRootTreeItem->setExpanded(true);
-
     m_projectTreeDock->setWidget(m_projectTree);
     addDockWidget(Qt::LeftDockWidgetArea, m_projectTreeDock);
 }
@@ -346,6 +345,7 @@ void MainWindow::CreatePropertyDock()
 
     m_propertyStack = new QStackedWidget(m_propertyDock);
 
+    m_emptyProjectWidget = new RoboSDP::Desktop::Widgets::ProjectEmptyStateWidget(m_propertyStack);
     m_requirementWidget = new RoboSDP::Requirement::Ui::RequirementWidget(m_propertyStack);
     m_topologyWidget = new RoboSDP::Topology::Ui::TopologyWidget(m_propertyStack);
     m_kinematicsWidget = new RoboSDP::Kinematics::Ui::KinematicsWidget(m_propertyStack);
@@ -361,6 +361,7 @@ void MainWindow::CreatePropertyDock()
             "请在左侧树选择具体节点继续录入、生成、求解、保存与加载。\n"
             "其余模块仍保持占位状态。"));
 
+    m_propertyStack->addWidget(m_emptyProjectWidget);
     m_propertyStack->addWidget(m_requirementWidget);
     m_propertyStack->addWidget(m_topologyWidget);
     m_propertyStack->addWidget(m_kinematicsWidget);
@@ -393,6 +394,27 @@ void MainWindow::CreatePropertyDock()
         this,
         [this](const QString& message) { AppendLogLine(message); });
 
+    // --- 新增：接收 Topology 的实时预览并发送给 VTK 视图 ---
+    connect(
+        m_topologyWidget,
+        &RoboSDP::Topology::Ui::TopologyWidget::TopologyPreviewGenerated,
+        this,
+        [this](const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene) {
+            if (m_robotVtkView != nullptr)
+            {
+                // 先临时关闭网格模型显示(因为此时只有参数没有3D模型文件)
+                m_robotVtkView->SetVisualMeshVisible(false);
+                m_robotVtkView->SetCollisionMeshVisible(false);
+                
+                // 核心逻辑：只有当 m_shouldResetNextPreview 为 true 时才重置相机
+                m_robotVtkView->ShowPreviewScene(scene, m_shouldResetNextPreview);
+                // 执行完一次重置后，立即将标志位置为 false
+                // 这样后续由滑块(DirtyTracking)触发的预览信号将不会重置相机
+                m_shouldResetNextPreview = false;
+                statusBar()->showMessage(QStringLiteral("中央区域：已实时同步构型尺寸骨架。"));
+            }
+        });
+
     connect(
         m_kinematicsWidget,
         &RoboSDP::Kinematics::Ui::KinematicsWidget::LogMessageGenerated,
@@ -409,30 +431,30 @@ void MainWindow::CreatePropertyDock()
 
     connect(
         m_kinematicsWidget,
-        &RoboSDP::Kinematics::Ui::KinematicsWidget::UrdfPreviewSceneGenerated,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::PreviewSceneGenerated,
         this,
         [this](const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene) {
             if (m_robotVtkView != nullptr)
             {
-                m_robotVtkView->ShowUrdfPreviewScene(scene);
+                m_robotVtkView->ShowPreviewScene(scene);
             }
 
             if (scene.IsEmpty())
             {
-                // 中文说明：模型结构切换时 Kinematics 会发送空场景，中央视图借此清理旧 URDF/Mesh 缓存。
-                statusBar()->showMessage(QStringLiteral("中央区域：已清空 URDF 预览缓存，等待新的模型导入。"));
-                AppendLogLine(QStringLiteral("[Desktop] URDF 预览缓存已清空。"));
+                // 中文说明：模型结构切换时 Kinematics 会发送空场景，中央视图借此清理旧骨架/Mesh 缓存。
+                statusBar()->showMessage(QStringLiteral("中央区域：已清空骨架预览缓存，等待新的模型同步。"));
+                AppendLogLine(QStringLiteral("[Desktop] 中央骨架预览缓存已清空。"));
                 return;
             }
 
             const QString modelName = scene.model_name.isEmpty() ? QStringLiteral("未命名模型") : scene.model_name;
             statusBar()->showMessage(
-                QStringLiteral("中央区域：已加载 URDF 骨架预览 - %1（节点 %2，连杆段 %3）")
+                QStringLiteral("中央区域：已加载骨架预览 - %1（节点 %2，连杆段 %3）")
                     .arg(modelName)
                     .arg(scene.nodes.size())
                     .arg(scene.segments.size()));
             AppendLogLine(
-                QStringLiteral("[Desktop] URDF 骨架预览已同步到中央三维视图：%1").arg(modelName));
+                QStringLiteral("[Desktop] 骨架预览已同步到中央三维视图：%1").arg(modelName));
         });
 
     connect(
@@ -446,7 +468,23 @@ void MainWindow::CreatePropertyDock()
                 m_robotVtkView->UpdatePreviewPoses(linkWorldPoses);
             }
         });
-
+    connect(
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::KinematicsPreviewGenerated,
+        this,
+        [this](const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene) {
+            if (m_robotVtkView != nullptr)
+            {
+                // --- 开启硬核调试模式的视觉开关 ---
+                m_robotVtkView->SetVisualMeshVisible(false);    // 隐藏蒙皮，看骨架
+                m_robotVtkView->SetJointAxesVisible(true);     // 显示黄色旋转轴线
+                m_robotVtkView->SetAxesVisible(true);          // 显示 RGB 三色坐标轴
+                m_robotVtkView->SetJointLabelsVisible(true);   // 显示关节名称标签
+                
+                // 依然不重置相机，保持观察连续性
+                m_robotVtkView->ShowPreviewScene(scene, false); 
+            }
+        });
     connect(
         m_dynamicsWidget,
         &RoboSDP::Dynamics::Ui::DynamicsWidget::LogMessageGenerated,
@@ -492,13 +530,101 @@ void MainWindow::CreateLogDock()
     addDockWidget(Qt::BottomDockWidgetArea, m_logDock);
 
     AppendLogLine(QStringLiteral("RoboSDP Desktop 启动完成。"));
-    AppendLogLine(QStringLiteral("当前已接入 Requirement / Topology / Kinematics / Dynamics / Selection / Planning / Scheme 模块的最小页面。"));
+    AppendLogLine(QStringLiteral("当前未打开项目，请先新建或打开 RoboSDP 项目。"));
+}
+
+void MainWindow::ResetProjectTreeItemPointers()
+{
+    m_projectRootTreeItem = nullptr;
+    m_requirementTreeItem = nullptr;
+    m_topologyTreeItem = nullptr;
+    m_kinematicsTreeItem = nullptr;
+    m_dynamicsTreeItem = nullptr;
+    m_selectionTreeItem = nullptr;
+    m_planningTreeItem = nullptr;
+    m_schemeTreeItem = nullptr;
+}
+
+void MainWindow::ShowEmptyProjectState()
+{
+    if (m_projectTree != nullptr)
+    {
+        m_projectTree->blockSignals(true);
+        m_projectTree->clear();
+        ResetProjectTreeItemPointers();
+        m_projectRootTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("未打开项目")});
+        m_projectTree->addTopLevelItem(m_projectRootTreeItem);
+        m_projectTree->setCurrentItem(m_projectRootTreeItem);
+        m_projectTree->blockSignals(false);
+    }
+
+    if (m_propertyStack != nullptr && m_emptyProjectWidget != nullptr)
+    {
+        m_propertyStack->setCurrentWidget(m_emptyProjectWidget);
+    }
+
+    statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#667085;}"));
+    statusBar()->showMessage(QStringLiteral("未打开项目：请先新建或打开 RoboSDP 项目。"));
+}
+
+void MainWindow::ShowActiveProjectState(const QString& projectRootPath)
+{
+    if (m_projectTree == nullptr)
+    {
+        return;
+    }
+
+    const QFileInfo projectRootInfo(projectRootPath);
+
+    m_projectTree->blockSignals(true);
+    m_projectTree->clear();
+    ResetProjectTreeItemPointers();
+
+    m_projectRootTreeItem = new QTreeWidgetItem(QStringList{
+        QStringLiteral("%1 (%2)")
+            .arg(projectRootInfo.fileName(), QDir::toNativeSeparators(projectRootInfo.absoluteFilePath()))});
+    m_requirementTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("任务需求")});
+    m_topologyTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("构型设计")});
+    m_kinematicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("运动学分析")});
+    m_dynamicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("动力学分析")});
+    m_selectionTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("驱动选型")});
+    m_planningTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("规划与分析")});
+    m_schemeTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("结果与导出")});
+
+    // 中文说明：项目树仅在有效项目上下文中暴露业务模块，避免无项目状态下误进入工作态。
+    m_projectRootTreeItem->addChild(m_requirementTreeItem);
+    m_projectRootTreeItem->addChild(m_topologyTreeItem);
+    m_projectRootTreeItem->addChild(m_kinematicsTreeItem);
+    m_projectRootTreeItem->addChild(m_dynamicsTreeItem);
+    m_projectRootTreeItem->addChild(m_selectionTreeItem);
+    m_projectRootTreeItem->addChild(m_planningTreeItem);
+    m_projectRootTreeItem->addChild(m_schemeTreeItem);
+
+    m_projectTree->addTopLevelItem(m_projectRootTreeItem);
+    m_projectRootTreeItem->setExpanded(true);
+    m_projectTree->setCurrentItem(m_requirementTreeItem);
+    m_projectTree->blockSignals(false);
+
+    HandleProjectTreeSelectionChanged(m_requirementTreeItem);
 }
 
 void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
 {
     if (currentItem == nullptr || m_propertyStack == nullptr)
     {
+        return;
+    }
+
+    const bool projectOpened =
+        !RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath().trimmed().isEmpty();
+    if (!projectOpened)
+    {
+        if (m_emptyProjectWidget != nullptr)
+        {
+            m_propertyStack->setCurrentWidget(m_emptyProjectWidget);
+        }
+        statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#667085;}"));
+        statusBar()->showMessage(QStringLiteral("未打开项目：请先新建或打开 RoboSDP 项目。"));
         return;
     }
 
@@ -515,6 +641,22 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     {
         m_propertyStack->setCurrentWidget(m_topologyWidget);
         statusBar()->showMessage(QStringLiteral("当前页面：Topology"));
+        // 优化逻辑：判断是否是首次进入
+        if (m_isFirstTopologyEntry)
+        {
+            // 1. 设置标志位，允许下一次收到的信号重置相机
+            m_shouldResetNextPreview = true;
+            
+            // 2. 触发 TopologyWidget 生成初始预览信号
+            m_topologyWidget->ForceEmitPreview(); 
+            
+            // 3. 标记已完成首次进入，后续再切回来将不再重置视角
+            m_isFirstTopologyEntry = false;
+        }
+        // --- 新增：切到构型页面时，强制刷新一次三维视图 ---
+        if (m_topologyWidget != nullptr) {
+            m_topologyWidget->ForceEmitPreview();
+        }
         return;
     }
 
@@ -561,6 +703,15 @@ void MainWindow::HandleRibbonNavigateTo(QTreeWidgetItem* targetItem, const QStri
 {
     if (m_projectTree == nullptr)
     {
+        return;
+    }
+
+    if (RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath().trimmed().isEmpty())
+    {
+        const QString message = QStringLiteral("请先新建或打开 RoboSDP 项目，再进入%1。").arg(targetName);
+        AppendLogLine(QStringLiteral("[WARN] [顶部功能区] %1").arg(message));
+        statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#b54708;font-weight:600;}"));
+        statusBar()->showMessage(message);
         return;
     }
 
@@ -639,6 +790,15 @@ void MainWindow::HandleOpenProjectRequested()
 void MainWindow::HandleGlobalSaveRequested()
 {
     AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求全局保存"));
+
+    if (RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath().trimmed().isEmpty())
+    {
+        const QString message = QStringLiteral("当前未打开项目，无法执行全局保存。");
+        AppendLogLine(QStringLiteral("[ERROR] [全局保存] %1").arg(message));
+        statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#b54708;font-weight:600;}"));
+        statusBar()->showMessage(message);
+        return;
+    }
 
     const RoboSDP::Infrastructure::ProjectSaveSummary summary =
         m_projectSaveCoordinator.SaveAll();
@@ -733,19 +893,12 @@ void MainWindow::HandleProjectContextPathChanged(const QString& projectRootPath)
 {
     if (projectRootPath.trimmed().isEmpty())
     {
+        ShowEmptyProjectState();
+        AppendLogLine(QStringLiteral("[INFO] [项目上下文] 当前未打开项目。"));
         return;
     }
 
-    const QFileInfo projectRootInfo(projectRootPath);
-    if (m_projectRootTreeItem != nullptr)
-    {
-        // 中文说明：项目树只展示 ProjectManager 中的当前项目上下文摘要，不保存独立项目状态。
-        m_projectRootTreeItem->setText(
-            0,
-            QStringLiteral("%1 (%2)")
-                .arg(projectRootInfo.fileName(), QDir::toNativeSeparators(projectRootInfo.absoluteFilePath())));
-        m_projectRootTreeItem->setExpanded(true);
-    }
+    ShowActiveProjectState(projectRootPath);
 
     statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#1b7f3b;}"));
     statusBar()->showMessage(QStringLiteral("当前项目：%1").arg(QDir::toNativeSeparators(projectRootPath)));

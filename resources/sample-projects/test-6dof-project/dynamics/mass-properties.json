@@ -1,0 +1,193 @@
+﻿{
+    "end_effector": {
+        "cog": [
+            0,
+            0,
+            0.05
+        ],
+        "inertia_tensor": [
+            0.004,
+            0.004,
+            0.002,
+            0,
+            0,
+            0
+        ],
+        "mass": 1
+    },
+    "joints": [
+        {
+            "efficiency": 0.92,
+            "friction": {
+                "coulomb": 0.45,
+                "static": 0.5,
+                "viscous": 0.08
+            },
+            "joint_id": "joint_1",
+            "transmission_ratio": 120
+        },
+        {
+            "efficiency": 0.92,
+            "friction": {
+                "coulomb": 0.225,
+                "static": 0.25,
+                "viscous": 0.04
+            },
+            "joint_id": "joint_2",
+            "transmission_ratio": 110
+        },
+        {
+            "efficiency": 0.92,
+            "friction": {
+                "coulomb": 0.15,
+                "static": 0.16666666666666666,
+                "viscous": 0.02666666666666667
+            },
+            "joint_id": "joint_3",
+            "transmission_ratio": 100
+        },
+        {
+            "efficiency": 0.94,
+            "friction": {
+                "coulomb": 0.1125,
+                "static": 0.125,
+                "viscous": 0.02
+            },
+            "joint_id": "joint_4",
+            "transmission_ratio": 80
+        },
+        {
+            "efficiency": 0.94,
+            "friction": {
+                "coulomb": 0.09,
+                "static": 0.1,
+                "viscous": 0.016
+            },
+            "joint_id": "joint_5",
+            "transmission_ratio": 70
+        },
+        {
+            "efficiency": 0.94,
+            "friction": {
+                "coulomb": 0.075,
+                "static": 0.08333333333333333,
+                "viscous": 0.013333333333333334
+            },
+            "joint_id": "joint_6",
+            "transmission_ratio": 60
+        }
+    ],
+    "links": [
+        {
+            "cog": [
+                0,
+                0,
+                0.175
+            ],
+            "inertia_tensor": [
+                0.08,
+                0.08,
+                0.04,
+                0,
+                0,
+                0
+            ],
+            "link_id": "link_1",
+            "mass": 8,
+            "source_detail": "estimated_from_kinematics_stage1"
+        },
+        {
+            "cog": [
+                0.15,
+                0,
+                0
+            ],
+            "inertia_tensor": [
+                0.065,
+                0.065,
+                0.0325,
+                0,
+                0,
+                0
+            ],
+            "link_id": "link_2",
+            "mass": 6.5,
+            "source_detail": "estimated_from_kinematics_stage1"
+        },
+        {
+            "cog": [
+                0.125,
+                0,
+                0
+            ],
+            "inertia_tensor": [
+                0.05,
+                0.05,
+                0.025,
+                0,
+                0,
+                0
+            ],
+            "link_id": "link_3",
+            "mass": 5,
+            "source_detail": "estimated_from_kinematics_stage1"
+        },
+        {
+            "cog": [
+                0,
+                0,
+                0.06
+            ],
+            "inertia_tensor": [
+                0.035,
+                0.035,
+                0.0175,
+                0,
+                0,
+                0
+            ],
+            "link_id": "link_4",
+            "mass": 3.5,
+            "source_detail": "estimated_from_kinematics_stage1"
+        },
+        {
+            "cog": [
+                0,
+                0,
+                0.05
+            ],
+            "inertia_tensor": [
+                0.024,
+                0.024,
+                0.012,
+                0,
+                0,
+                0
+            ],
+            "link_id": "link_5",
+            "mass": 2.4,
+            "source_detail": "estimated_from_kinematics_stage1"
+        },
+        {
+            "cog": [
+                0,
+                0,
+                0.04
+            ],
+            "inertia_tensor": [
+                0.015,
+                0.015,
+                0.0075,
+                0,
+                0,
+                0
+            ],
+            "link_id": "link_6",
+            "mass": 1.5,
+            "source_detail": "estimated_from_kinematics_stage1"
+        }
+    ]
+}
+
+
+

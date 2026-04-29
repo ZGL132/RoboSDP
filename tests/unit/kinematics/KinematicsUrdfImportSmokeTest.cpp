@@ -216,5 +216,59 @@ int main()
         return 15;
     }
 
+    const QString axisUrdfPath = QDir(projectRoot).absoluteFilePath(QStringLiteral("axis-preview.urdf"));
+    const QString axisUrdf = QStringLiteral(
+        "<robot name=\"axis_preview_robot\">"
+        "<link name=\"base_link\"/>"
+        "<joint name=\"joint_1\" type=\"revolute\">"
+        "<parent link=\"base_link\"/><child link=\"link_1\"/>"
+        "<axis xyz=\"1 0 0\"/><origin xyz=\"0 0 0.4\" rpy=\"0 0 0\"/>"
+        "<limit lower=\"-3.14\" upper=\"3.14\" effort=\"1\" velocity=\"1\"/>"
+        "</joint>"
+        "<link name=\"link_1\"/>"
+        "<joint name=\"fixed_tool\" type=\"fixed\">"
+        "<parent link=\"link_1\"/><child link=\"tool_link\"/>"
+        "<origin xyz=\"0 1 0\" rpy=\"0 0 0\"/>"
+        "</joint>"
+        "<link name=\"tool_link\"/>"
+        "</robot>");
+    if (!WriteUtf8File(axisUrdfPath, axisUrdf))
+    {
+        return 16;
+    }
+
+    const auto axisImportResult = service.ImportUrdfPreview(axisUrdfPath);
+    if (!axisImportResult.IsSuccess())
+    {
+        return 17;
+    }
+    if (axisImportResult.preview_model.dh_draft_extraction_level != QStringLiteral("partial"))
+    {
+        return 18;
+    }
+    if (axisImportResult.preview_model.links.size() != 1 || axisImportResult.preview_model.joint_limits.size() != 1)
+    {
+        return 19;
+    }
+
+    auto promotedAxisModel = axisImportResult.preview_model;
+    promotedAxisModel.master_model_type = QStringLiteral("dh_mdh");
+    promotedAxisModel.dh_editable = true;
+    promotedAxisModel.urdf_editable = false;
+    promotedAxisModel.modeling_mode = promotedAxisModel.parameter_convention;
+    promotedAxisModel.urdf_source_path.clear();
+    promotedAxisModel.unified_robot_model_ref.clear();
+    promotedAxisModel.joint_order_signature.clear();
+    promotedAxisModel.unified_robot_snapshot = {};
+    const auto axisDhPreviewResult = service.BuildDhPreviewScene(promotedAxisModel, std::vector<double>{0.0}, QString());
+    if (!axisDhPreviewResult.IsSuccess())
+    {
+        return 20;
+    }
+    if (axisDhPreviewResult.preview_scene.nodes.size() < 3 || axisDhPreviewResult.preview_scene.segments.size() < 2)
+    {
+        return 21;
+    }
+
     return 0;
 }

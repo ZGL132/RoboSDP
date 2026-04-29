@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="通用落地式 6R 串联 运动学模型">
+  <!-- ä¸­æè¯´æï¼è¯¥æä»¶ç± DH/MDH ä¸»æ¨¡åèªå¨æ´¾çï¼ä»æ¿è½½æå°è¿å¨å­¦ä¸»é¾ä¸åºå®åæ ç³»è¯­ä¹ã -->
+  <!-- å½åé¶æ®µä¸å¯¼åºçå® visual / collision / inertial æ°æ®ï¼é¿åè¯¯è§£ä¸ºé«ä¿çå·¥ç¨æ°å­æ ·æºã -->
+  <link name="base_root"/>
+  <link name="base_link"/>
+  <joint name="base_mount_joint" type="fixed">
+    <parent link="base_root"/>
+    <child link="base_link"/>
+    <origin xyz="0.00000000 0.00000000 0.00000000" rpy="0.00000000 0.00000000 0.00000000"/>
+  </joint>
+  <link name="joint_1_axis_link"/>
+  <joint name="joint_1" type="revolute">
+    <parent link="base_link"/>
+    <child link="joint_1_axis_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.22885912" upper="3.22885912" effort="1000.00000000" velocity="3.14159265"/>
+  </joint>
+  <link name="link_1"/>
+  <joint name="joint_1_post_fixed" type="fixed">
+    <parent link="joint_1_axis_link"/>
+    <child link="link_1"/>
+    <origin xyz="0.00000000 0.00000000 0.35000000" rpy="1.57079633 0.00000000 0.00000000"/>
+  </joint>
+  <link name="joint_2_axis_link"/>
+  <joint name="joint_2" type="revolute">
+    <parent link="link_1"/>
+    <child link="joint_2_axis_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.35619449" upper="1.48352986" effort="1000.00000000" velocity="3.14159265"/>
+  </joint>
+  <link name="link_2"/>
+  <joint name="joint_2_post_fixed" type="fixed">
+    <parent link="joint_2_axis_link"/>
+    <child link="link_2"/>
+    <origin xyz="0.30000000 0.00000000 0.00000000" rpy="0.00000000 0.00000000 0.00000000"/>
+  </joint>
+  <link name="joint_3_axis_link"/>
+  <joint name="joint_3" type="revolute">
+    <parent link="link_2"/>
+    <child link="joint_3_axis_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.61799388" upper="2.61799388" effort="1000.00000000" velocity="3.14159265"/>
+  </joint>
+  <link name="link_3"/>
+  <joint name="joint_3_post_fixed" type="fixed">
+    <parent link="joint_3_axis_link"/>
+    <child link="link_3"/>
+    <origin xyz="0.25000000 0.00000000 0.00000000" rpy="0.00000000 0.00000000 0.00000000"/>
+  </joint>
+  <link name="joint_4_axis_link"/>
+  <joint name="joint_4" type="revolute">
+    <parent link="link_3"/>
+    <child link="joint_4_axis_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.49065850" upper="3.49065850" effort="1000.00000000" velocity="4.53785606"/>
+  </joint>
+  <link name="link_4"/>
+  <joint name="joint_4_post_fixed" type="fixed">
+    <parent link="joint_4_axis_link"/>
+    <child link="link_4"/>
+    <origin xyz="0.00000000 0.00000000 0.12000000" rpy="0.00000000 0.00000000 0.00000000"/>
+  </joint>
+  <link name="joint_5_axis_link"/>
+  <joint name="joint_5" type="revolute">
+    <parent link="link_4"/>
+    <child link="joint_5_axis_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.18166156" upper="2.18166156" effort="1000.00000000" velocity="4.53785606"/>
+  </joint>
+  <link name="link_5"/>
+  <joint name="joint_5_post_fixed" type="fixed">
+    <parent link="joint_5_axis_link"/>
+    <child link="link_5"/>
+    <origin xyz="0.00000000 0.00000000 0.10000000" rpy="0.00000000 0.00000000 0.00000000"/>
+  </joint>
+  <link name="joint_6_axis_link"/>
+  <joint name="joint_6" type="revolute">
+    <parent link="link_5"/>
+    <child link="joint_6_axis_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-6.28318531" upper="6.28318531" effort="1000.00000000" velocity="4.53785606"/>
+  </joint>
+  <link name="link_6"/>
+  <joint name="joint_6_post_fixed" type="fixed">
+    <parent link="joint_6_axis_link"/>
+    <child link="link_6"/>
+    <origin xyz="0.00000000 0.00000000 1000000.00000000" rpy="0.00000000 0.00000000 0.00000000"/>
+  </joint>
+  <link name="flange_link"/>
+  <joint name="flange_fixed_joint" type="fixed">
+    <parent link="link_6"/>
+    <child link="flange_link"/>
+    <origin xyz="0.00000000 0.00000000 0.00000000" rpy="0.00000000 0.00000000 0.00000000"/>
+  </joint>
+  <link name="tcp_link"/>
+  <joint name="tcp_fixed_joint" type="fixed">
+    <parent link="flange_link"/>
+    <child link="tcp_link"/>
+    <origin xyz="0.00000000 0.00000000 0.10000000" rpy="0.00000000 0.00000000 0.00000000"/>
+  </joint>
+</robot>

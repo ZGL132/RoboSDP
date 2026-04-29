@@ -342,7 +342,7 @@ void PlanningWidget::RenderResults()
     const auto* latestResult = m_state.results.empty() ? nullptr : &m_state.results.back();
 
     m_collision_table->setRowCount(latestResult != nullptr ? static_cast<int>(latestResult->collision_results.size()) : 0);
-    if (latestResult != nullptr)
+      if (latestResult != nullptr)
     {
         for (int row = 0; row < static_cast<int>(latestResult->collision_results.size()); ++row)
         {
@@ -377,6 +377,47 @@ void PlanningWidget::RenderResults()
     }
 
     QStringList lines;
+    lines.push_back(QStringLiteral("Unified Ref = %1").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.unified_robot_model_ref.isEmpty()
+            ? QStringLiteral("not_generated")
+            : m_state.current_scene.meta.unified_robot_snapshot.unified_robot_model_ref));
+    lines.push_back(QStringLiteral("Kinematic Kernel Ready = %1").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.pinocchio_model_ready ? QStringLiteral("true") : QStringLiteral("false")));
+    lines.push_back(QStringLiteral("Snapshot Mode = %1 / %2").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.master_model_type,
+        m_state.current_scene.meta.unified_robot_snapshot.modeling_mode));
+    lines.push_back(QStringLiteral("Snapshot Source = %1 / %2").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.source_kinematic_id.trimmed().isEmpty()
+            ? QStringLiteral("unknown_model")
+            : m_state.current_scene.meta.unified_robot_snapshot.source_kinematic_id,
+        m_state.current_scene.meta.unified_robot_snapshot.model_source_mode.trimmed().isEmpty()
+            ? QStringLiteral("unknown_source")
+            : m_state.current_scene.meta.unified_robot_snapshot.model_source_mode));
+    lines.push_back(QStringLiteral("Derived Artifact State = %1").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_state_code.trimmed().isEmpty()
+            ? QStringLiteral("unknown_artifact")
+            : m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_state_code));
+    lines.push_back(QStringLiteral("Derived Artifact Path = %1").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_relative_path.trimmed().isEmpty()
+            ? QStringLiteral("not_materialized")
+            : m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_relative_path));
+    lines.push_back(QStringLiteral("Derived Artifact Version = %1").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_version.trimmed().isEmpty()
+            ? QStringLiteral("unknown_version")
+            : m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_version));
+    lines.push_back(QStringLiteral("Derived Artifact Generated At = %1").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_generated_at_utc.trimmed().isEmpty()
+            ? QStringLiteral("not_recorded")
+            : m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_generated_at_utc));
+    lines.push_back(QStringLiteral("Derived Artifact Exists = %1").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_exists ? QStringLiteral("true") : QStringLiteral("false")));
+    lines.push_back(QStringLiteral("Derived Artifact Fresh = %1").arg(
+        m_state.current_scene.meta.unified_robot_snapshot.derived_artifact_fresh ? QStringLiteral("true") : QStringLiteral("false")));
+    if (!m_state.current_scene.meta.unified_robot_snapshot.conversion_diagnostics.trimmed().isEmpty())
+    {
+        lines.push_back(QStringLiteral("Kinematic Chain Summary = %1")
+                            .arg(m_state.current_scene.meta.unified_robot_snapshot.conversion_diagnostics));
+    }
     lines.push_back(QStringLiteral("规划场景：%1").arg(m_state.current_scene.meta.name));
     lines.push_back(QStringLiteral("请求数量：%1").arg(m_state.requests.size()));
     lines.push_back(QStringLiteral("验证结果数量：%1").arg(m_state.results.size()));

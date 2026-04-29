@@ -219,6 +219,16 @@ QWidget* RibbonBarWidget::CreateViewTab()
                 true,
                 &RibbonBarWidget::signalSetAxesVisible),
             CreateToggleButton(
+                QStringLiteral("地面网格"),
+                QStringLiteral("显示或隐藏中央三维视图中的 Z=0 地面网格参考平面。"),
+                true,
+                &RibbonBarWidget::signalSetGroundGridVisible),
+            CreateToggleButton(
+                QStringLiteral("角落坐标轴"),
+                QStringLiteral("显示或隐藏屏幕角落的小型方向坐标轴，用于替代大世界坐标轴判断方向。"),
+                true,
+                &RibbonBarWidget::signalSetCornerAxesVisible),
+            CreateToggleButton(
                 QStringLiteral("Link 标签"),
                 QStringLiteral("显示 URDF Link 名称标签。"),
                 true,

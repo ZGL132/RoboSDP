@@ -1,0 +1,22 @@
+﻿{
+  "requests": [
+    {
+      "request_id": "planning_request_test_6dof_001",
+      "planning_scene_ref": "planning_scene_test_6dof",
+      "request_type": "point_to_point",
+      "rpc_method": "/robosdp.planning.PlanningVerificationService/VerifyPointToPoint",
+      "motion_group": "manipulator",
+      "planner_id": "RRTConnect",
+      "service_endpoint": "127.0.0.1:50051",
+      "check_collision": true,
+      "check_self_collision": true,
+      "allowed_planning_time_s": 1.0,
+      "target_cycle_time_s": 4.0,
+      "joint_ids": ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"],
+      "start_joint_values_deg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "goal_joint_values_deg": [15.0, -35.0, 45.0, 10.0, 15.0, 20.0]
+    }
+  ]
+}
+
+

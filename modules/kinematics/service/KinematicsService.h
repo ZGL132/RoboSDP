@@ -91,6 +91,38 @@ struct PreviewPoseUpdateResult
     }
 };
 
+/// @brief 基于 DH/MDH 参数生成中央骨架预览场景的结果包装体。
+struct PreviewSceneBuildResult
+{
+    RoboSDP::Errors::ErrorCode error_code = RoboSDP::Errors::ErrorCode::Ok;
+    QString message;
+    /// @brief 供中央三维主视图区直接消费的骨架场景 DTO；当前阶段仍复用既有预览结构。
+    RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto preview_scene;
+    /// @brief 与预览场景配套的轻量模型 DTO，供后续高频刷新与诊断链路复用。
+    RoboSDP::Kinematics::Dto::KinematicModelDto preview_model;
+
+    bool IsSuccess() const
+    {
+        return error_code == RoboSDP::Errors::ErrorCode::Ok;
+    }
+};
+
+/// @brief 从 URDF 工程模型提取 DH/MDH 草案的结果包装体。
+struct DhDraftExtractionResult
+{
+    RoboSDP::Errors::ErrorCode error_code = RoboSDP::Errors::ErrorCode::Ok;
+    QString message;
+    /// @brief 提取级别：full / partial / diagnostic_only。
+    QString extraction_level = QStringLiteral("diagnostic_only");
+    /// @brief 供 UI 只读展示的 DH/MDH 草案模型，主模型语义仍保持 URDF。
+    RoboSDP::Kinematics::Dto::KinematicModelDto draft_model;
+
+    bool IsSuccess() const
+    {
+        return error_code == RoboSDP::Errors::ErrorCode::Ok;
+    }
+};
+
 /**
  * @brief Kinematics 核心服务层类。
  *
@@ -239,6 +271,18 @@ public:
     UrdfImportResult ImportUrdfPreview(const QString& urdfFilePath) const;
 
     /**
+     * @brief 从 URDF 文件提取一份供只读展示的 DH/MDH 草案。
+     * @details
+     * 该接口只服务“URDF 主模型 -> DH 诊断视图”链路：
+     * 1. 尽可能从最小主干提取参数化草案；
+     * 2. 不改变当前主模型归属；
+     * 3. 不承诺所有 URDF 都能无损映射成标准 DH/MDH。
+     * @param urdfFilePath 待提取的 URDF 绝对路径
+     * @return 提取结果与诊断级别
+     */
+    DhDraftExtractionResult ExtractDhDraftFromUrdf(const QString& urdfFilePath) const;
+
+    /**
      * @brief 高频刷新 URDF 预览中各 link 的全局位姿。
      * @details
      * 该接口只复用 SharedRobotKernelRegistry 中已经缓存的共享内核，
@@ -251,7 +295,60 @@ public:
         const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
         const std::vector<double>& joint_positions_deg) const;
 
+    /**
+     * @brief 基于当前 DH/MDH 参数和 FK 关节输入生成中央骨架预览场景。
+     * @details
+     * 第一阶段只生成骨架节点、连杆线段和 TCP 末端固定段，
+     * 不尝试派生 visual/collision Mesh，确保最小可运行增量先接通。
+     * @param model 当前表单收集出的 DH/MDH 模型 DTO
+     * @param joint_positions_deg 当前 FK 输入框中的关节角，单位 deg
+     * @return 可直接送入中央三维主视图区的骨架预览场景
+     */
+    PreviewSceneBuildResult BuildDhPreviewScene(
+        const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+        const std::vector<double>& joint_positions_deg,
+        const QString& projectRootPath = QString()) const;
+
+    /**
+     * @brief 基于拓扑物理尺寸，执行基础 D-H 正运动学推导，生成 3D 骨架预览场景。
+     * @details
+     * 这是一个轻量级的跨模块通用工具。它不依赖 Pinocchio 原生库，
+     * 用于在 Topology 或 Kinematics 阶段实时提供所见即所得的视觉反馈。
+     * @param topologyModel 拓扑输入模型（提供连杆尺寸 a, d 等）
+     * @param jointAnglesDeg 给定的各关节角度。如果为空，则默认按“L型展开零位”展示。
+     * @return 用于传递给 VTK 渲染的场景 DTO
+     */
+    static RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto GenerateSkeletonPreview(
+        const RoboSDP::Topology::Dto::RobotTopologyModelDto& topologyModel,
+        const std::vector<double>& jointAnglesDeg = {});
+
+/**
+     * @brief 基于真实的 D-H 参数表（KinematicModelDto），执行正解推导生成 3D 预览场景。
+     * @details 这个方法专供 Kinematics 界面使用，它不仅画骨架，还能真实反映 D-H 矩阵的姿态变化。
+     * @param kinematicModel 运动学模型（包含 D-H 连杆参数表）
+     * @param jointAnglesDeg 实时的关节角度
+     */
+    static RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto GenerateSkeletonPreviewFromKinematicModel(
+        const RoboSDP::Kinematics::Dto::KinematicModelDto& kinematicModel,
+        const std::vector<double>& jointAnglesDeg = {});
 private:
+    /**
+     * @brief 为 DH/MDH 主模型写出最小派生 URDF 文件，并回填统一主链快照中的产物状态。
+     * @details
+     * 第一阶段 / 第二阶段过渡期间，该 URDF 只承载主链关节拓扑和最小固定坐标系语义，
+     * 不尝试导出真实 visual/collision/inertial 数据，避免给下游造成“高保真数字样机”错觉。
+     * @param projectRootPath 当前项目根目录
+     * @param model 当前 DH/MDH 主模型
+     * @param snapshot 待回填的统一主链快照
+     * @param diagnosticMessage 输出给调用方的中文诊断信息
+     * @return 文件写出错误码
+     */
+    RoboSDP::Errors::ErrorCode WriteDerivedUrdfArtifact(
+        const QString& projectRootPath,
+        const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+        RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto& snapshot,
+        QString& diagnosticMessage) const;
+
     /**
      * @brief 核心业务方法：执行具体的从拓扑到运动学模型的数据映射
      * @param topologyModel 拓扑输入模型

@@ -1,0 +1,84 @@
+﻿{
+    "gravity": [
+        0,
+        0,
+        -9.81
+    ],
+    "installation_pose": {
+        "position_m": [
+            0,
+            0,
+            0
+        ],
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ]
+    },
+    "meta": {
+        "dynamic_id": "dynamic_test_6dof",
+        "kinematic_ref": "kinematic_test_6dof",
+        "name": "6R 串联动力学模型",
+        "requirement_ref": "requirement_test_6dof",
+        "source": "kinematics",
+        "status": "ready",
+        "topology_ref": "topology_test_6dof",
+        "version": 1
+    },
+    "trajectories": [
+        {
+            "active_joint_id": "joint_2",
+            "duration_s": 1.5,
+            "joint_start_deg": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "joint_target_deg": [
+                0,
+                45,
+                0,
+                0,
+                0,
+                0
+            ],
+            "name": "6R 串联动力学模型",
+            "profile_type": "single_joint_trapezoid",
+            "sample_count": 60,
+            "trajectory_id": "traj_single_joint"
+        },
+        {
+            "active_joint_id": "",
+            "duration_s": 2,
+            "joint_start_deg": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "joint_target_deg": [
+                20,
+                -30,
+                25,
+                10,
+                -15,
+                35
+            ],
+            "name": "6R 串联动力学模型",
+            "profile_type": "point_to_point_sync",
+            "sample_count": 80,
+            "trajectory_id": "traj_point_to_point"
+        }
+    ]
+}
+
+
+
+
+

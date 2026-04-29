@@ -1,0 +1,947 @@
+{
+    "axis_relations": [
+    ],
+    "candidates": [
+        {
+            "candidate_id": "candidate_tpl_6r_floor_general",
+            "matches_requirement": true,
+            "model": {
+                "axis_relations": [
+                ],
+                "joints": [
+                    {
+                        "axis_direction": [
+                            0,
+                            0,
+                            1
+                        ],
+                        "axis_index": 1,
+                        "child_link_id": "link_1",
+                        "joint_id": "joint_1",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -185,
+                            185
+                        ],
+                        "parent_link_id": "base_link",
+                        "role": "base"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 2,
+                        "child_link_id": "link_2",
+                        "joint_id": "joint_2",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -135,
+                            85
+                        ],
+                        "parent_link_id": "link_1",
+                        "role": "shoulder"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 3,
+                        "child_link_id": "link_3",
+                        "joint_id": "joint_3",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -150,
+                            150
+                        ],
+                        "parent_link_id": "link_2",
+                        "role": "elbow"
+                    },
+                    {
+                        "axis_direction": [
+                            1,
+                            0,
+                            0
+                        ],
+                        "axis_index": 4,
+                        "child_link_id": "link_4",
+                        "joint_id": "joint_4",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -200,
+                            200
+                        ],
+                        "parent_link_id": "link_3",
+                        "role": "wrist_roll"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 5,
+                        "child_link_id": "link_5",
+                        "joint_id": "joint_5",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -125,
+                            125
+                        ],
+                        "parent_link_id": "link_4",
+                        "role": "wrist_pitch"
+                    },
+                    {
+                        "axis_direction": [
+                            1,
+                            0,
+                            0
+                        ],
+                        "axis_index": 6,
+                        "child_link_id": "tool_link",
+                        "joint_id": "joint_6",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -360,
+                            360
+                        ],
+                        "parent_link_id": "link_5",
+                        "role": "wrist_yaw"
+                    }
+                ],
+                "layout": {
+                    "elbow_type": "articulated",
+                    "hollow_joint_ids": [
+                    ],
+                    "hollow_wrist_required": false,
+                    "internal_routing_required": false,
+                    "reserved_channel_diameter_mm": 20,
+                    "seventh_axis_reserved": false,
+                    "shoulder_type": "offset",
+                    "wrist_intersection": true,
+                    "wrist_offset": false,
+                    "wrist_type": "spherical"
+                },
+                "meta": {
+                    "name": "通用落地式 6R 串联",
+                    "remarks": "用于 Topology 阶段最小闭环的基础模板。",
+                    "requirement_ref": "6DOF Test Project",
+                    "source": "template",
+                    "status": "ready",
+                    "template_id": "tpl_6r_floor_general",
+                    "topology_id": "topology_tpl_6r_floor_general",
+                    "version": 1
+                },
+                "robot_definition": {
+                    "application_tags": [
+                        "handling",
+                        "assembly"
+                    ],
+                    "base_height_m": 0,
+                    "base_mount_type": "floor",
+                    "base_orientation": [
+                        0,
+                        0,
+                        0
+                    ],
+                    "j1_rotation_range_deg": [
+                        -185,
+                        185
+                    ],
+                    "joint_count": 6,
+                    "robot_type": "6R_serial"
+                },
+                "topology_graph": {
+                    "joints_graph": [
+                        {
+                            "child_link_id": "link_1",
+                            "joint_id": "joint_1",
+                            "parent_link_id": "base_link"
+                        },
+                        {
+                            "child_link_id": "link_2",
+                            "joint_id": "joint_2",
+                            "parent_link_id": "link_1"
+                        },
+                        {
+                            "child_link_id": "link_3",
+                            "joint_id": "joint_3",
+                            "parent_link_id": "link_2"
+                        },
+                        {
+                            "child_link_id": "link_4",
+                            "joint_id": "joint_4",
+                            "parent_link_id": "link_3"
+                        },
+                        {
+                            "child_link_id": "link_5",
+                            "joint_id": "joint_5",
+                            "parent_link_id": "link_4"
+                        },
+                        {
+                            "child_link_id": "tool_link",
+                            "joint_id": "joint_6",
+                            "parent_link_id": "link_5"
+                        }
+                    ],
+                    "links": [
+                        {
+                            "link_id": "base_link",
+                            "name": "基座",
+                            "parent_joint_id": ""
+                        },
+                        {
+                            "link_id": "link_1",
+                            "name": "大臂回转连杆",
+                            "parent_joint_id": "joint_1"
+                        },
+                        {
+                            "link_id": "link_2",
+                            "name": "肩部连杆",
+                            "parent_joint_id": "joint_2"
+                        },
+                        {
+                            "link_id": "link_3",
+                            "name": "肘部连杆",
+                            "parent_joint_id": "joint_3"
+                        },
+                        {
+                            "link_id": "link_4",
+                            "name": "腕部连杆 1",
+                            "parent_joint_id": "joint_4"
+                        },
+                        {
+                            "link_id": "link_5",
+                            "name": "腕部连杆 2",
+                            "parent_joint_id": "joint_5"
+                        },
+                        {
+                            "link_id": "tool_link",
+                            "name": "法兰末端",
+                            "parent_joint_id": "joint_6"
+                        }
+                    ]
+                }
+            },
+            "recommendation_reason": [
+                "候选来自已登记的 6R 串联构型模板。",
+                "基座安装方式与 Requirement 约束匹配。",
+                "中空腕约束满足当前 Requirement。",
+                "模板适用场景包含当前 Requirement 场景标签。",
+                "拓扑结构校验通过。"
+            ],
+            "score": 110,
+            "template_id": "tpl_6r_floor_general",
+            "title": "通用落地式 6R 串联"
+        },
+        {
+            "candidate_id": "candidate_tpl_6r_hollow_wrist",
+            "matches_requirement": true,
+            "model": {
+                "axis_relations": [
+                ],
+                "joints": [
+                    {
+                        "axis_direction": [
+                            0,
+                            0,
+                            1
+                        ],
+                        "axis_index": 1,
+                        "child_link_id": "link_1",
+                        "joint_id": "joint_1",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -170,
+                            170
+                        ],
+                        "parent_link_id": "base_link",
+                        "role": "base"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 2,
+                        "child_link_id": "link_2",
+                        "joint_id": "joint_2",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -130,
+                            90
+                        ],
+                        "parent_link_id": "link_1",
+                        "role": "shoulder"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 3,
+                        "child_link_id": "link_3",
+                        "joint_id": "joint_3",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -145,
+                            145
+                        ],
+                        "parent_link_id": "link_2",
+                        "role": "elbow"
+                    },
+                    {
+                        "axis_direction": [
+                            1,
+                            0,
+                            0
+                        ],
+                        "axis_index": 4,
+                        "child_link_id": "link_4",
+                        "joint_id": "joint_4",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -190,
+                            190
+                        ],
+                        "parent_link_id": "link_3",
+                        "role": "wrist_roll"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 5,
+                        "child_link_id": "link_5",
+                        "joint_id": "joint_5",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -120,
+                            120
+                        ],
+                        "parent_link_id": "link_4",
+                        "role": "wrist_pitch"
+                    },
+                    {
+                        "axis_direction": [
+                            1,
+                            0,
+                            0
+                        ],
+                        "axis_index": 6,
+                        "child_link_id": "tool_link",
+                        "joint_id": "joint_6",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -360,
+                            360
+                        ],
+                        "parent_link_id": "link_5",
+                        "role": "wrist_yaw"
+                    }
+                ],
+                "layout": {
+                    "elbow_type": "compact",
+                    "hollow_joint_ids": [
+                    ],
+                    "hollow_wrist_required": true,
+                    "internal_routing_required": false,
+                    "reserved_channel_diameter_mm": 45,
+                    "seventh_axis_reserved": false,
+                    "shoulder_type": "offset",
+                    "wrist_intersection": true,
+                    "wrist_offset": false,
+                    "wrist_type": "hollow_spherical"
+                },
+                "meta": {
+                    "name": "中空腕工艺型 6R 串联",
+                    "remarks": "用于验证中空腕最小规则推荐。",
+                    "requirement_ref": "6DOF Test Project",
+                    "source": "template",
+                    "status": "draft",
+                    "template_id": "tpl_6r_hollow_wrist",
+                    "topology_id": "topology_tpl_6r_hollow_wrist",
+                    "version": 1
+                },
+                "robot_definition": {
+                    "application_tags": [
+                        "welding",
+                        "spraying",
+                        "handling"
+                    ],
+                    "base_height_m": 0,
+                    "base_mount_type": "floor",
+                    "base_orientation": [
+                        0,
+                        0,
+                        0
+                    ],
+                    "j1_rotation_range_deg": [
+                        -170,
+                        170
+                    ],
+                    "joint_count": 6,
+                    "robot_type": "6R_serial"
+                },
+                "topology_graph": {
+                    "joints_graph": [
+                        {
+                            "child_link_id": "link_1",
+                            "joint_id": "joint_1",
+                            "parent_link_id": "base_link"
+                        },
+                        {
+                            "child_link_id": "link_2",
+                            "joint_id": "joint_2",
+                            "parent_link_id": "link_1"
+                        },
+                        {
+                            "child_link_id": "link_3",
+                            "joint_id": "joint_3",
+                            "parent_link_id": "link_2"
+                        },
+                        {
+                            "child_link_id": "link_4",
+                            "joint_id": "joint_4",
+                            "parent_link_id": "link_3"
+                        },
+                        {
+                            "child_link_id": "link_5",
+                            "joint_id": "joint_5",
+                            "parent_link_id": "link_4"
+                        },
+                        {
+                            "child_link_id": "tool_link",
+                            "joint_id": "joint_6",
+                            "parent_link_id": "link_5"
+                        }
+                    ],
+                    "links": [
+                        {
+                            "link_id": "base_link",
+                            "name": "基座",
+                            "parent_joint_id": ""
+                        },
+                        {
+                            "link_id": "link_1",
+                            "name": "大臂回转连杆",
+                            "parent_joint_id": "joint_1"
+                        },
+                        {
+                            "link_id": "link_2",
+                            "name": "肩部连杆",
+                            "parent_joint_id": "joint_2"
+                        },
+                        {
+                            "link_id": "link_3",
+                            "name": "肘部连杆",
+                            "parent_joint_id": "joint_3"
+                        },
+                        {
+                            "link_id": "link_4",
+                            "name": "中空腕连杆 1",
+                            "parent_joint_id": "joint_4"
+                        },
+                        {
+                            "link_id": "link_5",
+                            "name": "中空腕连杆 2",
+                            "parent_joint_id": "joint_5"
+                        },
+                        {
+                            "link_id": "tool_link",
+                            "name": "法兰末端",
+                            "parent_joint_id": "joint_6"
+                        }
+                    ]
+                }
+            },
+            "recommendation_reason": [
+                "候选来自已登记的 6R 串联构型模板。",
+                "基座安装方式与 Requirement 约束匹配。",
+                "中空腕约束满足当前 Requirement。",
+                "模板适用场景包含当前 Requirement 场景标签。",
+                "拓扑结构校验通过。"
+            ],
+            "score": 110,
+            "template_id": "tpl_6r_hollow_wrist",
+            "title": "中空腕工艺型 6R 串联"
+        },
+        {
+            "candidate_id": "candidate_tpl_6r_wall_compact",
+            "matches_requirement": true,
+            "model": {
+                "axis_relations": [
+                ],
+                "joints": [
+                    {
+                        "axis_direction": [
+                            0,
+                            0,
+                            1
+                        ],
+                        "axis_index": 1,
+                        "child_link_id": "link_1",
+                        "joint_id": "joint_1",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -160,
+                            160
+                        ],
+                        "parent_link_id": "base_link",
+                        "role": "base"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 2,
+                        "child_link_id": "link_2",
+                        "joint_id": "joint_2",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -120,
+                            95
+                        ],
+                        "parent_link_id": "link_1",
+                        "role": "shoulder"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 3,
+                        "child_link_id": "link_3",
+                        "joint_id": "joint_3",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -140,
+                            140
+                        ],
+                        "parent_link_id": "link_2",
+                        "role": "elbow"
+                    },
+                    {
+                        "axis_direction": [
+                            1,
+                            0,
+                            0
+                        ],
+                        "axis_index": 4,
+                        "child_link_id": "link_4",
+                        "joint_id": "joint_4",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -180,
+                            180
+                        ],
+                        "parent_link_id": "link_3",
+                        "role": "wrist_roll"
+                    },
+                    {
+                        "axis_direction": [
+                            0,
+                            1,
+                            0
+                        ],
+                        "axis_index": 5,
+                        "child_link_id": "link_5",
+                        "joint_id": "joint_5",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -115,
+                            115
+                        ],
+                        "parent_link_id": "link_4",
+                        "role": "wrist_pitch"
+                    },
+                    {
+                        "axis_direction": [
+                            1,
+                            0,
+                            0
+                        ],
+                        "axis_index": 6,
+                        "child_link_id": "tool_link",
+                        "joint_id": "joint_6",
+                        "joint_type": "revolute",
+                        "motion_range_deg": [
+                            -340,
+                            340
+                        ],
+                        "parent_link_id": "link_5",
+                        "role": "wrist_yaw"
+                    }
+                ],
+                "layout": {
+                    "elbow_type": "compact",
+                    "hollow_joint_ids": [
+                    ],
+                    "hollow_wrist_required": false,
+                    "internal_routing_required": false,
+                    "reserved_channel_diameter_mm": 20,
+                    "seventh_axis_reserved": false,
+                    "shoulder_type": "compact",
+                    "wrist_intersection": true,
+                    "wrist_offset": false,
+                    "wrist_type": "spherical"
+                },
+                "meta": {
+                    "name": "壁挂紧凑型 6R 串联",
+                    "remarks": "用于验证基座安装方式最小规则推荐。",
+                    "requirement_ref": "6DOF Test Project",
+                    "source": "template",
+                    "status": "draft",
+                    "template_id": "tpl_6r_wall_compact",
+                    "topology_id": "topology_tpl_6r_wall_compact",
+                    "version": 1
+                },
+                "robot_definition": {
+                    "application_tags": [
+                        "grinding",
+                        "welding",
+                        "handling"
+                    ],
+                    "base_height_m": 0.35,
+                    "base_mount_type": "wall",
+                    "base_orientation": [
+                        90,
+                        0,
+                        0
+                    ],
+                    "j1_rotation_range_deg": [
+                        -160,
+                        160
+                    ],
+                    "joint_count": 6,
+                    "robot_type": "6R_serial"
+                },
+                "topology_graph": {
+                    "joints_graph": [
+                        {
+                            "child_link_id": "link_1",
+                            "joint_id": "joint_1",
+                            "parent_link_id": "base_link"
+                        },
+                        {
+                            "child_link_id": "link_2",
+                            "joint_id": "joint_2",
+                            "parent_link_id": "link_1"
+                        },
+                        {
+                            "child_link_id": "link_3",
+                            "joint_id": "joint_3",
+                            "parent_link_id": "link_2"
+                        },
+                        {
+                            "child_link_id": "link_4",
+                            "joint_id": "joint_4",
+                            "parent_link_id": "link_3"
+                        },
+                        {
+                            "child_link_id": "link_5",
+                            "joint_id": "joint_5",
+                            "parent_link_id": "link_4"
+                        },
+                        {
+                            "child_link_id": "tool_link",
+                            "joint_id": "joint_6",
+                            "parent_link_id": "link_5"
+                        }
+                    ],
+                    "links": [
+                        {
+                            "link_id": "base_link",
+                            "name": "壁挂基座",
+                            "parent_joint_id": ""
+                        },
+                        {
+                            "link_id": "link_1",
+                            "name": "回转连杆",
+                            "parent_joint_id": "joint_1"
+                        },
+                        {
+                            "link_id": "link_2",
+                            "name": "紧凑肩部连杆",
+                            "parent_joint_id": "joint_2"
+                        },
+                        {
+                            "link_id": "link_3",
+                            "name": "紧凑肘部连杆",
+                            "parent_joint_id": "joint_3"
+                        },
+                        {
+                            "link_id": "link_4",
+                            "name": "腕部连杆 1",
+                            "parent_joint_id": "joint_4"
+                        },
+                        {
+                            "link_id": "link_5",
+                            "name": "腕部连杆 2",
+                            "parent_joint_id": "joint_5"
+                        },
+                        {
+                            "link_id": "tool_link",
+                            "name": "法兰末端",
+                            "parent_joint_id": "joint_6"
+                        }
+                    ]
+                }
+            },
+            "recommendation_reason": [
+                "已根据 Requirement 预留通道约束抬高模板通道直径。",
+                "候选来自已登记的 6R 串联构型模板。",
+                "基座安装方式与 Requirement 偏好不一致，保留为低优先级候选。",
+                "中空腕约束满足当前 Requirement。",
+                "模板适用场景包含当前 Requirement 场景标签。",
+                "拓扑结构校验通过。"
+            ],
+            "score": 75,
+            "template_id": "tpl_6r_wall_compact",
+            "title": "壁挂紧凑型 6R 串联"
+        }
+    ],
+    "joints": [
+        {
+            "axis_direction": [
+                0,
+                0,
+                1
+            ],
+            "axis_index": 1,
+            "child_link_id": "link_1",
+            "joint_id": "joint_1",
+            "joint_type": "revolute",
+            "motion_range_deg": [
+                -185,
+                185
+            ],
+            "parent_link_id": "base_link",
+            "role": "base"
+        },
+        {
+            "axis_direction": [
+                0,
+                1,
+                0
+            ],
+            "axis_index": 2,
+            "child_link_id": "link_2",
+            "joint_id": "joint_2",
+            "joint_type": "revolute",
+            "motion_range_deg": [
+                -135,
+                85
+            ],
+            "parent_link_id": "link_1",
+            "role": "shoulder"
+        },
+        {
+            "axis_direction": [
+                0,
+                1,
+                0
+            ],
+            "axis_index": 3,
+            "child_link_id": "link_3",
+            "joint_id": "joint_3",
+            "joint_type": "revolute",
+            "motion_range_deg": [
+                -150,
+                150
+            ],
+            "parent_link_id": "link_2",
+            "role": "elbow"
+        },
+        {
+            "axis_direction": [
+                1,
+                0,
+                0
+            ],
+            "axis_index": 4,
+            "child_link_id": "link_4",
+            "joint_id": "joint_4",
+            "joint_type": "revolute",
+            "motion_range_deg": [
+                -200,
+                200
+            ],
+            "parent_link_id": "link_3",
+            "role": "wrist_roll"
+        },
+        {
+            "axis_direction": [
+                0,
+                1,
+                0
+            ],
+            "axis_index": 5,
+            "child_link_id": "link_5",
+            "joint_id": "joint_5",
+            "joint_type": "revolute",
+            "motion_range_deg": [
+                -125,
+                125
+            ],
+            "parent_link_id": "link_4",
+            "role": "wrist_pitch"
+        },
+        {
+            "axis_direction": [
+                1,
+                0,
+                0
+            ],
+            "axis_index": 6,
+            "child_link_id": "tool_link",
+            "joint_id": "joint_6",
+            "joint_type": "revolute",
+            "motion_range_deg": [
+                -360,
+                360
+            ],
+            "parent_link_id": "link_5",
+            "role": "wrist_yaw"
+        }
+    ],
+    "layout": {
+        "elbow_type": "articulated",
+        "hollow_joint_ids": [
+        ],
+        "hollow_wrist_required": false,
+        "internal_routing_required": false,
+        "reserved_channel_diameter_mm": 20,
+        "seventh_axis_reserved": false,
+        "shoulder_type": "offset",
+        "wrist_intersection": true,
+        "wrist_offset": false,
+        "wrist_type": "spherical"
+    },
+    "meta": {
+        "name": "通用落地式 6R 串联",
+        "remarks": "用于 Topology 阶段最小闭环的基础模板。",
+        "requirement_ref": "6DOF Test Project",
+        "source": "template",
+        "status": "ready",
+        "template_id": "tpl_6r_floor_general",
+        "topology_id": "topology_tpl_6r_floor_general",
+        "version": 1
+    },
+    "recommendation": {
+        "combined_score": 110,
+        "recommendation_reason": [
+            "候选来自已登记的 6R 串联构型模板。",
+            "基座安装方式与 Requirement 约束匹配。",
+            "中空腕约束满足当前 Requirement。",
+            "模板适用场景包含当前 Requirement 场景标签。",
+            "拓扑结构校验通过。",
+            "当前推荐基于模板匹配、基座约束、中空腕约束和基础校验的最小规则结果。"
+        ],
+        "recommended_candidate_id": "candidate_tpl_6r_floor_general",
+        "recommended_template_id": "tpl_6r_floor_general",
+        "recommended_topology_id": "topology_tpl_6r_floor_general",
+        "requirement_constraints_applied": true,
+        "requirement_loaded": true
+    },
+    "robot_definition": {
+        "application_tags": [
+            "handling",
+            "assembly"
+        ],
+        "base_height_m": 0,
+        "base_mount_type": "floor",
+        "base_orientation": [
+            0,
+            0,
+            0
+        ],
+        "j1_rotation_range_deg": [
+            -185,
+            185
+        ],
+        "joint_count": 6,
+        "robot_type": "6R_serial"
+    },
+    "topology_graph": {
+        "joints_graph": [
+            {
+                "child_link_id": "link_1",
+                "joint_id": "joint_1",
+                "parent_link_id": "base_link"
+            },
+            {
+                "child_link_id": "link_2",
+                "joint_id": "joint_2",
+                "parent_link_id": "link_1"
+            },
+            {
+                "child_link_id": "link_3",
+                "joint_id": "joint_3",
+                "parent_link_id": "link_2"
+            },
+            {
+                "child_link_id": "link_4",
+                "joint_id": "joint_4",
+                "parent_link_id": "link_3"
+            },
+            {
+                "child_link_id": "link_5",
+                "joint_id": "joint_5",
+                "parent_link_id": "link_4"
+            },
+            {
+                "child_link_id": "tool_link",
+                "joint_id": "joint_6",
+                "parent_link_id": "link_5"
+            }
+        ],
+        "links": [
+            {
+                "link_id": "base_link",
+                "name": "基座",
+                "parent_joint_id": ""
+            },
+            {
+                "link_id": "link_1",
+                "name": "大臂回转连杆",
+                "parent_joint_id": "joint_1"
+            },
+            {
+                "link_id": "link_2",
+                "name": "肩部连杆",
+                "parent_joint_id": "joint_2"
+            },
+            {
+                "link_id": "link_3",
+                "name": "肘部连杆",
+                "parent_joint_id": "joint_3"
+            },
+            {
+                "link_id": "link_4",
+                "name": "腕部连杆 1",
+                "parent_joint_id": "joint_4"
+            },
+            {
+                "link_id": "link_5",
+                "name": "腕部连杆 2",
+                "parent_joint_id": "joint_5"
+            },
+            {
+                "link_id": "tool_link",
+                "name": "法兰末端",
+                "parent_joint_id": "joint_6"
+            }
+        ]
+    }
+}

@@ -22,6 +22,10 @@ namespace Ribbon
 {
 class RibbonBarWidget;
 }
+namespace Widgets
+{
+class ProjectEmptyStateWidget;
+}
 }
 
 namespace RoboSDP::Requirement::Ui
@@ -93,6 +97,15 @@ private:
     /// 创建底部日志面板。
     void CreateLogDock();
 
+    /// 显示未打开项目时的启动空状态。
+    void ShowEmptyProjectState();
+
+    /// 显示项目已打开后的业务工作状态。
+    void ShowActiveProjectState(const QString& projectRootPath);
+
+    /// 清空项目树节点指针，避免树重建后保留悬空地址。
+    void ResetProjectTreeItemPointers();
+
     /// 根据项目树选中节点切换属性页。
     void HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem);
 
@@ -136,6 +149,7 @@ private:
     QTreeWidgetItem* m_planningTreeItem = nullptr;
     QTreeWidgetItem* m_schemeTreeItem = nullptr;
     QStackedWidget* m_propertyStack = nullptr;
+    RoboSDP::Desktop::Widgets::ProjectEmptyStateWidget* m_emptyProjectWidget = nullptr;
     QPlainTextEdit* m_placeholderPropertyPanel = nullptr;
     RoboSDP::Requirement::Ui::RequirementWidget* m_requirementWidget = nullptr;
     RoboSDP::Topology::Ui::TopologyWidget* m_topologyWidget = nullptr;
@@ -146,6 +160,8 @@ private:
     RoboSDP::Scheme::Ui::SchemeWidget* m_schemeWidget = nullptr;
     QPlainTextEdit* m_logPanel = nullptr;
     RoboSDP::Infrastructure::ProjectSaveCoordinator m_projectSaveCoordinator;
+    bool m_isFirstTopologyEntry = true;    // 记录是否是第一次进入构型页面
+    bool m_shouldResetNextPreview = false; // 控制下一次预览是否重置相机的临时标志
 };
 
 } // namespace RoboSDP::Desktop

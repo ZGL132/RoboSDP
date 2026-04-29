@@ -28,6 +28,7 @@ struct UrdfPreviewDisplayOptions
     bool show_link_labels = true;
     bool show_joint_labels = true;
     bool show_axes = true;
+    bool show_ground_grid = true;
     bool reset_camera = true;
 };
 
@@ -43,7 +44,7 @@ class VtkSceneBuilder
 public:
 #if defined(ROBOSDP_HAVE_VTK)
     /// @brief 构建中央视图的最小测试场景。
-    static void BuildMinimalTestScene(vtkRenderer* renderer, bool showAxes = true);
+    static void BuildMinimalTestScene(vtkRenderer* renderer, bool showAxes = true, bool showGroundGrid = true);
 
     /// @brief 根据 URDF 骨架预览 DTO 构建中央三维场景。
     static void BuildUrdfPreviewScene(

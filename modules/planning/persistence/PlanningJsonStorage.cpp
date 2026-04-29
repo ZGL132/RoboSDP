@@ -66,6 +66,73 @@ std::array<double, 3> FromArray3(const QJsonArray& array)
     return values;
 }
 
+QJsonObject ToUnifiedRobotSnapshotObject(
+    const RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto& snapshot)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("unified_robot_model_ref"), snapshot.unified_robot_model_ref);
+    object.insert(QStringLiteral("snapshot_version"), snapshot.snapshot_version);
+    object.insert(QStringLiteral("source_kinematic_id"), snapshot.source_kinematic_id);
+    object.insert(QStringLiteral("master_model_type"), snapshot.master_model_type);
+    object.insert(QStringLiteral("modeling_mode"), snapshot.modeling_mode);
+    object.insert(QStringLiteral("parameter_convention"), snapshot.parameter_convention);
+    object.insert(QStringLiteral("backend_type"), snapshot.backend_type);
+    object.insert(QStringLiteral("joint_order_signature"), snapshot.joint_order_signature);
+    object.insert(QStringLiteral("pinocchio_model_ready"), snapshot.pinocchio_model_ready);
+    object.insert(QStringLiteral("frame_semantics_version"), snapshot.frame_semantics_version);
+    object.insert(QStringLiteral("model_source_mode"), snapshot.model_source_mode);
+    object.insert(QStringLiteral("conversion_diagnostics"), snapshot.conversion_diagnostics);
+    object.insert(QStringLiteral("derived_artifact_relative_path"), snapshot.derived_artifact_relative_path);
+    object.insert(QStringLiteral("derived_artifact_version"), snapshot.derived_artifact_version);
+    object.insert(QStringLiteral("derived_artifact_generated_at_utc"), snapshot.derived_artifact_generated_at_utc);
+    object.insert(QStringLiteral("derived_artifact_state_code"), snapshot.derived_artifact_state_code);
+    object.insert(QStringLiteral("derived_artifact_exists"), snapshot.derived_artifact_exists);
+    object.insert(QStringLiteral("derived_artifact_fresh"), snapshot.derived_artifact_fresh);
+    return object;
+}
+
+RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto FromUnifiedRobotSnapshotObject(const QJsonObject& object)
+{
+    RoboSDP::Kinematics::Dto::UnifiedRobotModelSnapshotDto snapshot;
+    snapshot.unified_robot_model_ref =
+        object.value(QStringLiteral("unified_robot_model_ref")).toString(snapshot.unified_robot_model_ref);
+    snapshot.snapshot_version =
+        std::max(1, object.value(QStringLiteral("snapshot_version")).toInt(snapshot.snapshot_version));
+    snapshot.source_kinematic_id =
+        object.value(QStringLiteral("source_kinematic_id")).toString(snapshot.source_kinematic_id);
+    snapshot.master_model_type =
+        object.value(QStringLiteral("master_model_type")).toString(snapshot.master_model_type);
+    snapshot.modeling_mode =
+        object.value(QStringLiteral("modeling_mode")).toString(snapshot.modeling_mode);
+    snapshot.parameter_convention =
+        object.value(QStringLiteral("parameter_convention")).toString(snapshot.parameter_convention);
+    snapshot.backend_type =
+        object.value(QStringLiteral("backend_type")).toString(snapshot.backend_type);
+    snapshot.joint_order_signature =
+        object.value(QStringLiteral("joint_order_signature")).toString(snapshot.joint_order_signature);
+    snapshot.pinocchio_model_ready =
+        object.value(QStringLiteral("pinocchio_model_ready")).toBool(snapshot.pinocchio_model_ready);
+    snapshot.frame_semantics_version =
+        object.value(QStringLiteral("frame_semantics_version")).toInt(snapshot.frame_semantics_version);
+    snapshot.model_source_mode =
+        object.value(QStringLiteral("model_source_mode")).toString(snapshot.model_source_mode);
+    snapshot.conversion_diagnostics =
+        object.value(QStringLiteral("conversion_diagnostics")).toString(snapshot.conversion_diagnostics);
+    snapshot.derived_artifact_relative_path =
+        object.value(QStringLiteral("derived_artifact_relative_path")).toString(snapshot.derived_artifact_relative_path);
+    snapshot.derived_artifact_version =
+        object.value(QStringLiteral("derived_artifact_version")).toString(snapshot.derived_artifact_version);
+    snapshot.derived_artifact_generated_at_utc =
+        object.value(QStringLiteral("derived_artifact_generated_at_utc")).toString(snapshot.derived_artifact_generated_at_utc);
+    snapshot.derived_artifact_state_code =
+        object.value(QStringLiteral("derived_artifact_state_code")).toString(snapshot.derived_artifact_state_code);
+    snapshot.derived_artifact_exists =
+        object.value(QStringLiteral("derived_artifact_exists")).toBool(snapshot.derived_artifact_exists);
+    snapshot.derived_artifact_fresh =
+        object.value(QStringLiteral("derived_artifact_fresh")).toBool(snapshot.derived_artifact_fresh);
+    return snapshot;
+}
+
 QJsonObject ToJointStateObject(const RoboSDP::Planning::Dto::PlanningJointStateDto& state)
 {
     QJsonObject object;
@@ -305,6 +372,14 @@ QJsonObject PlanningJsonStorage::ToSceneJsonObject(const RoboSDP::Planning::Dto:
     metaObject.insert(QStringLiteral("dynamic_ref"), scene.meta.dynamic_ref);
     metaObject.insert(QStringLiteral("selection_ref"), scene.meta.selection_ref);
     metaObject.insert(QStringLiteral("requirement_ref"), scene.meta.requirement_ref);
+    metaObject.insert(QStringLiteral("unified_robot_model_ref"), scene.meta.unified_robot_model_ref);
+    metaObject.insert(QStringLiteral("kinematic_kernel_ready"), scene.meta.kinematic_kernel_ready);
+    metaObject.insert(
+        QStringLiteral("kinematic_conversion_diagnostics"),
+        scene.meta.kinematic_conversion_diagnostics);
+    metaObject.insert(
+        QStringLiteral("unified_robot_snapshot"),
+        ToUnifiedRobotSnapshotObject(scene.meta.unified_robot_snapshot));
 
     QJsonArray limitArray;
     for (const auto& limit : scene.joint_limits)
@@ -364,6 +439,44 @@ RoboSDP::Planning::Dto::PlanningSceneDto PlanningJsonStorage::FromSceneJsonObjec
     scene.meta.dynamic_ref = metaObject.value(QStringLiteral("dynamic_ref")).toString();
     scene.meta.selection_ref = metaObject.value(QStringLiteral("selection_ref")).toString();
     scene.meta.requirement_ref = metaObject.value(QStringLiteral("requirement_ref")).toString();
+    scene.meta.unified_robot_model_ref = metaObject.value(QStringLiteral("unified_robot_model_ref")).toString();
+    scene.meta.kinematic_kernel_ready =
+        metaObject.value(QStringLiteral("kinematic_kernel_ready")).toBool(false);
+    scene.meta.kinematic_conversion_diagnostics =
+        metaObject.value(QStringLiteral("kinematic_conversion_diagnostics")).toString();
+    scene.meta.unified_robot_snapshot =
+        FromUnifiedRobotSnapshotObject(metaObject.value(QStringLiteral("unified_robot_snapshot")).toObject());
+    if (scene.meta.unified_robot_snapshot.unified_robot_model_ref.trimmed().isEmpty())
+    {
+        scene.meta.unified_robot_snapshot.unified_robot_model_ref = scene.meta.unified_robot_model_ref;
+        scene.meta.unified_robot_snapshot.source_kinematic_id = scene.meta.kinematic_ref;
+        scene.meta.unified_robot_snapshot.pinocchio_model_ready = scene.meta.kinematic_kernel_ready;
+        scene.meta.unified_robot_snapshot.conversion_diagnostics =
+            scene.meta.kinematic_conversion_diagnostics;
+        scene.meta.unified_robot_snapshot.derived_artifact_relative_path =
+            QStringLiteral("kinematics/derived/%1.urdf").arg(
+                scene.meta.kinematic_ref.trimmed().isEmpty()
+                    ? QStringLiteral("unknown_kinematic")
+                    : scene.meta.kinematic_ref.trimmed());
+        scene.meta.unified_robot_snapshot.derived_artifact_version =
+            QStringLiteral("legacy_snapshot_v%1").arg(scene.meta.unified_robot_snapshot.snapshot_version);
+        scene.meta.unified_robot_snapshot.derived_artifact_state_code = QStringLiteral("legacy_unknown");
+        scene.meta.unified_robot_snapshot.derived_artifact_exists = false;
+        scene.meta.unified_robot_snapshot.derived_artifact_fresh = false;
+    }
+    if (scene.meta.unified_robot_snapshot.derived_artifact_state_code.trimmed().isEmpty())
+    {
+        scene.meta.unified_robot_snapshot.derived_artifact_relative_path =
+            QStringLiteral("kinematics/derived/%1.urdf").arg(
+                scene.meta.kinematic_ref.trimmed().isEmpty()
+                    ? QStringLiteral("unknown_kinematic")
+                    : scene.meta.kinematic_ref.trimmed());
+        scene.meta.unified_robot_snapshot.derived_artifact_version =
+            QStringLiteral("legacy_snapshot_v%1").arg(scene.meta.unified_robot_snapshot.snapshot_version);
+        scene.meta.unified_robot_snapshot.derived_artifact_state_code = QStringLiteral("legacy_unknown");
+        scene.meta.unified_robot_snapshot.derived_artifact_exists = false;
+        scene.meta.unified_robot_snapshot.derived_artifact_fresh = false;
+    }
     scene.robot_collision_model_ref = jsonObject.value(QStringLiteral("robot_collision_model_ref")).toString();
 
     scene.joint_limits.clear();

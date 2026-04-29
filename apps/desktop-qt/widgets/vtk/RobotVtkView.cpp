@@ -10,10 +10,15 @@
 #if defined(ROBOSDP_HAVE_VTK)
 #include <QVTKOpenGLNativeWidget.h>
 #include <vtkActor.h>
+#include <vtkAxesActor.h>
 #include <vtkCamera.h>
+#include <vtkCaptionActor2D.h>
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkNew.h>
+#include <vtkOrientationMarkerWidget.h>
+#include <vtkProperty.h>
 #include <vtkRenderer.h>
+#include <vtkTextProperty.h>
 #endif
 
 namespace RoboSDP::Desktop::Vtk
@@ -25,11 +30,27 @@ RobotVtkView::RobotVtkView(QWidget* parent)
     BuildLayout();
 }
 
-void RobotVtkView::ShowUrdfPreviewScene(const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene)
+RobotVtkView::~RobotVtkView()
 {
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_corner_axes_widget != nullptr)
+    {
+        // 中文说明：角落坐标轴绑定了 VTK interactor，销毁视图前先禁用，避免关闭窗口时访问失效对象。
+        m_corner_axes_widget->SetEnabled(0);
+    }
+#endif
+}
+
+// RobotVtkView.cpp
+
+void RobotVtkView::ShowPreviewScene(const PreviewSceneDto& scene, bool resetCamera)
+{
+    // 清理旧的 Actor 缓存（如 Mesh），但不一定会重置相机
     ClearCache();
     m_currentScene = scene;
-    RefreshScene();
+    
+    // 将 resetCamera 参数透传给实际的刷新函数
+    RefreshScene(resetCamera);
 }
 
 void RobotVtkView::UpdatePreviewPoses(
@@ -101,16 +122,8 @@ void RobotVtkView::ClearCache()
 void RobotVtkView::ResetCameraToCurrentScene()
 {
 #if defined(ROBOSDP_HAVE_VTK)
-    if (m_renderer != nullptr)
-    {
-        // 中文说明：相机复位只作用于中央视图，不改变 URDF 场景 DTO 或模块计算状态。
-        m_renderer->ResetCamera();
-    }
-
-    if (m_renderWindow != nullptr)
-    {
-        m_renderWindow->Render();
-    }
+    // 中文说明：重置视角先包围当前可见场景，再统一回到产品要求的等轴测观察方向。
+    ApplyCameraPreset(1.0, -1.0, 1.0, 0.0, 0.0, 1.0);
 #endif
 }
 
@@ -122,7 +135,7 @@ void RobotVtkView::SetSkeletonVisible(bool visible)
     }
 
     m_showSkeleton = visible;
-    // 中文说明：顶部视图开关只影响显示层，不改变 URDF 场景 DTO 或 FK 计算结果。
+    // 中文说明：顶部视图开关只影响显示层，不改变预览场景 DTO 或 FK 计算结果。
     RefreshScene(false);
 }
 
@@ -168,6 +181,32 @@ void RobotVtkView::SetAxesVisible(bool visible)
 
     m_showAxes = visible;
     RefreshScene(false);
+}
+
+void RobotVtkView::SetGroundGridVisible(bool visible)
+{
+    if (m_showGroundGrid == visible)
+    {
+        return;
+    }
+
+    m_showGroundGrid = visible;
+    RefreshScene(false);
+}
+
+void RobotVtkView::SetCornerAxesVisible(bool visible)
+{
+    if (m_showCornerAxes == visible)
+    {
+        return;
+    }
+
+    m_showCornerAxes = visible;
+    if (m_statusLabel != nullptr)
+    {
+        m_statusLabel->setText(BuildStatusText());
+    }
+    RefreshCornerAxesVisibility();
 }
 
 void RobotVtkView::SetLinkLabelsVisible(bool visible)
@@ -250,6 +289,7 @@ void RobotVtkView::BuildVtkView()
     renderWindow->AddRenderer(renderer);
     m_renderer = renderer;
 
+    BuildCornerAxesWidget();
     m_layout->addWidget(m_vtkWidget, 1);
     RefreshScene();
 #endif
@@ -259,6 +299,71 @@ void RobotVtkView::BuildFallbackView()
 {
     m_layout->addStretch();
     RefreshScene();
+}
+
+void RobotVtkView::BuildCornerAxesWidget()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_vtkWidget == nullptr || m_corner_axes_widget != nullptr)
+    {
+        return;
+    }
+
+    vtkNew<vtkAxesActor> axesActor;
+    axesActor->SetTotalLength(0.85, 0.85, 0.85);
+    axesActor->SetShaftTypeToCylinder();
+    axesActor->SetCylinderRadius(0.018);
+    axesActor->SetConeRadius(0.075);
+    axesActor->SetSphereRadius(0.045);
+    axesActor->GetXAxisShaftProperty()->SetColor(0.62, 0.25, 0.25);
+    axesActor->GetXAxisTipProperty()->SetColor(0.72, 0.34, 0.34);
+    axesActor->GetYAxisShaftProperty()->SetColor(0.26, 0.56, 0.32);
+    axesActor->GetYAxisTipProperty()->SetColor(0.32, 0.66, 0.38);
+    axesActor->GetZAxisShaftProperty()->SetColor(0.28, 0.40, 0.72);
+    axesActor->GetZAxisTipProperty()->SetColor(0.34, 0.48, 0.82);
+
+    auto tuneCaption = [](vtkCaptionActor2D* captionActor) {
+        if (captionActor == nullptr || captionActor->GetCaptionTextProperty() == nullptr)
+        {
+            return;
+        }
+
+        captionActor->GetCaptionTextProperty()->SetFontSize(8);
+        captionActor->GetCaptionTextProperty()->SetBold(false);
+        captionActor->GetCaptionTextProperty()->SetColor(0.80, 0.84, 0.88);
+    };
+    tuneCaption(axesActor->GetXAxisCaptionActor2D());
+    tuneCaption(axesActor->GetYAxisCaptionActor2D());
+    tuneCaption(axesActor->GetZAxisCaptionActor2D());
+
+    m_corner_axes_actor = axesActor;
+    m_corner_axes_widget = vtkSmartPointer<vtkOrientationMarkerWidget>::New();
+    m_corner_axes_widget->SetOrientationMarker(m_corner_axes_actor);
+    m_corner_axes_widget->SetInteractor(m_vtkWidget->interactor());
+    m_corner_axes_widget->SetViewport(0.015, 0.015, 0.145, 0.145);
+    RefreshCornerAxesVisibility();
+#endif
+}
+
+void RobotVtkView::RefreshCornerAxesVisibility()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_corner_axes_widget == nullptr)
+    {
+        return;
+    }
+
+    // 中文说明：角落方向坐标轴固定在屏幕空间，不参与主场景重建和相机包围盒计算。
+    m_corner_axes_widget->SetEnabled(m_showCornerAxes ? 1 : 0);
+    if (m_showCornerAxes)
+    {
+        m_corner_axes_widget->InteractiveOff();
+    }
+    if (m_renderWindow != nullptr)
+    {
+        m_renderWindow->Render();
+    }
+#endif
 }
 
 void RobotVtkView::RefreshScene(bool resetCamera)
@@ -277,12 +382,16 @@ void RobotVtkView::RefreshScene(bool resetCamera)
         displayOptions.show_collision_meshes = m_showCollisionMesh;
         displayOptions.show_joint_axes = m_showJointAxes;
         displayOptions.show_axes = m_showAxes;
+        displayOptions.show_ground_grid = m_showGroundGrid;
         displayOptions.show_link_labels = m_showLinkLabels;
         displayOptions.show_joint_labels = m_showJointLabels;
         displayOptions.reset_camera = resetCamera;
         if (m_currentScene.IsEmpty())
         {
-            VtkSceneBuilder::BuildMinimalTestScene(m_renderer, displayOptions.show_axes);
+            VtkSceneBuilder::BuildMinimalTestScene(
+                m_renderer,
+                displayOptions.show_axes,
+                displayOptions.show_ground_grid);
         }
         else
         {
@@ -292,6 +401,12 @@ void RobotVtkView::RefreshScene(bool resetCamera)
                 displayOptions,
                 m_link_actors,
                 m_link_mesh_geometries);
+        }
+
+        if (resetCamera)
+        {
+            // 中文说明：无论当前是空参考场景还是机器人预览场景，首次展示都统一使用等轴测视角。
+            ApplyCameraPreset(1.0, -1.0, 1.0, 0.0, 0.0, 1.0);
         }
     }
 
@@ -329,40 +444,34 @@ void RobotVtkView::ApplyCameraPreset(
     directionY /= directionLength;
     directionZ /= directionLength;
 
-    double bounds[6] = {-1.0, 1.0, -1.0, 1.0, -1.0, 1.0};
-    m_renderer->ComputeVisiblePropBounds(bounds);
-    const bool validBounds =
-        std::isfinite(bounds[0]) &&
-        std::isfinite(bounds[1]) &&
-        std::isfinite(bounds[2]) &&
-        std::isfinite(bounds[3]) &&
-        std::isfinite(bounds[4]) &&
-        std::isfinite(bounds[5]) &&
-        bounds[0] <= bounds[1] &&
-        bounds[2] <= bounds[3] &&
-        bounds[4] <= bounds[5];
-
-    const double centerX = validBounds ? (bounds[0] + bounds[1]) * 0.5 : 0.0;
-    const double centerY = validBounds ? (bounds[2] + bounds[3]) * 0.5 : 0.0;
-    const double centerZ = validBounds ? (bounds[4] + bounds[5]) * 0.5 : 0.0;
-    const double spanX = validBounds ? (bounds[1] - bounds[0]) : 2.0;
-    const double spanY = validBounds ? (bounds[3] - bounds[2]) : 2.0;
-    const double spanZ = validBounds ? (bounds[5] - bounds[4]) : 2.0;
-    const double maxSpan = std::max({spanX, spanY, spanZ, 1.0});
-    const double distance = maxSpan * 2.8;
-
     vtkCamera* camera = m_renderer->GetActiveCamera();
     if (camera == nullptr)
     {
         return;
     }
 
-    // 中文说明：预设视角只调整相机姿态，不修改模型 actor transform 或任何业务 DTO。
-    camera->SetFocalPoint(centerX, centerY, centerZ);
+    m_renderer->ResetCamera();
+
+    double focalPoint[3] = {0.0, 0.0, 0.0};
+    double position[3] = {0.0, 0.0, 1.0};
+    camera->GetFocalPoint(focalPoint);
+    camera->GetPosition(position);
+
+    double distance = std::sqrt(
+        (position[0] - focalPoint[0]) * (position[0] - focalPoint[0]) +
+        (position[1] - focalPoint[1]) * (position[1] - focalPoint[1]) +
+        (position[2] - focalPoint[2]) * (position[2] - focalPoint[2]));
+    if (!std::isfinite(distance) || distance < 1.0e-6)
+    {
+        distance = 3.0;
+    }
+
+    // 中文说明：先让 VTK 用当前场景安全求出包围相机，再只覆写观察方向，避免标签/辅助层把手算包围盒拉坏。
+    camera->SetFocalPoint(focalPoint);
     camera->SetPosition(
-        centerX + directionX * distance,
-        centerY + directionY * distance,
-        centerZ + directionZ * distance);
+        focalPoint[0] + directionX * distance,
+        focalPoint[1] + directionY * distance,
+        focalPoint[2] + directionZ * distance);
     camera->SetViewUp(upX, upY, upZ);
     camera->OrthogonalizeViewUp();
     m_renderer->ResetCameraClippingRange();
@@ -387,7 +496,7 @@ QString RobotVtkView::BuildStatusText() const
     if (!m_currentScene.IsEmpty())
     {
         return QStringLiteral(
-            "中央三维主视图区：已加载 URDF 骨架预览数据（模型 %1，节点 %2，连杆段 %3），"
+            "中央三维主视图区：已加载骨架预览数据（模型 %1，节点 %2，连杆段 %3），"
             "但当前构建未启用 VTK，因此只能显示文字摘要。请检查 ROBOSDP_VTK_DIR 与 VTK 组件配置。")
             .arg(m_currentScene.model_name.isEmpty() ? QStringLiteral("未命名模型") : m_currentScene.model_name)
             .arg(m_currentScene.nodes.size())
@@ -402,14 +511,18 @@ QString RobotVtkView::BuildStatusText() const
         const QString collisionState = m_showCollisionMesh ? QStringLiteral("开") : QStringLiteral("关");
         const QString jointAxisState = m_showJointAxes ? QStringLiteral("开") : QStringLiteral("关");
         const QString axesState = m_showAxes ? QStringLiteral("开") : QStringLiteral("关");
+        const QString groundGridState = m_showGroundGrid ? QStringLiteral("开") : QStringLiteral("关");
+        const QString cornerAxesState = m_showCornerAxes ? QStringLiteral("开") : QStringLiteral("关");
         const QString linkLabelState = m_showLinkLabels ? QStringLiteral("开") : QStringLiteral("关");
         const QString jointLabelState = m_showJointLabels ? QStringLiteral("开") : QStringLiteral("关");
-        return QStringLiteral("中央三维主视图区：URDF 预览，骨架=%1，Visual=%2，Collision=%3，关节轴=%4，坐标系=%5，Link 标签=%6，Joint 标签=%7，模型 %8，节点 %9，连杆段 %10，visual mesh %11，collision mesh %12。")
+        return QStringLiteral("中央三维主视图区：预览模型，骨架=%1，Visual=%2，Collision=%3，关节轴=%4，坐标系=%5，地面网格=%6，角落坐标轴=%7，Link 标签=%8，Joint 标签=%9，模型 %10，节点 %11，连杆段 %12，visual mesh %13，collision mesh %14。")
             .arg(skeletonState)
             .arg(visualState)
             .arg(collisionState)
             .arg(jointAxisState)
             .arg(axesState)
+            .arg(groundGridState)
+            .arg(cornerAxesState)
             .arg(linkLabelState)
             .arg(jointLabelState)
             .arg(m_currentScene.model_name.isEmpty() ? QStringLiteral("未命名模型") : m_currentScene.model_name)
@@ -421,12 +534,16 @@ QString RobotVtkView::BuildStatusText() const
 
 #if defined(ROBOSDP_HAVE_VTK)
     const QString axesState = m_showAxes ? QStringLiteral("开") : QStringLiteral("关");
-    return QStringLiteral("中央三维主视图区：当前显示最小 VTK 测试场景，坐标系=%1，等待 URDF 骨架导入。")
-        .arg(axesState);
+    const QString groundGridState = m_showGroundGrid ? QStringLiteral("开") : QStringLiteral("关");
+    const QString cornerAxesState = m_showCornerAxes ? QStringLiteral("开") : QStringLiteral("关");
+    return QStringLiteral("中央三维主视图区：当前显示默认三维参考场景，坐标系=%1，地面网格=%2，角落坐标轴=%3，等待新的机器人骨架同步。")
+        .arg(axesState)
+        .arg(groundGridState)
+        .arg(cornerAxesState);
 #else
     return QStringLiteral(
         "中央三维主视图区：当前构建环境未检测到与 Qt 工具链匹配的 VTK。\n"
-        "本轮仍可执行 URDF 骨架导入，但中央区域只显示文字摘要。");
+        "本轮仍可执行机器人骨架同步，但中央区域只显示文字摘要。");
 #endif
 }
 
