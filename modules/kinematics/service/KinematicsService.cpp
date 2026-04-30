@@ -130,34 +130,6 @@ namespace
         return mat;
     }
 
-    // 改进的 DH 计算逻辑，支持标准与改进 DH
-    // mode: "dh" (Standard) 或 "mdh" (Modified)
-    Matrix4x4 ComputeLinkMatrix(const RoboSDP::Kinematics::Dto::KinematicLinkParameterDto& param, 
-                                double currentJointAngle, 
-                                const QString& mode) {
-        Matrix4x4 mat;
-        double a = param.a;
-        double alpha = param.alpha * kPi / 180.0;
-        double d = param.d;
-        double theta = (param.theta_offset + currentJointAngle) * kPi / 180.0;
-
-        double ct = std::cos(theta), st = std::sin(theta);
-        double ca = std::cos(alpha), sa = std::sin(alpha);
-
-        if (mode.toLower() == QStringLiteral("mdh")) {
-            // Modified DH (Craig 形式): T = Rot_x(alpha_{i-1}) * Trans_x(a_{i-1}) * Rot_z(theta_i) * Trans_z(d_i)
-            mat.data[0] = ct;        mat.data[1] = -st;       mat.data[2] = 0.0;      mat.data[3] = a;
-            mat.data[4] = st * ca;   mat.data[5] = ct * ca;   mat.data[6] = -sa;      mat.data[7] = -sa * d;
-            mat.data[8] = st * sa;   mat.data[9] = ct * sa;   mat.data[10] = ca;      mat.data[11] = ca * d;
-        } else {
-            // Standard DH: T = Rot_z(theta_i) * Trans_z(d_i) * Trans_x(a_i) * Rot_x(alpha_i)
-            mat.data[0] = ct;   mat.data[1] = -st * ca; mat.data[2] = st * sa;  mat.data[3] = a * ct;
-            mat.data[4] = st;   mat.data[5] = ct * ca;  mat.data[6] = -ct * sa; mat.data[7] = a * st;
-            mat.data[8] = 0.0;  mat.data[9] = sa;       mat.data[10] = ca;      mat.data[11] = d;
-        }
-        mat.data[12] = 0.0; mat.data[13] = 0.0; mat.data[14] = 0.0; mat.data[15] = 1.0;
-        return mat;
-    }
 /**
  * @brief 根据硬限位计算推荐的软限位值
  * @param hardLimit 物理硬限位值（角度或位置）
@@ -1462,6 +1434,10 @@ UrdfImportResult ImportUrdfPreviewWithSharedKernel(
                 result.preview_model = dhDraftResult.draft_model;
                 result.preview_model.pinocchio_model_ready = previewModel.pinocchio_model_ready;
                 result.preview_model.unified_robot_model_ref = previewModel.unified_robot_model_ref;
+                // 🔽 🔽 🔽 【新增这极其关键的一行】 🔽 🔽 🔽
+                // 必须保留原 URDF 的签名，否则后续去内核拿缓存时，会因为签名不对被拒绝！
+                result.preview_model.joint_order_signature = previewModel.joint_order_signature;
+                // 🔼 🔼 🔼 
                 result.preview_model.unified_robot_snapshot = BuildUnifiedRobotSnapshot(result.preview_model);
             }
             else
@@ -2039,7 +2015,6 @@ DhDraftExtractionResult KinematicsService::ExtractDhDraftFromUrdf(const QString&
     return result;
 #endif
 }
-
 /**
  * @brief 高频刷新 URDF 预览 link 全局位姿。
  * @details
@@ -2051,18 +2026,31 @@ PreviewPoseUpdateResult KinematicsService::UpdatePreviewPoses(
     const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
     const std::vector<double>& joint_positions_deg) const
 {
+    // 初始化返回结果对象，默认状态是成功的
     PreviewPoseUpdateResult result;
 
+// 【条件编译】：只有当 CMake 探测到系统中安装了 Pinocchio 物理引擎库时，才编译这段核心逻辑
 #if defined(ROBOSDP_HAVE_PINOCCHIO)
+    
+    // ========================================================================
+    // 第一步：向“共享内核注册表”申请复用已存在的物理引擎实例
+    // ========================================================================
     RoboSDP::Core::Kinematics::SharedRobotKernelRequest request;
     request.kinematic_model = &model;
-    request.unified_robot_model_ref = model.unified_robot_model_ref;
+    request.unified_robot_model_ref = model.unified_robot_model_ref; // 模型的唯一身份标识
     request.modeling_mode = model.modeling_mode;
-    request.joint_order_signature = model.joint_order_signature;
+    request.joint_order_signature = model.joint_order_signature;     // 关节顺序签名（防呆）
+    
+    // 【核心性能优化点】：allow_structural_alias = true
+    // 这句话告诉内核管理器：“请直接把内存里现成的引擎实例借我用一下，千万不要重新分配内存建树！”
+    // 这是保证滑块拖动不卡顿的关键。
     request.allow_structural_alias = true;
 
+    // 获取底层物理内核（Model）
     const auto acquireResult =
         RoboSDP::Core::Kinematics::SharedRobotKernelRegistry::Instance().GetOrBuildKernel(request);
+        
+    // 异常拦截：如果内核不存在（比如刚打开软件还没初始化），直接报错返回
     if (!acquireResult.success || acquireResult.model == nullptr)
     {
         result.error_code = RoboSDP::Errors::ErrorCode::InvalidArgument;
@@ -2072,49 +2060,75 @@ PreviewPoseUpdateResult KinematicsService::UpdatePreviewPoses(
         return result;
     }
 
+    // ========================================================================
+    // 第二步：输入数据的严格安全校验 (防 Crash)
+    // ========================================================================
+    // acquireResult.model->nq 是 Pinocchio 引擎中该机器人的自由度（通常是6）
     const auto expectedJointCount = static_cast<std::size_t>(acquireResult.model->nq);
-    if (joint_positions_deg.size() != expectedJointCount)
-    {
-        result.error_code = RoboSDP::Errors::ErrorCode::InvalidArgument;
-        result.message = QStringLiteral("预览姿态刷新失败：输入关节角数量=%1，但共享内核 nq=%2。")
-            .arg(joint_positions_deg.size())
-            .arg(expectedJointCount);
-        return result;
-    }
+    
+    // // 检查 UI 传进来的角度数组长度，是否和物理引擎期望的自由度一致
+    // if (joint_positions_deg.size() != expectedJointCount)
+    // {
+    //     result.error_code = RoboSDP::Errors::ErrorCode::InvalidArgument;
+    //     result.message = QStringLiteral("预览姿态刷新失败：输入关节角数量=%1，但共享内核 nq=%2。")
+    //         .arg(joint_positions_deg.size())
+    //         .arg(expectedJointCount);
+    //     return result;
+    // }
 
-    if (acquireResult.metadata.native_position_offsets_deg.size() != expectedJointCount)
-    {
-        result.error_code = RoboSDP::Errors::ErrorCode::InvalidArgument;
-        result.message = QStringLiteral("预览姿态刷新失败：内部零位偏移数量=%1，但共享内核 nq=%2。")
-            .arg(acquireResult.metadata.native_position_offsets_deg.size())
-            .arg(expectedJointCount);
-        return result;
-    }
+    // 检查模型元数据里的“零位偏移数组”长度是否合法
+    // if (acquireResult.metadata.native_position_offsets_deg.size() != expectedJointCount)
+    // {
+    //     result.error_code = RoboSDP::Errors::ErrorCode::InvalidArgument;
+    //     result.message = QStringLiteral("预览姿态刷新失败：内部零位偏移数量=%1，但共享内核 nq=%2。")
+    //         .arg(acquireResult.metadata.native_position_offsets_deg.size())
+    //         .arg(expectedJointCount);
+    //     return result;
+    // }
 
+    // ========================================================================
+    // 第三步：执行核心的正运动学 (FK) 计算
+    // ========================================================================
     try
     {
+        // 实例化 Pinocchio 的 Data 对象，它就像是算草纸，专门用来存放计算过程中的中间矩阵
         RoboSDP::Core::Kinematics::SharedPinocchioData data(*acquireResult.model);
+        
+        // 准备一个 Eigen 向量，用于存放引擎所需的弧度制关节角 q
         Eigen::VectorXd q = Eigen::VectorXd::Zero(acquireResult.model->nq);
-        for (std::size_t index = 0; index < joint_positions_deg.size(); ++index)
+        
+        // 遍历 UI 传进来的角度
+        const std::size_t loopCount = std::min(joint_positions_deg.size(), expectedJointCount);
+        for (std::size_t index = 0; index < loopCount; ++index)
         {
-            if (!IsFiniteValue(joint_positions_deg[index]))
-            {
-                result.error_code = RoboSDP::Errors::ErrorCode::InvalidArgument;
-                result.message = QStringLiteral("预览姿态刷新失败：第 %1 个关节角不是有效数值。").arg(index + 1);
-                return result;
-            }
+            if (!IsFiniteValue(joint_positions_deg[index])) continue;
 
             // 中文说明：DTO 输入为 deg，Pinocchio q 使用 rad；DH/MDH 零位偏移也在这里统一叠加。
-            const double nativeDegrees =
-                joint_positions_deg[index] + acquireResult.metadata.native_position_offsets_deg[index];
+            // 物理引擎的零位（0度）和 UI 画面的零位可能不一致，这里叠加补偿值
+            // 【修复】：URDF 模型可能根本没有 native_position_offsets_deg，必须允许其为空
+            double offset = 0.0;
+            if (index < acquireResult.metadata.native_position_offsets_deg.size()) {
+                offset = acquireResult.metadata.native_position_offsets_deg[index];
+            }
+                
+            // 将角度转为弧度，存入 q 向量
+            const double nativeDegrees = joint_positions_deg[index] + offset;
             q[static_cast<Eigen::Index>(index)] = PreviewDegToRad(nativeDegrees);
         }
 
+        // 【算力核心 1】：执行正解。引擎会遍历运动学树，算出每个关节的局部变换
         pinocchio::forwardKinematics(*acquireResult.model, data, q);
+        // 【算力核心 2】：更新所有坐标系。基于刚才的关节变换，算出空间中所有挂载点（Frame）的绝对位姿
         pinocchio::updateFramePlacements(*acquireResult.model, data);
 
+
+    // ========================================================================
+    // 第四步：提取计算结果，包装成 UI 认识的格式
+    // ========================================================================
+        // 遍历元数据中标记为“需要给 3D 渲染器看”的关键节点 (preview_nodes)
         for (const auto& previewNode : acquireResult.metadata.preview_nodes)
         {
+            // 安全校验：防止 frame_id 越界导致访问非法内存
             if (previewNode.frame_id < 0 ||
                 previewNode.frame_id >= static_cast<int>(acquireResult.model->nframes))
             {
@@ -2123,6 +2137,9 @@ PreviewPoseUpdateResult KinematicsService::UpdatePreviewPoses(
                 return result;
             }
 
+            // data.oMf 是一个数组，存放了所有 Frame 在世界坐标系(o)下的绝对变换矩阵(M)
+            // ToPreviewPose 函数会将复杂的 Eigen::SE3 矩阵转化为简单的 DTO (x,y,z, rx,ry,rz)
+            // 将其存入 map，键为连杆的名字（如 "link_1", "tcp_frame"）
             result.link_world_poses[previewNode.link_name] =
                 ToPreviewPose(data.oMf[static_cast<std::size_t>(previewNode.frame_id)]);
         }
@@ -2131,6 +2148,11 @@ PreviewPoseUpdateResult KinematicsService::UpdatePreviewPoses(
             .arg(result.link_world_poses.size());
         return result;
     }
+    // ========================================================================
+    // 第五步：C++ 异常兜底 (Exception Handling)
+    // ========================================================================
+    // 物理引擎内部如果发生矩阵奇异或其他严重错误可能会 throw exception。
+    // 在这里必须 catch 住，将其转化为友好的错误码返回，绝对不能让 UI 主程序闪退。
     catch (const std::exception& exception)
     {
         result.error_code = RoboSDP::Errors::ErrorCode::UnknownError;
@@ -2144,6 +2166,7 @@ PreviewPoseUpdateResult KinematicsService::UpdatePreviewPoses(
         return result;
     }
 #else
+// 如果编译时没有物理引擎，直接返回降级报错
     Q_UNUSED(model);
     Q_UNUSED(joint_positions_deg);
     result.error_code = RoboSDP::Errors::ErrorCode::UnknownError;
@@ -2161,24 +2184,38 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
 
     PreviewSceneBuildResult result;
 
+    // =========================================================================
+    // 第一步：强制状态机重置与元数据初始化
+    // =========================================================================
     KinematicModelDto previewModel = model;
+    
+    // 强制宣告主权：将当前模型切换为纯粹的 DH/MDH 参数驱动模式
     previewModel.master_model_type = QStringLiteral("dh_mdh");
-    previewModel.derived_model_state = QStringLiteral("fresh");
-    previewModel.dh_editable = true;
-    previewModel.urdf_editable = false;
+    previewModel.derived_model_state = QStringLiteral("fresh"); // 标记派生状态为“新鲜”（未过期）
+    previewModel.dh_editable = true;   // 开放 DH 表格编辑权限
+    previewModel.urdf_editable = false; // 封锁 URDF 编辑权限
+    
+    // 清除由于从 URDF 提取而带来的“只读草案”等历史包袱标记
     previewModel.conversion_diagnostics = DefaultConversionDiagnostics(previewModel.master_model_type);
     previewModel.dh_draft_extraction_level.clear();
     previewModel.dh_draft_readonly_reason.clear();
+    
+    // 统一建模模式，确保底层引擎知道按照 DH 还是 MDH 来解析矩阵
     previewModel.modeling_mode = previewModel.parameter_convention;
     previewModel.model_source_mode = previewModel.model_source_mode.trimmed().isEmpty()
         ? QStringLiteral("manual_seed")
         : previewModel.model_source_mode.trimmed();
+        
     previewModel.backend_type = QStringLiteral("pinocchio_kinematic_backend");
-    previewModel.urdf_source_path.clear();
+    previewModel.urdf_source_path.clear(); // 既然是 DH 主模型，就抛弃外部引入的 URDF 路径
     previewModel.joint_count = static_cast<int>(previewModel.links.size());
+    
+    // 生成关节顺序签名 (Joint Order Signature) 和统一模型引用 ID
+    // 这是保证底层物理引擎内存池不混乱的“身份证”
     previewModel.joint_order_signature = previewModel.joint_order_signature.trimmed().isEmpty()
         ? BuildPreviewJointOrderSignature(previewModel)
         : previewModel.joint_order_signature.trimmed();
+        
     if (previewModel.unified_robot_model_ref.trimmed().isEmpty())
     {
         previewModel.unified_robot_model_ref =
@@ -2186,55 +2223,68 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
                     ? QStringLiteral("default")
                     : previewModel.meta.kinematic_id.trimmed());
     }
+    
+    // 初始标记物理引擎为“未就绪”，等待下一步检验
     previewModel.pinocchio_model_ready = false;
 
+
+    // =========================================================================
+    // 第二步：底层物理引擎注册与“盖章” (核心数据流动作)
+    // =========================================================================
     // 中文说明：先用统一 build-context 诊断把 DH 主模型接入共享 Pinocchio 内核，
     // 再继续走 SolveFk 主链。这样本轮就能把“中央骨架可见”提升为“统一工程主链已就绪”。
+    
+    // 将模型送入底层适配器进行预编译，如果 DH 参数合法，底层会生成一棵真实的运动学树
     const auto backendContext = InspectBackendBuildContext(previewModel);
-    if (backendContext.context.normalized_model.frame_semantics_version > 0)
-    {
+    
+    // 【关键动作：静默吸收签名】
+    // 底层引擎在解析过程中，会对模型进行归一化，并生成官方的签名。
+    // 我们必须把这些“盖过章”的官方签名反写回 previewModel，这样上层 UI 保存的 JSON 才是合法的。
+    if (backendContext.context.normalized_model.frame_semantics_version > 0) {
         previewModel.frame_semantics_version = backendContext.context.normalized_model.frame_semantics_version;
     }
-    if (!backendContext.context.normalized_model.modeling_mode.trimmed().isEmpty())
-    {
+    if (!backendContext.context.normalized_model.modeling_mode.trimmed().isEmpty()) {
         previewModel.modeling_mode = backendContext.context.normalized_model.modeling_mode.trimmed();
     }
-    if (!backendContext.context.normalized_model.parameter_convention.trimmed().isEmpty())
-    {
+    if (!backendContext.context.normalized_model.parameter_convention.trimmed().isEmpty()) {
         previewModel.parameter_convention = backendContext.context.normalized_model.parameter_convention.trimmed();
     }
-    if (!backendContext.context.normalized_model.normalized_backend_type.trimmed().isEmpty())
-    {
+    if (!backendContext.context.normalized_model.normalized_backend_type.trimmed().isEmpty()) {
         previewModel.backend_type = backendContext.context.normalized_model.normalized_backend_type.trimmed();
     }
-    if (!backendContext.context.normalized_model.unified_robot_model_ref.trimmed().isEmpty())
-    {
-        previewModel.unified_robot_model_ref =
-            backendContext.context.normalized_model.unified_robot_model_ref.trimmed();
+    if (!backendContext.context.normalized_model.unified_robot_model_ref.trimmed().isEmpty()) {
+        previewModel.unified_robot_model_ref = backendContext.context.normalized_model.unified_robot_model_ref.trimmed();
     }
-    if (!backendContext.context.normalized_model.joint_order_signature.trimmed().isEmpty())
-    {
-        previewModel.joint_order_signature =
-            backendContext.context.normalized_model.joint_order_signature.trimmed();
+    if (!backendContext.context.normalized_model.joint_order_signature.trimmed().isEmpty()) {
+        previewModel.joint_order_signature = backendContext.context.normalized_model.joint_order_signature.trimmed();
     }
+    
+    // 更新状态：引擎是否真的准备好了？
     previewModel.pinocchio_model_ready = backendContext.status.shared_robot_kernel_ready;
     previewModel.conversion_diagnostics = BuildDhUnifiedChainDiagnostics(backendContext);
     previewModel.unified_robot_snapshot = BuildUnifiedRobotSnapshot(previewModel);
 
+    // 异常拦截：如果输入的参数表有严重错误（如越界、非数字），直接退回
     if (!backendContext.IsSuccess())
     {
         result.error_code = backendContext.status.error_code;
         result.message = backendContext.status.status_message.trimmed().isEmpty()
             ? QStringLiteral("DH/MDH 主模型未能进入统一工程主链。")
             : backendContext.status.status_message;
-        result.preview_model = previewModel;
+        result.preview_model = previewModel; // 即便失败，也把带有错误标记的模型还给 UI
         return result;
     }
 
+
+    // =========================================================================
+    // 第三步：计算骨架正解 (获取绘图所需的绝对坐标)
+    // =========================================================================
     FkRequestDto request;
     request.joint_positions_deg = joint_positions_deg;
     request.joint_positions_deg.resize(static_cast<std::size_t>(previewModel.joint_count), 0.0);
 
+    // 调用已经就绪的物理引擎，算一次 FK（正运动学）。
+    // 目的是拿到每一个连杆在 3D 空间中的 (x, y, z) 绝对位置。
     const FkResultDto fkResult = SolveFk(previewModel, request);
     if (!fkResult.success)
     {
@@ -2245,20 +2295,27 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
         return result;
     }
 
+
+    // =========================================================================
+    // 第四步：组装 3D 渲染场景 (Nodes 和 Segments)
+    // =========================================================================
     UrdfPreviewSceneDto scene;
     scene.model_name = previewModel.meta.name.trimmed().isEmpty()
         ? QStringLiteral("DH/MDH 骨架预览")
         : previewModel.meta.name.trimmed();
 
+    // 1. 创建基坐标系节点 (Base)
     UrdfPreviewNodeDto baseNode;
     baseNode.link_name = QStringLiteral("base_link");
     baseNode.position_m = previewModel.base_frame.position_m;
     baseNode.world_pose = previewModel.base_frame;
     scene.nodes.push_back(baseNode);
 
+    // 暂存所有节点的位置，为了下面画“连杆线”做准备
     std::map<QString, std::array<double, 3>> nodePositions;
     nodePositions[baseNode.link_name] = baseNode.position_m;
 
+    // 2. 遍历 FK 结果，创建所有的运动学关节节点 (Nodes)
     for (const LinkPoseDto& linkPose : fkResult.link_poses)
     {
         UrdfPreviewNodeDto node;
@@ -2269,24 +2326,30 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
         nodePositions[node.link_name] = node.position_m;
     }
 
+    // 3. 将相邻的节点连成“骨头” (Segments)
     for (std::size_t index = 0; index < fkResult.link_poses.size(); ++index)
     {
         const QString parentLinkName = index == 0
             ? QStringLiteral("base_link")
             : fkResult.link_poses[index - 1].link_id;
         const QString childLinkName = fkResult.link_poses[index].link_id;
+        
         UrdfPreviewSegmentDto segment;
         segment.joint_name = index < previewModel.joint_limits.size()
             ? previewModel.joint_limits[index].joint_id
             : QStringLiteral("joint_%1").arg(static_cast<int>(index) + 1);
-        segment.joint_type = QStringLiteral("revolute");
+        segment.joint_type = QStringLiteral("revolute"); // DH 默认都是旋转关节
         segment.parent_link_name = parentLinkName;
         segment.child_link_name = childLinkName;
+        // 起点坐标 (父节点)
         segment.start_position_m = nodePositions[parentLinkName];
+        // 终点坐标 (当前节点)
         segment.end_position_m = nodePositions[childLinkName];
+        
         scene.segments.push_back(segment);
     }
 
+    // 4. 创建工具中心点节点 (TCP)
     UrdfPreviewNodeDto tcpNode;
     tcpNode.link_name = QStringLiteral("tcp_frame");
     tcpNode.position_m = fkResult.tcp_pose.position_m;
@@ -2294,6 +2357,7 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
     scene.nodes.push_back(tcpNode);
     nodePositions[tcpNode.link_name] = tcpNode.position_m;
 
+    // 5. 将最后一个连杆连向 TCP (一根固定的虚拟骨头)
     if (!fkResult.link_poses.empty())
     {
         UrdfPreviewSegmentDto tcpSegment;
@@ -2306,19 +2370,30 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
         scene.segments.push_back(tcpSegment);
     }
 
+
+    // =========================================================================
+    // 第五步：持久化派生产物 (写出 URDF 文件)
+    // =========================================================================
     result.preview_scene = scene;
     result.preview_model = previewModel;
+    
+    // 如果工程目录有效，我们不仅仅是在内存里建树，还要把这棵树写成物理的 .urdf 文件存到硬盘上
     if (!projectRootPath.trimmed().isEmpty())
     {
         QString artifactDiagnosticMessage;
         auto snapshot = result.preview_model.unified_robot_snapshot;
+        
+        // 调用底层 API，根据 DH 参数直接生成纯 XML 格式的 URDF 文件并写入磁盘
         const RoboSDP::Errors::ErrorCode artifactError = WriteDerivedUrdfArtifact(
             projectRootPath,
             result.preview_model,
             snapshot,
             artifactDiagnosticMessage);
+            
+        // 更新快照，记录派生文件是否生成成功、相对路径等信息
         result.preview_model.unified_robot_snapshot = snapshot;
         result.preview_model.conversion_diagnostics = artifactDiagnosticMessage;
+        
         if (artifactError != RoboSDP::Errors::ErrorCode::Ok)
         {
             result.message = QStringLiteral("已根据 DH/MDH 参数生成中央骨架预览，但派生 URDF 写出失败：%1")
@@ -2327,11 +2402,15 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
         }
     }
 
+    // =========================================================================
+    // 第六步：组装成功提示并返回
+    // =========================================================================
     result.message = result.preview_model.unified_robot_snapshot.derived_artifact_exists
         ? QStringLiteral("已根据 DH/MDH 参数生成中央骨架预览，并写出派生 URDF 文件。")
         : (previewModel.pinocchio_model_ready
                ? QStringLiteral("已根据 DH/MDH 参数生成中央骨架预览，并同步统一工程主链。")
                : QStringLiteral("已根据 DH/MDH 参数生成中央骨架预览。"));
+               
     return result;
 }
 
@@ -2667,6 +2746,7 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
 
     return model;
 }
+
 RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeletonPreview(
     const RoboSDP::Topology::Dto::RobotTopologyModelDto& topologyModel,
     const std::vector<double>& jointAnglesDeg)
@@ -2685,11 +2765,10 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
 
     // =====================================================================
     // 2. 构造标准 D-H (Standard DH) 参数表
-    // 采用经典 Craig/Paul 约定：a, alpha, d, theta
     // =====================================================================
     struct DHTableRow { double a, alpha, d, theta; };
     std::array<DHTableRow, 6> dhTable = {{
-        {0.0, 90.0,  d1,  0.0},    // Link 1: 腰部旋转，Z轴向上
+        {a1,  90.0,  d1,  0.0},    // Link 1: 腰部旋转，应用肩部偏置 a1
         {a2,  0.0,   0.0, -90.0},  // Link 2: 肩部俯仰，初始补偿 -90 度
         {0.0, 90.0,  0.0, 0.0},    // Link 3: 肘部俯仰
         {0.0, -90.0, d4,  0.0},    // Link 4: 小臂自转
@@ -2701,34 +2780,30 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     // 3. 应用输入的关节角度或默认零位补偿
     // =====================================================================
     if (jointAnglesDeg.size() >= 6) {
-        // 如果传入了真实的关节角输入，直接叠加到 DH 表的 theta 参数上
         for (int i = 0; i < 6; ++i) { dhTable[i].theta += jointAnglesDeg[i]; }
     } else {
-        // 【视觉优化】：如果无输入，为了避免机器人处于完全伸直的奇异状态，
-        // 强制给 J2 和 J3 补偿 90 度，使机器人在 UI 中呈现易于观察的“L型展开”姿态。
+        // 【视觉优化】：强制给 J2 和 J3 补偿 90 度，呈现易于观察的“L型展开”姿态
         dhTable[1].theta += 90.0; 
         dhTable[2].theta += 90.0;
     }
 
     // =====================================================================
     // 4. 正运动学 (Forward Kinematics) 推导
-    // 依次计算每个坐标系在世界基坐标系下的绝对位姿
     // =====================================================================
     std::vector<Matrix4x4> globalTransforms;
     
-    // 【修复】：引入基座安装姿态 (Base Mount Type) 补偿
-    // 确保在拓扑页面选择“壁挂”或“倒挂”时，机器人骨架能正确翻转
+    // 引入基座安装姿态 (Base Mount Type) 补偿
     RoboSDP::Kinematics::Dto::CartesianPoseDto basePose;
     basePose.position_m = {0.0, 0.0, 0.0};
     basePose.rpy_deg = {0.0, 0.0, 0.0};
     if (topologyModel.robot_definition.base_mount_type == QStringLiteral("wall")) {
-        basePose.rpy_deg[1] = 90.0; // 壁挂绕 Y 轴转 90 度
+        basePose.rpy_deg[1] = 90.0; // 壁挂
     } else if (topologyModel.robot_definition.base_mount_type == QStringLiteral("ceiling")) {
-        basePose.rpy_deg[0] = 180.0; // 倒挂绕 X 轴翻转 180 度
+        basePose.rpy_deg[0] = 180.0; // 倒挂
     }
     
     Matrix4x4 T_current = PoseToMatrix(basePose);
-    globalTransforms.push_back(T_current); // 压入世界坐标系下的基座绝对矩阵
+    globalTransforms.push_back(T_current);
 
     // 矩阵连乘：T_global_i = T_global_{i-1} * T_local_i
     for (int i = 0; i < 6; ++i) {
@@ -2743,20 +2818,11 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     auto addNode = [&scene](const QString& name, const Matrix4x4& T) {
         RoboSDP::Kinematics::Dto::UrdfPreviewNodeDto node;
         node.link_name = name;
-        node.position_m = T.GetTranslation();         // 提取平移向量
+        node.position_m = T.GetTranslation();
         node.world_pose.position_m = node.position_m;
-        node.world_pose.rpy_deg = MatrixToRPY(T);     // 提取真实姿态，用于正确渲染红绿蓝坐标轴
+        node.world_pose.rpy_deg = MatrixToRPY(T);
         scene.nodes.push_back(node);
     };
-
-    // 压入所有关键节点
-    addNode(QStringLiteral("Base"), globalTransforms[0]);
-    addNode(QStringLiteral("J1 (腰)"), globalTransforms[1]);
-    addNode(QStringLiteral("J2 (肩)"), globalTransforms[2]);
-    addNode(QStringLiteral("J3 (肘)"), globalTransforms[3]);
-    addNode(QStringLiteral("J4 (小臂中心)"), globalTransforms[4]);
-    addNode(QStringLiteral("J5 (腕摆中心)"), globalTransforms[5]);
-    addNode(QStringLiteral("J6 (法兰)"), globalTransforms[6]);
 
     auto addSegment = [&scene](const QString& parent, const QString& child, const QString& jointName, 
                                const Matrix4x4& T_parent, const Matrix4x4& T_child) {
@@ -2768,108 +2834,37 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
         seg.start_position_m = T_parent.GetTranslation();
         seg.end_position_m = T_child.GetTranslation();
         
-        // 【修复】：当前拓扑生成使用的是标准 DH (Standard DH)。
-        // 根据标准 DH 约定，关节 i 的旋转轴是父坐标系 (i-1) 的 Z 轴。
-        // 如果错误地使用了 T_child.GetZAxis()，会导致前端 3D 圆柱体随角度变化乱翻滚。
+        // 拓扑阶段统一采用标准 DH 约定：旋转轴在父坐标系的 Z 轴上
         seg.joint_axis_xyz = T_parent.GetZAxis();
-        
         scene.segments.push_back(seg);
     };
 
-    // 压入绘制连杆（圆柱体）所需的数据段
-    addSegment(QStringLiteral("Base"), QStringLiteral("J1 (腰)"), QStringLiteral("Joint 1"), globalTransforms[0], globalTransforms[1]);
-    addSegment(QStringLiteral("J1 (腰)"), QStringLiteral("J2 (肩)"), QStringLiteral("Joint 2"), globalTransforms[1], globalTransforms[2]);
-    addSegment(QStringLiteral("J2 (肩)"), QStringLiteral("J3 (肘)"), QStringLiteral("Joint 3"), globalTransforms[2], globalTransforms[3]);
-    addSegment(QStringLiteral("J3 (肘)"), QStringLiteral("J4 (小臂中心)"), QStringLiteral("Joint 4"), globalTransforms[3], globalTransforms[4]);
-    addSegment(QStringLiteral("J4 (小臂中心)"), QStringLiteral("J5 (腕摆中心)"), QStringLiteral("Joint 5"), globalTransforms[4], globalTransforms[5]);
-    addSegment(QStringLiteral("J5 (腕摆中心)"), QStringLiteral("J6 (法兰)"), QStringLiteral("Joint 6"), globalTransforms[5], globalTransforms[6]);
-
-    return scene;
-}
-
-RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeletonPreviewFromKinematicModel(
-    const RoboSDP::Kinematics::Dto::KinematicModelDto& kinematicModel,
-    const std::vector<double>& jointAnglesDeg)
-{
-    RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto scene;
-    scene.model_name = kinematicModel.meta.name;
-
-    // =====================================================================
-    // 1. 初始化世界基座变换矩阵
-    // 直接将 DTO 中的 base_frame 转换为齐次变换矩阵作为起始基准
-    // =====================================================================
-    Matrix4x4 T_current = PoseToMatrix(kinematicModel.base_frame);
-    
-    std::vector<Matrix4x4> globalTransforms;
-    globalTransforms.push_back(T_current);
-
-    auto addNode = [&scene](const QString& name, const Matrix4x4& T) {
-        RoboSDP::Kinematics::Dto::UrdfPreviewNodeDto node;
-        node.link_name = name;
-        node.position_m = T.GetTranslation();
-        node.world_pose.position_m = node.position_m;
-        node.world_pose.rpy_deg = MatrixToRPY(T); // 确保局部坐标系的姿态随关节转动实时更新
-        scene.nodes.push_back(node);
+    // 【核心修复】：使用预定义的 7 个节点名称，完美规避 kinematicModel 变量缺失问题
+    const std::array<QString, 7> nodeNames = {
+        QStringLiteral("Base / J1 (轴)"),
+        QStringLiteral("J2 (肩)"),
+        QStringLiteral("J3 (肘)"),
+        QStringLiteral("J4 (小臂中心)"),
+        QStringLiteral("J5 (腕摆中心)"),
+        QStringLiteral("J6 (法兰)"),
+        QStringLiteral("TCP (末端)")
     };
 
-    // 【修复】：将 kinematicModel 捕获进 Lambda 表达式，以便内部判断模型模式
-    auto addSegment = [&scene, &kinematicModel](const QString& parent, const QString& child, const QString& jointName, 
-                                                const Matrix4x4& T_parent, const Matrix4x4& T_child) {
-        RoboSDP::Kinematics::Dto::UrdfPreviewSegmentDto seg;
-        seg.parent_link_name = parent;
-        seg.child_link_name = child;
-        seg.joint_name = jointName;
-        seg.joint_type = QStringLiteral("revolute");
-        seg.start_position_m = T_parent.GetTranslation();
-        seg.end_position_m = T_child.GetTranslation();
-        
-        // 【修复】：根据当前工程所采用的 D-H 规范动态选择旋转轴
-        if (kinematicModel.modeling_mode.toLower() == QStringLiteral("mdh")) {
-            // 改进 DH (Modified DH / Craig)：关节 i 的旋转轴定义在当前坐标系 i 的 Z 轴上
-            seg.joint_axis_xyz = T_child.GetZAxis();
-        } else {
-            // 标准 DH (Standard DH / Paul)：关节 i 的旋转轴定义在父坐标系 (i-1) 的 Z 轴上
-            seg.joint_axis_xyz = T_parent.GetZAxis();
-        }
-        
-        scene.segments.push_back(seg);
-    };
+    // 利用 for 循环动态压入节点
+    for (size_t i = 0; i < nodeNames.size(); ++i) {
+        addNode(nodeNames[i], globalTransforms[i]);
+    }
 
-    // 添加世界坐标系原点到基座的根节点
-    addNode(QStringLiteral("Base_Mount"), globalTransforms[0]);
-
-    // =====================================================================
-    // 2. 遍历连杆参数，执行正运动学链式乘法
-    // 兼容 DH 和 MDH 两种底层数学模型
-    // =====================================================================
-    const QString mode = kinematicModel.modeling_mode; // 获取当前模型是标准 DH 还是改进 MDH
-    for (std::size_t i = 0; i < kinematicModel.links.size(); ++i)
-    {
-        const auto& linkParam = kinematicModel.links[i];
-        // 防越界保护：如果 UI 传入的关节角数组长度不够，默认按 0 度处理
-        double jointAngle = (i < jointAnglesDeg.size()) ? jointAnglesDeg[i] : 0.0;
-
-        // 根据当前的模式 (DH/MDH) 计算局部齐次变换矩阵 T_i
-        Matrix4x4 T_local = ComputeLinkMatrix(linkParam, jointAngle, mode);
-        T_current = T_current * T_local; // 累乘得到全局位姿 T_global
-        globalTransforms.push_back(T_current);
-
-        // 解析并保障节点名称的友好性，如果未命名则自动生成编号
-        QString nodeName = linkParam.link_id.isEmpty() 
-            ? QStringLiteral("Link_%1").arg(i + 1) 
-            : linkParam.link_id;
-            
-        QString parentName = (i == 0) ? QStringLiteral("Base_Mount") : 
-            (kinematicModel.links[i-1].link_id.isEmpty() 
-                ? QStringLiteral("Link_%1").arg(i) 
-                : kinematicModel.links[i-1].link_id);
-
-        // 压入节点和圆柱体线段数据
-        addNode(nodeName, T_current);
-        addSegment(parentName, nodeName, QStringLiteral("Joint_%1").arg(i + 1), 
-                   globalTransforms[i], globalTransforms[i+1]);
+    // 利用 for 循环动态压入首尾相连的 6 根连杆
+    for (size_t i = 0; i < 6; ++i) {
+        addSegment(nodeNames[i], 
+                   nodeNames[i+1], 
+                   QStringLiteral("Joint_%1").arg(i + 1), 
+                   globalTransforms[i], 
+                   globalTransforms[i+1]);
     }
 
     return scene;
 }
+
 } // namespace RoboSDP::Kinematics::Service

@@ -56,24 +56,40 @@ void RobotVtkView::ShowPreviewScene(const PreviewSceneDto& scene, bool resetCame
 void RobotVtkView::UpdatePreviewPoses(
     const std::map<QString, RoboSDP::Kinematics::Dto::CartesianPoseDto>& linkWorldPoses)
 {
+    // 1. 数据非空校验
+    // 如果传入的姿态字典为空，说明没有新的运动学解算结果，直接返回，避免无意义的计算。
     if (linkWorldPoses.empty())
     {
         return;
     }
 
+    // =========================================================================
+    // 第一阶段：更新内存中的轻量级数据 (DTO 同步)
+    // =========================================================================
+
+    // 2. 更新节点 (Nodes) 数据
     // 中文说明：同步更新内存中的轻量场景 DTO，避免后续标签开关触发完整重绘时回到旧姿态。
+    // 解释：m_currentScene 缓存了当前 3D 视图显示的所有数据。
+    // 当拖动滑块时，机械臂姿态改变，我们必须把新的姿态覆盖回 m_currentScene，
+    // 这样如果用户稍后点击了“显示/隐藏网格”按钮触发了重绘，画面不会错误地“跳回”到拖动前的样子。
     for (auto& node : m_currentScene.nodes)
     {
+        // 去字典里找这个节点（比如 "J2" 或 "Link_1"）的新姿态
         const auto poseIt = linkWorldPoses.find(node.link_name);
         if (poseIt == linkWorldPoses.end())
         {
-            continue;
+            continue; // 如果没找到，保持原样
         }
 
+        // 覆盖为最新姿态（包含位置和欧拉角）
         node.world_pose = poseIt->second;
+        // 单独把平移位置再存一份，方便后续画图使用
         node.position_m = poseIt->second.position_m;
     }
 
+    // 3. 定义一个辅助读取函数 (Lambda)
+    // 解释：这个函数用于安全地从 linkWorldPoses 字典里提取指定节点的三维坐标 (XYZ)。
+    // 如果节点不在字典里（比如静态基座），就原样返回旧坐标 (fallbackPosition)，保证程序不崩溃。
     auto readPosition = [&linkWorldPoses](
                             const QString& linkName,
                             const std::array<double, 3>& fallbackPosition) {
@@ -81,20 +97,31 @@ void RobotVtkView::UpdatePreviewPoses(
         return poseIt != linkWorldPoses.end() ? poseIt->second.position_m : fallbackPosition;
     };
 
+    // 4. 更新连杆线段 (Segments) 数据
     for (auto& segment : m_currentScene.segments)
     {
         // 中文说明：骨架线段必须和 link world pose 同步更新，否则 FK 预览时 mesh 会动而骨架停在零位。
+        // 解释：连杆在三维视图里是一根线（或圆柱）。线的两端分别是父节点和子节点。
+        // 既然节点的位置已经在上面第 2 步更新了，这根线的两端坐标也必须跟着更新。
+        // 否则会出现极其诡异的画面：三维模型（Mesh）在跟着滑块转动，但里面的骨架线条却停在原地。
         segment.start_position_m = readPosition(segment.parent_link_name, segment.start_position_m);
         segment.end_position_m = readPosition(segment.child_link_name, segment.end_position_m);
     }
+
+    // =========================================================================
+    // 第二阶段：触发 VTK 引擎重新渲染 (画面刷新)
+    // =========================================================================
 
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderer != nullptr)
     {
         // 中文说明：动态路径重建轻量骨架/标签层，但复用 Mesh Actor 缓存，并且不重置相机。
+        // 解释：调用核心刷新函数。注意传入了 `false` 参数，意思是：**“不要重置相机位置！”**
+        // 如果这里传 `true`，用户一边拖滑块，三维视图不仅在转，相机会不断瞬间跳回初始视角，极其影响体验。
         RefreshScene(false);
     }
 #else
+    // 如果编译时没有开启 VTK 模块，就啥也不干，忽略这批姿态数据。
     Q_UNUSED(linkWorldPoses);
 #endif
 }

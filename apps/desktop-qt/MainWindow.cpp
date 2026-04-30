@@ -436,7 +436,7 @@ void MainWindow::CreatePropertyDock()
         [this](const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene) {
             if (m_robotVtkView != nullptr)
             {
-                m_robotVtkView->ShowPreviewScene(scene);
+                m_robotVtkView->ShowPreviewScene(scene, m_shouldResetNextPreview);
             }
 
             if (scene.IsEmpty())
@@ -470,7 +470,7 @@ void MainWindow::CreatePropertyDock()
         });
     connect(
         m_kinematicsWidget,
-        &RoboSDP::Kinematics::Ui::KinematicsWidget::KinematicsPreviewGenerated,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::PreviewSceneGenerated,
         this,
         [this](const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene) {
             if (m_robotVtkView != nullptr)

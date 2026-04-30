@@ -24,8 +24,8 @@
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
-#include <QTimer>
 #include <QVBoxLayout>
+#include <QDateTime>
 
 namespace RoboSDP::Kinematics::Ui
 {
@@ -311,46 +311,69 @@ RoboSDP::Infrastructure::ProjectSaveItemResult KinematicsWidget::SaveCurrentDraf
     }
     return {ModuleName(), saveResult.IsSuccess(), saveResult.message};
 }
-
+/**
+ * @brief 绑定所有 UI 控件的数据变化事件，用于追踪未保存状态（Dirty Tracking）和触发实时渲染。
+ * @details 
+ * 采用 Qt 的 findChildren 反射机制，批量遍历不同类型的控件并挂载信号槽。
+ * 这样无论以后在 UI 上增加多少个普通输入框，都不需要在这里手动补充连接代码。
+ */
 void KinematicsWidget::ConnectDirtyTracking()
 {
+    // 1. 遍历界面上所有的单行文本框 (例如：模型名称、拓扑引用等)
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
+        // textEdited 信号：只有当用户真正在键盘上打字修改时才触发（代码 setValue 不会触发）
         connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
     }
+    
+    // 2. 遍历所有的下拉选项框 (例如：参数约定 DH/MDH、求解器类型等)
     for (QComboBox* editor : findChildren<QComboBox*>())
     {
+        // 强转信号指针，解决 QComboBox::currentIndexChanged 函数重载的歧义问题
         connect(editor, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [this](int) {
-            MarkDirty();
+            MarkDirty(); // 只要选项改变，标记为“未保存”
         });
     }
+    
+    // 3. 遍历所有的双精度浮点数输入框 (涵盖了大量的尺寸、位置、容差参数)
     for (QDoubleSpinBox* editor : findChildren<QDoubleSpinBox*>())
     {
         connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
             MarkDirty();
         });
     }
+    
+    // 4. 遍历所有的整数输入框 (例如：最大迭代次数、采样点数)
     for (QSpinBox* editor : findChildren<QSpinBox*>())
     {
         connect(editor, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, [this](int) {
             MarkDirty();
         });
     }
+    
+    // 5. 遍历所有的复选框 (例如：是否启用 Tool Frame、Workpiece Frame 等)
     for (QCheckBox* editor : findChildren<QCheckBox*>())
     {
         connect(editor, &QCheckBox::toggled, this, [this](bool) { MarkDirty(); });
     }
+    
+    // 6. 遍历所有的表格组件 (核心的 DH 参数表、关节限位表)
     for (QTableWidget* table : findChildren<QTableWidget*>())
     {
+        // cellChanged 信号：当表格中任意一个单元格的内容发生修改时触发
         connect(table, &QTableWidget::cellChanged, this, [this](int, int) { MarkDirty(); });
     }
-    // 找到所有 FK 关节角度输入框 (m_fk_joint_spins)
+
+    // =====================================================================
+    // 7. 特殊高频交互路由 (通道 B：轻量级位姿更新)
+    // =====================================================================
+    // A/B 通道：将 FK (正运动学) 关节的 6 个拖动滑块单独拎出来绑定
     for (int i = 0; i < 6; ++i) {
         if (m_fk_joint_spins[i]) {
             connect(m_fk_joint_spins[i], static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
                 this, [this](double) {
-                    // 当角度改变时，立即更新 3D 预览
-                    UpdateKinematicsPreview(); 
+                    MarkDirty();    // 1. 标记模型已修改
+                    SyncPoseOnly(); // 2. 【核心】直接呼叫轻量级通道，将角度发给引擎算矩阵，实现 3D 视图的实时联动
                 });
         }
     }
@@ -372,7 +395,6 @@ void KinematicsWidget::MarkClean()
 
 void KinematicsWidget::TriggerImportUrdf()
 {
-    // 中文说明：外部顶部功能区只能触发页面既有入口，避免绕过 KinematicsWidget 的 UI 状态同步与日志输出。
     OnImportUrdfClicked();
 }
 
@@ -392,10 +414,7 @@ void KinematicsWidget::BuildUi()
     m_sample_workspace_button = new QPushButton(QStringLiteral("采样工作空间"), this);
     m_save_button = new QPushButton(QStringLiteral("保存草稿"), this);
     m_load_button = new QPushButton(QStringLiteral("重新加载"), this);
-    m_build_from_topology_button->setObjectName(QStringLiteral("kinematics_build_from_topology_button"));
-    m_run_fk_button->setObjectName(QStringLiteral("kinematics_run_fk_button"));
-    m_run_ik_button->setObjectName(QStringLiteral("kinematics_run_ik_button"));
-    m_sample_workspace_button->setObjectName(QStringLiteral("kinematics_sample_workspace_button"));
+    
     actionLayout->addWidget(m_import_urdf_button);
     actionLayout->addWidget(m_build_from_topology_button);
     actionLayout->addWidget(m_promote_dh_draft_button);
@@ -408,12 +427,10 @@ void KinematicsWidget::BuildUi()
     actionLayout->addStretch();
 
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存 Topology，再生成 KinematicModel。"), this);
-    m_operation_label->setObjectName(QStringLiteral("kinematics_operation_label"));
     m_operation_label->setWordWrap(true);
 
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
-    // 中文说明：Kinematics 页面按业务域拆为页签，底层模型收集、FK/IK 和中央预览链路保持不变。
     tabs->addTab(CreateScrollableTab(CreateModelGroup()), QStringLiteral("模型与坐标系"));
     tabs->addTab(CreateScrollableTab(CreateDhTableGroup()), QStringLiteral("DH/MDH 参数"));
     tabs->addTab(CreateScrollableTab(CreateJointLimitGroup()), QStringLiteral("关节限位"));
@@ -423,14 +440,6 @@ void KinematicsWidget::BuildUi()
     rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
-
-    m_preview_pose_update_timer = new QTimer(this);
-    m_preview_pose_update_timer->setSingleShot(true);
-    // 中文说明：16ms 对齐约 60 FPS 的交互刷新目标；当前阶段统一用于 URDF 位姿更新与 DH 骨架重建两类预览。
-    m_preview_pose_update_timer->setInterval(16);
-    connect(m_preview_pose_update_timer, &QTimer::timeout, this, [this]() {
-        FlushActivePreviewUpdate();
-    });
 
     connect(m_import_urdf_button, &QPushButton::clicked, this, [this]() { OnImportUrdfClicked(); });
     connect(m_build_from_topology_button, &QPushButton::clicked, this, [this]() { OnBuildFromTopologyClicked(); });
@@ -442,25 +451,23 @@ void KinematicsWidget::BuildUi()
     connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
     connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
 
-    // 中文说明：以下连接显式覆盖会影响骨架几何语义的输入项，确保 DH/MDH 表、Base/TCP 和参数约定变化时能刷新中央骨架。
+    // A/B 通道：将涉及“结构变动”的输入项绑定至重量级通道 SyncStructureAndPreview
     connect(
         m_parameter_convention_combo,
         static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
         this,
-        [this](int) { ScheduleDhPreviewSceneUpdate(); });
+        [this](int) { SyncStructureAndPreview(); });
+
     connect(m_dh_table, &QTableWidget::cellChanged, this, [this](int, int) {
-        ScheduleDhPreviewSceneUpdate();
+        SyncStructureAndPreview();
     });
 
     auto connectPreviewEditors = [this](const std::array<QDoubleSpinBox*, 6>& editors) {
         for (QDoubleSpinBox* editor : editors)
         {
-            if (editor == nullptr)
-            {
-                continue;
-            }
+            if (editor == nullptr) continue;
             connect(editor, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) {
-                ScheduleDhPreviewSceneUpdate();
+                SyncStructureAndPreview();
             });
         }
     };
@@ -572,20 +579,19 @@ QGroupBox* KinematicsWidget::CreateModelGroup()
         framesLayout->addWidget(frameGroup, 1);
     };
 
-    // 坐标系编辑器覆盖世界基座、法兰、工具、工件和 TCP 参考系。
-    createFrameEditor(QStringLiteral("Base Frame"), m_base_frame_spins, QStringLiteral("机器人基坐标系，相对项目世界坐标系定义。"));
-    createFrameEditor(QStringLiteral("Flange Frame"), m_flange_frame_spins, QStringLiteral("法兰坐标系，相对末端连杆坐标系定义。"));
+    createFrameEditor(QStringLiteral("Base Frame"), m_base_frame_spins, QStringLiteral("机器人基坐标系。"));
+    createFrameEditor(QStringLiteral("Flange Frame"), m_flange_frame_spins, QStringLiteral("法兰坐标系。"));
     createFrameEditor(
         QStringLiteral("Tool Frame"),
         m_tool_frame_spins,
-        QStringLiteral("工具参考系，可选，用于工艺或规划场景定义。"),
+        QStringLiteral("工具参考系，可选。"),
         &m_tool_frame_enabled_check);
     createFrameEditor(
         QStringLiteral("Workpiece Frame"),
         m_workpiece_frame_spins,
-        QStringLiteral("工件参考系，可选，用于工艺或规划场景定义。"),
+        QStringLiteral("工件参考系，可选。"),
         &m_workpiece_frame_enabled_check);
-    createFrameEditor(QStringLiteral("TCP Frame"), m_tcp_frame_spins, QStringLiteral("TCP 坐标系，相对法兰坐标系定义。"));
+    createFrameEditor(QStringLiteral("TCP Frame"), m_tcp_frame_spins, QStringLiteral("TCP 坐标系。"));
     layout->addLayout(framesLayout);
 
     if (m_tool_frame_enabled_check != nullptr)
@@ -670,10 +676,7 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     {
         auto* spinBox = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
         m_fk_joint_spins[static_cast<std::size_t>(index)] = spinBox;
-        // 中文说明：FK 关节输入可能在拖动时高频变化，这里只排队刷新，真正计算由 QTimer 节流触发。
-        connect(spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) {
-            ScheduleActivePreviewUpdate();
-        });
+        // 注意：此处事件绑定已被统一移入 ConnectDirtyTracking，避免重复绑定。
         fkGrid->addWidget(new QLabel(QStringLiteral("J%1").arg(index + 1), groupBox), 1, index);
         fkGrid->addWidget(spinBox, 2, index);
     }
@@ -817,6 +820,7 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsWidget::CollectModelFromFo
     model.ik_solver_config.orientation_tolerance_deg = m_orientation_tolerance_spin->value();
     model.ik_solver_config.step_gain = m_step_gain_spin->value();
     model.joint_count = static_cast<int>(model.links.size());
+    
     if (model.master_model_type == QStringLiteral("urdf"))
     {
         if (model.dh_draft_extraction_level.trimmed().isEmpty())
@@ -891,6 +895,7 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
     m_orientation_tolerance_spin->setValue(model.ik_solver_config.orientation_tolerance_deg);
     m_step_gain_spin->setValue(model.ik_solver_config.step_gain);
     m_workspace_sample_count_spin->setValue(128);
+    
     m_is_populating_form = false;
     RefreshEditingState();
     RefreshModelStatusLabels();
@@ -1016,6 +1021,7 @@ void KinematicsWidget::RenderResults()
         : QStringLiteral("未启用")));
     lines.push_back(QStringLiteral("TCP Frame 偏移[m] = %1").arg(FormatArray3(m_state.current_model.tcp_frame.translation_m, 4)));
     lines.push_back(QStringLiteral("骨架预览：%1").arg(FormatPreviewSceneSummary(m_preview_scene)));
+    
     if (!m_preview_scene.IsEmpty())
     {
         lines.push_back(QStringLiteral("预览模型名：%1").arg(m_preview_scene.model_name));
@@ -1151,241 +1157,126 @@ void KinematicsWidget::EmitTelemetryStatus(
         warning);
 }
 
-// 【排队总指挥】：当用户在界面上拖动滑块时，第一时间触发这个函数
-void KinematicsWidget::ScheduleActivePreviewUpdate()
+// =========================================================================
+// 通道 A：结构变动处理 (重量级重建)
+// =========================================================================
+void KinematicsWidget::SyncStructureAndPreview()
 {
-    // 如果当前正在用后台数据自动填充表单（PopulateForm），则直接返回。
-    // 这是为了防止 UI 自动赋值时错误触发连环回调，导致死循环。
-    if (m_is_populating_form)
-    {
-        return;
+    if (m_is_populating_form) return;
+
+    // 1. 收集界面草稿
+    auto draftModel = CollectModelFromForm();
+
+    // 如果当前是 URDF 只读模式，不允许利用表格直接驱动底层骨架改变
+    if (draftModel.master_model_type == QStringLiteral("urdf")) {
+        return; 
     }
 
-    // 【路由判断】：
-    // 如果当前预览的是 DH 骨架 (dh_preview)，或者主模型根本就不是 URDF，
-    // 说明此时任何改动都可能涉及连杆长度、结构的改变。
-    if (m_preview_source_mode == QStringLiteral("dh_preview") ||
-        m_state.current_model.master_model_type != QStringLiteral("urdf"))
-    {
-        // 走重量级路线：排队请求“重建 3D 场景”
-        ScheduleDhPreviewSceneUpdate();
-        return;
-    }
+    // 只要结构发生变动（包含从拓扑更新），强制赋予带时间戳的唯一 ID。
+    // 这将迫使物理引擎彻底销毁旧缓存，重新解析新的 DH 参数建树！
+    draftModel.unified_robot_model_ref = QStringLiteral("dh_preview::%1_%2")
+        .arg(draftModel.meta.kinematic_id.trimmed().isEmpty() ? QStringLiteral("default") : draftModel.meta.kinematic_id.trimmed())
+        .arg(QDateTime::currentMSecsSinceEpoch());
 
-    // 否则（说明当前是 URDF 主模型，结构锁死，只能动关节），
-    // 走轻量级路线：排队请求“更新矩阵位姿”
-    SchedulePreviewPoseUpdate();
-}
-// 【发车总指挥】：当定时器 (16ms) 超时，也就是用户停止拖动时，触发这个函数
-void KinematicsWidget::FlushActivePreviewUpdate()
-{
-    // 【路由判断】：
-    // 如果当前是 URDF 预览模式，并且确实存在 URDF 文件路径
-    if (m_preview_source_mode == QStringLiteral("urdf_preview") &&
-        !m_preview_model.urdf_source_path.trimmed().isEmpty())
-    {
-        // 走轻量级路线：执行矩阵位姿更新
-        FlushPreviewPoseUpdate();
-        return;
-    }
-
-    // 否则，兜底走重量级路线：执行 3D 场景重建
-    FlushDhPreviewSceneUpdate();
-}
-
-// 【轻量级 - 排队】：准备更新关节位姿
-void KinematicsWidget::SchedulePreviewPoseUpdate()
-{
-    // 异常拦截：防抖定时器没初始化、当前没有 3D 场景、或者没有 URDF 文件，统统不排队。
-    if (m_preview_pose_update_timer == nullptr ||
-        m_preview_scene.IsEmpty() ||
-        m_preview_model.urdf_source_path.trimmed().isEmpty())
-    {
-        return;
-    }
-
-    // 重置并启动防抖定时器。如果 16ms 内再次调用，定时器会重新从 0 开始算。
-    m_preview_pose_update_timer->start();
-}
-// 【轻量级 - 执行】：真正计算并发送新的 4x4 变换矩阵
-void KinematicsWidget::FlushPreviewPoseUpdate()
-{
-    // 再次进行异常拦截（因为这是延迟执行的，在此期间可能模型被清空了）
-    if (m_preview_scene.IsEmpty() ||
-        m_preview_model.urdf_source_path.trimmed().isEmpty())
-    {
-        return;
-    }
-
-    // 获取当前模型需要的关节总数
-    const int expectedJointCount = m_preview_model.joint_count;
-    if (expectedJointCount <= 0)
-    {
-        return;
-    }
-
-    // 安全检查：如果模型需要的关节数，比界面上提供的输入框（m_fk_joint_spins，通常是 6 个）还要多，
-    // 说明 UI 承载不了这个复杂的机器人，输出警告并放弃刷新。
-    if (expectedJointCount > static_cast<int>(m_fk_joint_spins.size()))
-    {
-        emit LogMessageGenerated(
-            QStringLiteral("[Kinematics][Warning] 当前工程模型预览关节数量=%1，超过页面 FK 输入数量=%2，已跳过动态预览刷新。")
-                .arg(expectedJointCount)
-                .arg(static_cast<int>(m_fk_joint_spins.size())));
-        return;
-    }
-
-    // 收集界面上滑块的角度值
-    std::vector<double> jointPositionsDeg;
-    jointPositionsDeg.reserve(static_cast<std::size_t>(expectedJointCount));
-    for (int index = 0; index < expectedJointCount; ++index)
-    {
-        const auto spinIndex = static_cast<std::size_t>(index);
-        // 读取对应的 SpinBox 值，如果指针为空则默认给 0.0
-        jointPositionsDeg.push_back(m_fk_joint_spins[spinIndex] != nullptr
-            ? m_fk_joint_spins[spinIndex]->value()
-            : 0.0);
-    }
-
-    // 【核心算力调用】：让 Service (通常包裹了 Pinocchio 等数学引擎) 根据新角度算正解，
-    // 得到每个 Link（连杆）在世界坐标系下的绝对位姿 (Pose)。
-    const auto updateResult = m_service.UpdatePreviewPoses(m_preview_model, jointPositionsDeg);
+    // 2. 调用 Service 的通道 A 接口重建引擎环境与场景
+    const QString projectRootPath = RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    auto angles = CollectJointInputs(m_fk_joint_spins);
     
-    // 如果数学引擎计算报错（例如奇异点、超出范围等）
-    if (!updateResult.IsSuccess())
+    const auto buildResult = m_service.BuildDhPreviewScene(draftModel, angles, projectRootPath);
+
+    if (buildResult.IsSuccess())
     {
-        emit LogMessageGenerated(QStringLiteral("[Kinematics][Warning] %1").arg(updateResult.message));
-        return;
-    }
-
-    // 计算成功！将算好的所有连杆位姿（通常是个 Map<String, Pose>）通过信号广播出去。
-    // 主窗口里的 3D 渲染器（VTK/OpenGL）收到后，直接对对应的 Actor 应用新的 Transform，瞬间完成画面更新。
-    emit PreviewPosesUpdated(updateResult.link_world_poses);
-}
-
-// 【重量级 - 排队】：准备摧毁旧模型并生成新骨架
-void KinematicsWidget::ScheduleDhPreviewSceneUpdate()
-{
-    // 如果正在自动填充表单（避免误触），或者定时器为空，不排队。
-    if (m_is_populating_form || m_preview_pose_update_timer == nullptr)
-    {
-        return;
-    }
-
-    // 虽然重建场景很耗性能，但我们依然复用了同一个 16ms 定时器来进行节流防抖。
-    // 只要用户还在表格里连续快速输入数字，就不会真正触发极其卡顿的场景重建 (FlushDhPreviewSceneUpdate)。
-    m_preview_pose_update_timer->start();
-}
-void KinematicsWidget::FlushDhPreviewSceneUpdate()
-{
-    // ==========================================
-    // 第一步：从 UI 收集数据，并强制覆写状态机标志位
-    // ==========================================
-    
-    // 1. 读取当前界面上所有输入框和表格的值，打包成 DTO
-    m_state.current_model = CollectModelFromForm();
-    
-    // 2. 强制宣告主权：当前模型的主数据源是 DH/MDH 参数，不再是 URDF
-    m_state.current_model.master_model_type = QStringLiteral("dh_mdh");
-    // 标记当前派生状态为“新鲜”（表示刚生成，没有过期）
-    m_state.current_model.derived_model_state = QStringLiteral("fresh");
-    // 锁定 UI 权限：DH 表格可编辑，URDF 视图相关逻辑锁定
-    m_state.current_model.dh_editable = true;
-    m_state.current_model.urdf_editable = false;
-
-    // ==========================================
-    // 第二步：数据清洗与容错 (Sanitization)
-    // ==========================================
-    
-    // 中文说明：从 URDF 提取草案切回 DH/MDH 主模型时，参数约定必须收敛为有效的 DH 或 MDH，
-    // 否则后端校验会把当前草稿继续当成 URDF 口径，导致中央骨架预览构建失败。
-    // 【解析】：如果之前的草案是从 URDF 强行提取的，它的参数约定（parameter_convention）可能是乱码或空的。
-    // 这里做一个安全兜底：如果不是标准的 "DH" 或 "MDH"，就强行重置为 "DH"，防止后端引擎解析崩溃。
-    if (m_state.current_model.parameter_convention != QStringLiteral("DH") &&
-        m_state.current_model.parameter_convention != QStringLiteral("MDH"))
-    {
-        m_state.current_model.parameter_convention = QStringLiteral("DH");
-    }
-    
-    // 同步内部的建模模式和诊断日志
-    m_state.current_model.modeling_mode = m_state.current_model.parameter_convention;
-    m_state.current_model.conversion_diagnostics = QStringLiteral("当前草稿以 DH/MDH 参数为主模型。");
-    
-    // 刷新后端的诊断状态（检查是否缺少必填项等）
-    RefreshBackendDiagnostics();
-
-
-    // ==========================================
-    // 第三步：调用底层物理引擎进行计算 (重量级操作)
-    // ==========================================
-    
-    // 获取当前项目的磁盘根路径
-    const QString projectRootPath =
-        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+        // 3. 静默吸收引擎分配的内部签名，绝对不反写表格以防打断用户输入
+        m_state.current_model.unified_robot_snapshot = buildResult.preview_model.unified_robot_snapshot;
+        m_state.current_model.joint_order_signature = buildResult.preview_model.joint_order_signature;
+        m_state.current_model.pinocchio_model_ready = buildResult.preview_model.pinocchio_model_ready;
+        m_state.current_model.conversion_diagnostics = buildResult.preview_model.conversion_diagnostics;
+        m_state.current_model.unified_robot_model_ref = buildResult.preview_model.unified_robot_model_ref;
         
-    // 【核心调用】：把模型参数、当前的关节角度传给 Service。
-    // 引擎会根据 DH 参数计算连杆变换，生成对应的 3D 几何体描述（PreviewScene）
-    const auto buildResult = m_service.BuildDhPreviewScene(
-        m_state.current_model,
-        CollectJointInputs(m_fk_joint_spins),
-        projectRootPath);
+        m_preview_scene = buildResult.preview_scene;
+        m_preview_model = buildResult.preview_model;
+        m_preview_source_mode = QStringLiteral("dh_preview");
+
+        // 4. 发射重绘信号给 VTK
+        emit PreviewSceneGenerated(m_preview_scene);
         
-        
-    // ==========================================
-    // 第四步：异常处理 (如果构建失败)
-    // ==========================================
-    if (!buildResult.IsSuccess())
-    {
-        // 如果后端引擎报错（比如 DH 参数写得不合法导致矩阵奇异等）
-        // 1. 在 UI 顶部显示警告红字
-        SetOperationMessage(buildResult.message, false, true);
-        // 2. 发送到底部状态栏
-        EmitTelemetryStatus(QStringLiteral("DH/MDH 主模型"), buildResult.message, true);
-        // 3. 渲染右下角的结果文本框
+        RefreshBackendDiagnostics();
         RenderResults();
         RefreshModelStatusLabels();
-        // 4. 打印日志并中断执行
-        emit LogMessageGenerated(QStringLiteral("[Kinematics][Warning] %1").arg(buildResult.message));
+    }
+    else 
+    {
+        SetOperationMessage(buildResult.message, false, true);
+        EmitTelemetryStatus(QStringLiteral("DH/MDH 主模型"), buildResult.message, true);
+    }
+}
+
+// =========================================================================
+// 通道 B：姿态变动处理 (轻量级位姿更新 / 骨架实时重绘)
+// =========================================================================
+void KinematicsWidget::SyncPoseOnly()
+{
+    if (m_is_populating_form) return;
+
+    auto angles = CollectJointInputs(m_fk_joint_spins);
+
+    // =====================================================================
+    // 路线 1：DH/MDH 主模型
+    // =====================================================================
+    if (m_state.current_model.master_model_type == QStringLiteral("dh_mdh"))
+    {
+        // 【核心修复 1】：必须抓取界面上实时的表格数据，而不是用旧的缓存
+        auto liveModel = CollectModelFromForm();
+        liveModel.unified_robot_model_ref = m_state.current_model.unified_robot_model_ref;
+        liveModel.joint_order_signature = m_state.current_model.joint_order_signature;
+
+        RoboSDP::Kinematics::Dto::FkRequestDto request;
+        request.joint_positions_deg = angles;
+        // 自动将界面上的 6 个角度截断为模型实际需要的数量（例如 2 个）
+        request.joint_positions_deg.resize(static_cast<std::size_t>(liveModel.joint_count), 0.0);
+
+        // 调用基于 Pinocchio 共享内核的 SolveFk
+        const auto fkResult = m_service.SolveFk(liveModel, request);
+
+        if (fkResult.success)
+        {
+            PreviewPoseMap poseMap;
+            poseMap[QStringLiteral("base_link")] = liveModel.base_frame;
+            for (const auto& linkPose : fkResult.link_poses)
+            {
+                poseMap[linkPose.link_id] = linkPose.pose;
+            }
+            poseMap[QStringLiteral("tcp_frame")] = fkResult.tcp_pose;
+            
+            emit PreviewPosesUpdated(poseMap);
+            // 成功时可选打印日志，避免拖动时日志刷屏
+            // emit LogMessageGenerated(QStringLiteral("[Kinematics] DH/MDH 姿态刷新成功。"));
+        }
+        else 
+        {
+            // 【核心修复 2】：绝对不能静默失败！把拦截原因红字打在公屏上！
+            emit LogMessageGenerated(QStringLiteral("[Kinematics][Error] DH/MDH 姿态刷新被拦截：%1").arg(fkResult.message));
+        }
         return;
     }
 
-
-    // ==========================================
-    // 第五步：同步引擎快照与 UI 状态 (非常关键)
-    // ==========================================
-    
-    // 中文说明：DH 主模型预览成功后，以 Service 返回的统一模型快照覆盖当前草稿，
-    // 这样项目保存、状态展示和后续跨模块主链都能读到同一份 unified_robot_model_ref / joint_order_signature。
-    // 【解析】：注意这里！引擎不仅仅是返回了 3D 画面，它还“加工”了你的 current_model。
-    // 比如它会自动为你生成全局唯一的关节顺序签名 (joint_order_signature)。
-    // 必须用引擎返回的 preview_model 覆盖界面的 current_model，否则保存到硬盘的数据会缺少这些关键签名！
-    m_state.current_model = buildResult.preview_model;
-    
-    // 保存 3D 场景数据和预览数据模式
-    m_preview_scene = buildResult.preview_scene;
-    m_preview_model = buildResult.preview_model;
-    m_preview_source_mode = QStringLiteral("dh_preview");
-    
-    // 再次刷新面板上的文字状态和诊断信息
-    RefreshBackendDiagnostics();
-    RenderResults();
-    RefreshModelStatusLabels();
-    
-    // 告诉底部状态栏：Pinocchio 引擎计算完毕
-    EmitTelemetryStatus(QStringLiteral("Pinocchio"), buildResult.message, false);
-    
-    // 【最终动作】：把生成好的 3D 场景数据通过信号发射出去，主窗口的 VTK 会接住它并渲染出机器人模型。
-    emit PreviewSceneGenerated(m_preview_scene);
+    // =====================================================================
+    // 路线 2：URDF 工程模型
+    // =====================================================================
+    const auto updateResult = m_service.UpdatePreviewPoses(m_state.current_model, angles);
+    if (updateResult.IsSuccess() && !updateResult.link_world_poses.empty())
+    {
+        emit PreviewPosesUpdated(updateResult.link_world_poses);
+    }
+    else 
+    {
+        // 同样，把 URDF 失败的原因打印出来
+        emit LogMessageGenerated(QStringLiteral("[Kinematics][Warning] URDF 姿态刷新被拦截：%1").arg(updateResult.message));
+    }
 }
-
 void KinematicsWidget::ClearPreviewContext()
 {
-    if (m_preview_pose_update_timer != nullptr)
-    {
-        m_preview_pose_update_timer->stop();
-    }
-
-    // 中文说明：从 Topology/JSON 切换模型结构时，旧中央预览上下文不能继续留在视图里。
+    // 从 Topology/JSON 切换模型结构时，旧中央预览上下文不能继续留在视图里。
     m_preview_scene = PreviewSceneDto {};
     m_preview_model = RoboSDP::Kinematics::Dto::KinematicModelDto {};
     m_preview_source_mode = QStringLiteral("none");
@@ -1539,7 +1430,7 @@ void KinematicsWidget::OnImportUrdfClicked()
         RefreshBackendDiagnostics();
         RenderResults();
         emit PreviewSceneGenerated(m_preview_scene);
-        SchedulePreviewPoseUpdate();
+        SyncPoseOnly(); // 调用新版矩阵计算通道
         MarkDirty();
     }
 
@@ -1547,28 +1438,56 @@ void KinematicsWidget::OnImportUrdfClicked()
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(importResult.message));
 }
 
+/**
+ * @brief 槽函数：响应用户点击“从 Topology 生成”按钮的事件。
+ * @details 
+ * 该函数负责调用底层服务，读取当前项目的拓扑配置文件，将其映射为标准的 DH/MDH 运动学参数，
+ * 并驱动界面的数据表格和右侧的 3D VTK 视图进行一次“重量级”的同步刷新（通道 A）。
+ */
 void KinematicsWidget::OnBuildFromTopologyClicked()
 {
+    // 1. 获取当前项目的根目录路径，用于底层服务读取对应的 Topology JSON 文件
     const QString projectRootPath =
         RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+        
+    // 2. 调用核心业务层：执行“拓扑到运动学”的核心算法映射
     const auto buildResult = m_service.BuildFromTopology(projectRootPath);
+    
+    // 3. 检查底层转换是否成功
     if (buildResult.IsSuccess())
     {
+        // 3.1 更新当前界面的内存状态机
         m_state = buildResult.state;
-        ClearPreviewContext();
         
-        // 1. 先用新的 D-H 模型填充表格
+        // 【重要架构细节】：这里注释掉了 ClearPreviewContext();
+        // 原因：ClearPreviewContext 会发射一个“空场景”信号。如果在这里调用，
+        // 紧接着下方的 SyncStructureAndPreview() 又会发射一个“新场景”信号。
+        // 这在 Qt 和 VTK 的异步渲染队列中极易引发“竞态条件 (Race Condition)”，
+        // 导致画面闪烁或者新的渲染指令被丢弃，因此直接复写即可，无需清屏。
+        // ClearPreviewContext(); 
+        
+        // 3.2 数据流向 UI：将后台生成的全新 D-H 模型数据回填到界面的 QTableWidget 和 SpinBox 中
+        // 注意：PopulateForm 内部会设置 m_is_populating_form = true，防止触发连环的 cellChanged 信号
         PopulateForm(m_state.current_model);
         
-        // 2. 【核心修复】：删除旧的 FlushDhPreviewSceneUpdate()，使用新的实时正解渲染器！
-        UpdateKinematicsPreview(); 
+        // 3.3 数据流向 3D 引擎：【核心修改 - 调用通道 A】
+        // 由于是从拓扑全新生成的模型，机器人的物理尺寸 ($a, \alpha, d, \theta$) 已经发生了根本改变。
+        // 因此必须走“重量级重建”通道：强制底层 Pinocchio 物理引擎销毁旧缓存、重新建树，
+        // 并向主窗口发射 PreviewSceneGenerated 信号，让 VTK 重新绘制所有的圆柱体和网格。
+        SyncStructureAndPreview(); 
         
+        // 3.4 刷新右下角的文本诊断面板和结果摘要
         RefreshBackendDiagnostics();
         RenderResults();
+        
+        // 3.5 将当前页面标记为“已修改但未保存”（Dirty），激活顶部的“保存草稿”按钮
         MarkDirty();
     }
 
+    // 4. 用户交互反馈：在界面底部的状态栏显示成功或失败的提示文本
     SetOperationMessage(buildResult.message, buildResult.IsSuccess());
+    
+    // 5. 记录系统日志，抛给主窗口的 Console 面板
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(buildResult.message));
 }
 
@@ -1645,7 +1564,8 @@ void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
     m_state.current_model.dh_editable = true;
     m_state.current_model.urdf_editable = false;
     m_state.current_model.modeling_mode = m_state.current_model.parameter_convention;
-    m_state.current_model.model_source_mode = QStringLiteral("urdf_draft_promoted");
+    // m_state.current_model.model_source_mode = QStringLiteral("urdf_draft_promoted");
+    m_state.current_model.model_source_mode = QStringLiteral("manual_seed");
     if (m_state.current_model.parameter_convention != QStringLiteral("DH") &&
         m_state.current_model.parameter_convention != QStringLiteral("MDH"))
     {
@@ -1659,13 +1579,15 @@ void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
     m_state.current_model.urdf_source_path.clear();
     m_state.current_model.pinocchio_model_ready = false;
     m_state.current_model.unified_robot_model_ref.clear();
-    // 中文说明：从 URDF 草案切成 DH 主模型后，关节顺序签名必须按当前参数表重建，不能继续复用导入态的路径型签名。
     m_state.current_model.joint_order_signature.clear();
     m_state.current_model.unified_robot_snapshot = {};
 
     ClearPreviewContext();
     PopulateForm(m_state.current_model);
-    FlushDhPreviewSceneUpdate();
+    
+    // 【核心修改】：通过通道 A 同步重建三维骨架
+    SyncStructureAndPreview();
+
     MarkDirty();
 
     const QString message = QStringLiteral("已切换为 DH/MDH 主模型模式，中央骨架与派生产物已按参数化主链刷新。");
@@ -1812,7 +1734,9 @@ void KinematicsWidget::OnSwitchToUrdfMasterClicked()
     RefreshBackendDiagnostics();
     RenderResults();
     emit PreviewSceneGenerated(m_preview_scene);
-    SchedulePreviewPoseUpdate();
+    
+    SyncPoseOnly(); // 调用通道 B 更新姿态
+
     MarkDirty();
 
     const QString message = QStringLiteral("已切换为 URDF 主模型模式，中央视图改由工程模型预览驱动。");
@@ -1915,7 +1839,13 @@ void KinematicsWidget::OnLoadClicked()
         PopulateForm(m_state.current_model);
         if (m_state.current_model.master_model_type != QStringLiteral("urdf"))
         {
-            FlushDhPreviewSceneUpdate();
+            // 【核心修改】：通过通道 A 重建三维骨架
+            SyncStructureAndPreview();
+        }
+        else 
+        {
+            // 【核心修改】：通过通道 B 恢复三维姿态
+            SyncPoseOnly();
         }
         RefreshBackendDiagnostics();
         RenderResults();
@@ -1926,26 +1856,4 @@ void KinematicsWidget::OnLoadClicked()
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(loadResult.message));
 }
 
-// KinematicsWidget.cpp 末尾添加
-
-void KinematicsWidget::UpdateKinematicsPreview()
-{
-    // 1. 收集当前的拓扑尺寸（这里建议从 m_state 或通过 service 获取最新的副本）
-    // 为了简单，我们先获取当前的运动学模型
-    const auto& model = m_state.current_model;
-    
-    // 2. 收集当前的关节角度
-    std::vector<double> currentAngles;
-    for (int i = 0; i < 6; ++i) {
-        currentAngles.push_back(m_fk_joint_spins[i]->value());
-    }
-
-    // 3. 调用 Service 生成带真实位姿的场景
-    // 注意：我们需要一个能接收 RobotTopologyModelDto 的转换函数，
-    // 或者直接在 KinematicsService 里增加一个接收 KinematicModelDto 的重载
-    auto scene = m_service.GenerateSkeletonPreviewFromKinematicModel(model, currentAngles);
-
-    // 4. 发射预览信号
-    emit KinematicsPreviewGenerated(scene);
-}
 } // namespace RoboSDP::Kinematics::Ui

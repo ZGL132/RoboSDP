@@ -13,6 +13,7 @@
 #include <vtkActor.h>
 #include <vtkArrowSource.h>
 #include <vtkAxesActor.h>
+#include <vtkTubeFilter.h>
 #include <vtkBillboardTextActor3D.h>
 #include <vtkCaptionActor2D.h>
 #include <vtkLineSource.h>
@@ -527,7 +528,16 @@ void AddNodeLabel(
     labelActor->SetPosition(position[0], position[1], position[2]);
     labelActor->GetTextProperty()->SetFontSize(13);
     labelActor->GetTextProperty()->SetColor(0.74, 0.84, 0.92);
-    labelActor->GetTextProperty()->SetBold(false);
+    labelActor->GetTextProperty()->SetBold(true); // 稍微加粗更易读
+
+    // 【新增】：开启阴影，防止文字和浅色背景融为一体
+    labelActor->GetTextProperty()->SetShadow(true);
+    labelActor->GetTextProperty()->SetShadowOffset(1, -1);
+
+    // 【可选新增】：或者给文字加一个黑色的半透明背景框
+    // labelActor->GetTextProperty()->SetBackgroundColor(0.0, 0.0, 0.0);
+    // labelActor->GetTextProperty()->SetBackgroundOpacity(0.5);
+
     renderer->AddActor(labelActor);
 }
 
@@ -574,10 +584,13 @@ void AddJointLabel(
 {
     vtkNew<vtkBillboardTextActor3D> labelActor;
     labelActor->SetInput(segment.joint_name.toStdString().c_str());
+    
+    // 【修复】：将 end_position_m 改为 start_position_m
     labelActor->SetPosition(
-        segment.end_position_m[0] - labelOffset * 0.9,
-        segment.end_position_m[1] + labelOffset * 0.25,
-        segment.end_position_m[2] + labelOffset * 0.55);
+        segment.start_position_m[0] - labelOffset * 0.0,
+        segment.start_position_m[1] + labelOffset * 0.0,
+        segment.start_position_m[2] + labelOffset * 0.0);
+        
     labelActor->GetTextProperty()->SetFontSize(12);
     labelActor->GetTextProperty()->SetColor(0.84, 0.78, 0.42);
     labelActor->GetTextProperty()->SetBold(false);
@@ -592,13 +605,13 @@ void AddJointHighlight(
     double opacity)
 {
     vtkNew<vtkSphereSource> jointSphere;
-    jointSphere->SetRadius(nodeRadius * 1.35);
+    jointSphere->SetRadius(nodeRadius * 1.0);
     jointSphere->SetThetaResolution(24);
     jointSphere->SetPhiResolution(24);
     jointSphere->SetCenter(
-        segment.end_position_m[0],
-        segment.end_position_m[1],
-        segment.end_position_m[2]);
+        segment.start_position_m[0],
+        segment.start_position_m[1],
+        segment.start_position_m[2]);
 
     vtkNew<vtkPolyDataMapper> jointMapper;
     jointMapper->SetInputConnection(jointSphere->GetOutputPort());
@@ -607,6 +620,15 @@ void AddJointHighlight(
     jointActor->SetMapper(jointMapper);
     jointActor->GetProperty()->SetColor(colors->GetColor3d("Yellow").GetData());
     jointActor->GetProperty()->SetOpacity(opacity);
+
+    // 【新增】：给关节球添加金属光泽
+    if (opacity > 0.9)
+    { // 如果是不透明状态，强化光影
+        jointActor->GetProperty()->SetSpecular(0.5);
+        jointActor->GetProperty()->SetSpecularPower(30.0);
+        jointActor->GetProperty()->SetAmbient(0.1);
+    }
+
     renderer->AddActor(jointActor);
 }
 
@@ -628,16 +650,14 @@ void AddJointAxisArrow(
         return;
     }
 
-    const auto* childNode = FindNodeByLinkName(previewScene, segment.child_link_name);
-    if (childNode == nullptr)
+    const auto* parentNode = FindNodeByLinkName(previewScene, segment.parent_link_name);
+    if (parentNode == nullptr)
     {
         return;
     }
 
-    const std::array<double, 3> localAxis =
-        NormalizeVector(segment.joint_axis_xyz, {0.0, 0.0, 1.0});
-    const std::array<double, 3> axisWorld =
-        TransformDirectionByPose(childNode->world_pose, localAxis);
+    const std::array<double, 3> localAxis = NormalizeVector(segment.joint_axis_xyz, {0.0, 0.0, 1.0});
+    const std::array<double, 3> axisWorld = TransformDirectionByPose(parentNode->world_pose, localAxis);
     const std::array<double, 3> helper =
         std::abs(axisWorld[2]) < 0.92 ? std::array<double, 3>{0.0, 0.0, 1.0}
                                       : std::array<double, 3>{0.0, 1.0, 0.0};
@@ -645,14 +665,14 @@ void AddJointAxisArrow(
         NormalizeVector(CrossVector(helper, axisWorld), {0.0, 1.0, 0.0});
     const std::array<double, 3> basisZ =
         NormalizeVector(CrossVector(axisWorld, basisY), {0.0, 0.0, 1.0});
-    const double axisLength = std::max(nodeRadius * 7.5, 0.12);
+    const double axisLength = std::max(nodeRadius * 5.0, 0.08);
 
     vtkNew<vtkArrowSource> arrowSource;
     arrowSource->SetTipResolution(24);
     arrowSource->SetShaftResolution(18);
-    arrowSource->SetTipLength(0.28);
-    arrowSource->SetTipRadius(0.08);
-    arrowSource->SetShaftRadius(0.026);
+    arrowSource->SetTipLength(0.25);
+    arrowSource->SetTipRadius(0.04);
+    arrowSource->SetShaftRadius(0.012);
 
     vtkNew<vtkMatrix4x4> axisMatrix;
     axisMatrix->Identity();
@@ -661,7 +681,7 @@ void AddJointAxisArrow(
         axisMatrix->SetElement(row, 0, axisWorld[static_cast<std::size_t>(row)] * axisLength);
         axisMatrix->SetElement(row, 1, basisY[static_cast<std::size_t>(row)] * axisLength);
         axisMatrix->SetElement(row, 2, basisZ[static_cast<std::size_t>(row)] * axisLength);
-        axisMatrix->SetElement(row, 3, segment.end_position_m[static_cast<std::size_t>(row)]);
+        axisMatrix->SetElement(row, 3, segment.start_position_m[static_cast<std::size_t>(row)]);
     }
 
     vtkNew<vtkTransform> axisTransform;
@@ -678,6 +698,8 @@ void AddJointAxisArrow(
     axisActor->SetMapper(axisMapper);
     axisActor->GetProperty()->SetColor(0.25, 1.0, 0.20);
     axisActor->GetProperty()->SetOpacity(0.92);
+    // 【新增】：禁用光照，让坐标轴保持纯色高亮，不受场景阴影影响
+    axisActor->GetProperty()->SetLighting(false);
     renderer->AddActor(axisActor);
 }
 
@@ -904,13 +926,22 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
                 segment.end_position_m[1],
                 segment.end_position_m[2]);
 
+            // 【新增】：使用 vtkTubeFilter 将线条变成 3D 圆管
+            vtkNew<vtkTubeFilter> tubeFilter;
+            tubeFilter->SetInputConnection(lineSource->GetOutputPort());
+            tubeFilter->SetRadius(nodeRadius * 0.1); // 连杆稍微比关节球细一点
+            tubeFilter->SetNumberOfSides(16);        // 圆柱切面数，保证圆滑
+
             vtkNew<vtkPolyDataMapper> lineMapper;
-            lineMapper->SetInputConnection(lineSource->GetOutputPort());
+            lineMapper->SetInputConnection(tubeFilter->GetOutputPort()); // 改为接收 tubeFilter
 
             vtkNew<vtkActor> lineActor;
             lineActor->SetMapper(lineMapper);
             lineActor->GetProperty()->SetColor(colors->GetColor3d("DeepSkyBlue").GetData());
-            lineActor->GetProperty()->SetLineWidth(4.0);
+            // 【新增】：添加高光和漫反射，增强 3D 金属/塑料质感
+            lineActor->GetProperty()->SetDiffuse(0.8);
+            lineActor->GetProperty()->SetSpecular(0.3);
+            lineActor->GetProperty()->SetSpecularPower(20.0);
             lineActor->GetProperty()->SetOpacity(skeletonSegmentOpacity);
             renderer->AddActor(lineActor);
         }
