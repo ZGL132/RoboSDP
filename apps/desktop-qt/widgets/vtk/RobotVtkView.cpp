@@ -19,6 +19,7 @@
 #include <vtkProperty.h>
 #include <vtkRenderer.h>
 #include <vtkTextProperty.h>
+#include <vtkTextActor.h>   // <--- 【新增】
 #endif
 
 namespace RoboSDP::Desktop::Vtk
@@ -317,6 +318,28 @@ void RobotVtkView::BuildVtkView()
     m_renderer = renderer;
 
     BuildCornerAxesWidget();
+
+    // 🔽🔽🔽 【新增水印初始化代码】 🔽🔽🔽
+    m_watermark_actor = vtkSmartPointer<vtkTextActor>::New();
+    m_watermark_actor->SetInput("No Preview Model"); // 默认文本
+    // 设置文字属性
+    vtkTextProperty* textProp = m_watermark_actor->GetTextProperty();
+    textProp->SetFontSize(16);          // 字体大小
+    textProp->SetColor(0.8, 0.8, 0.8);  // 浅灰色
+    textProp->SetOpacity(0.6);          // 半透明效果，不喧宾夺主
+    textProp->SetBold(true);
+    textProp->SetShadow(true);          // 开启阴影让文字在任何背景下都清晰
+    textProp->SetShadowOffset(1, -1);
+    
+    // 设置水印位置：屏幕右上角 (以屏幕像素系为基准)
+    // VTK 的 SetPosition2 是用 Normalized Viewport (0~1) 坐标的，这里我们直接给具体像素位置或者比例
+    m_watermark_actor->GetPositionCoordinate()->SetCoordinateSystemToNormalizedViewport();
+    m_watermark_actor->SetPosition(0.02, 0.95); // 0.02(左) 0.95(上)，即左上角
+
+    m_renderer->AddActor2D(m_watermark_actor); // 加入渲染器 (2D 覆盖层)
+    // 🔼🔼🔼 【新增结束】 🔼🔼🔼
+
+
     m_layout->addWidget(m_vtkWidget, 1);
     RefreshScene();
 #endif
@@ -354,8 +377,15 @@ void RobotVtkView::BuildCornerAxesWidget()
         {
             return;
         }
-
-        captionActor->GetCaptionTextProperty()->SetFontSize(8);
+        // 🔽🔽🔽 【核心修复：彻底禁用自动缩放】 🔽🔽🔽
+        if (captionActor->GetTextActor())
+        {
+            captionActor->GetTextActor()->SetTextScaleModeToNone();
+        }
+        captionActor->BorderOff();
+        captionActor->LeaderOff();
+        // 🔼🔼🔼 【修复结束】 🔼🔼🔼
+        captionActor->GetCaptionTextProperty()->SetFontSize(12);
         captionActor->GetCaptionTextProperty()->SetBold(false);
         captionActor->GetCaptionTextProperty()->SetColor(0.80, 0.84, 0.88);
     };
@@ -419,6 +449,8 @@ void RobotVtkView::RefreshScene(bool resetCamera)
                 m_renderer,
                 displayOptions.show_axes,
                 displayOptions.show_ground_grid);
+                m_watermark_actor->SetInput("View: Minimal Test Scene");
+                m_watermark_actor->GetTextProperty()->SetColor(0.6, 0.6, 0.6); 
         }
         else
         {
@@ -428,7 +460,27 @@ void RobotVtkView::RefreshScene(bool resetCamera)
                 displayOptions,
                 m_link_actors,
                 m_link_mesh_geometries);
+
+           // 🔽🔽🔽 【修改这里的判断条件】 🔽🔽🔽
+            // 不再判断有没有外壳，而是判断场景数据里有没有携带真实的 URDF 文件路径
+            if (!m_currentScene.urdf_file_path.trimmed().isEmpty()) {
+                // 如果有路径，说明它是从一个真实的 URDF 文件里读出来的
+                m_watermark_actor->SetInput("[ Driven by: URDF Physical Model ]");
+                m_watermark_actor->GetTextProperty()->SetColor(0.4, 0.8, 1.0); // 科技蓝
+            } else {
+                // 如果没有路径，说明它是我们在内存里用 DH 参数硬算出来的骨架
+                m_watermark_actor->SetInput("[ Driven by: DH/MDH Kinematic Skeleton ]");
+                m_watermark_actor->GetTextProperty()->SetColor(1.0, 0.6, 0.2); // 警示橙色
+            }
+            // 🔼🔼🔼 【修改结束】 🔼🔼🔼
+
+
         }
+        // 🔽🔽🔽 【关键修复】：重新把水印贴回画布 🔽🔽🔽
+        // 因为 VtkSceneBuilder 内部调用了 RemoveAllViewProps() 清空了图层，
+        // 所以每次刷新后，必须重新把水印层注册进渲染器。
+        m_renderer->AddActor2D(m_watermark_actor);
+        // 🔼🔼🔼 【修复结束】 🔼🔼🔼
 
         if (resetCamera)
         {

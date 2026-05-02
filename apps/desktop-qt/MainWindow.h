@@ -118,6 +118,15 @@ private:
     /// 响应顶部功能区“打开项目”命令，校验 project.json 后更新全局项目上下文。
     void HandleOpenProjectRequested();
 
+    /// 处理项目树的右键菜单请求
+    void HandleProjectTreeContextMenu(const QPoint& pos);
+
+    /// 响应关闭项目请求
+    void HandleCloseProjectRequested();
+
+    /// 检查是否有未保存的更改，并弹窗询问用户。返回 false 表示用户点击了“取消”拦截关闭。
+    bool PromptForUnsavedChanges();
+
     /// 响应顶部功能区“保存”命令，执行全局保存编排。
     void HandleGlobalSaveRequested();
 
@@ -133,6 +142,10 @@ private:
     /// 向底部日志面板追加一条消息。
     void AppendLogLine(const QString& message);
 
+protected:
+    /// 重写主窗口的关闭事件（点击右上角 X 时触发），防止丢失数据
+    void closeEvent(QCloseEvent *event) override;
+    
 private:
     RoboSDP::Desktop::Ribbon::RibbonBarWidget* m_ribbonBar = nullptr;
     RoboSDP::Desktop::Vtk::RobotVtkView* m_robotVtkView = nullptr;

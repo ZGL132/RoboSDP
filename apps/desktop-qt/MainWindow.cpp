@@ -27,6 +27,8 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
+#include <QMenu>   
+#include <QCloseEvent> 
 
 namespace RoboSDP::Desktop
 {
@@ -336,6 +338,15 @@ void MainWindow::CreateProjectTreeDock()
 
     m_projectTreeDock->setWidget(m_projectTree);
     addDockWidget(Qt::LeftDockWidgetArea, m_projectTreeDock);
+
+    // 【新增：开启右键菜单策略并绑定信号】
+    m_projectTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(
+        m_projectTree,
+        &QTreeWidget::customContextMenuRequested,
+        this,
+        &MainWindow::HandleProjectTreeContextMenu);
+
 }
 
 void MainWindow::CreatePropertyDock()
@@ -923,5 +934,113 @@ void MainWindow::AppendLogLine(const QString& message)
     const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
     m_logPanel->appendPlainText(QStringLiteral("[%1] %2").arg(timestamp, message));
 }
+// 【新增实现代码】
+void MainWindow::HandleProjectTreeContextMenu(const QPoint& pos)
+{
+    // 获取当前鼠标右键点击的树节点
+    QTreeWidgetItem* clickedItem = m_projectTree->itemAt(pos);
 
+    // 检查是否有打开的项目
+    const bool isProjectOpen = !RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath().isEmpty();
+
+    // 只有当点击的是“根节点（主项目）”，并且当前确实有项目打开时，才弹出菜单
+    if (clickedItem == m_projectRootTreeItem && isProjectOpen)
+    {
+        QMenu contextMenu(this);
+        
+        QAction* closeAction = contextMenu.addAction(QStringLiteral("关闭项目"));
+        connect(closeAction, &QAction::triggered, this, &MainWindow::HandleCloseProjectRequested);
+        
+        // 在鼠标当前屏幕位置显示菜单
+        contextMenu.exec(m_projectTree->viewport()->mapToGlobal(pos));
+    }
+}
+
+void MainWindow::HandleCloseProjectRequested()
+{
+    // 调用拦截器：如果返回 false，说明用户取消了操作，直接 return 终止
+    if (!PromptForUnsavedChanges())
+    {
+        return; 
+    }
+
+    AppendLogLine(QStringLiteral("[INFO] [项目服务] 用户关闭了当前项目。"));
+    RoboSDP::Infrastructure::ProjectManager::instance().setCurrentProjectPath(QString());
+}
+// 🔽🔽🔽 【新增：未保存进度拦截核心逻辑】 🔽🔽🔽
+bool MainWindow::PromptForUnsavedChanges()
+{
+    // 1. 遍历检查所有注册的业务模块，看看是否有谁被修改过了 (Dirty)
+    bool hasUnsaved = false;
+    if (m_requirementWidget && m_requirementWidget->HasUnsavedChanges()) hasUnsaved = true;
+    if (m_topologyWidget && m_topologyWidget->HasUnsavedChanges()) hasUnsaved = true;
+    if (m_kinematicsWidget && m_kinematicsWidget->HasUnsavedChanges()) hasUnsaved = true;
+    if (m_dynamicsWidget && m_dynamicsWidget->HasUnsavedChanges()) hasUnsaved = true;
+    if (m_selectionWidget && m_selectionWidget->HasUnsavedChanges()) hasUnsaved = true;
+    if (m_planningWidget && m_planningWidget->HasUnsavedChanges()) hasUnsaved = true;
+    if (m_schemeWidget && m_schemeWidget->HasUnsavedChanges()) hasUnsaved = true;
+
+    // 如果大家都干干净净，直接放行
+    if (!hasUnsaved)
+    {
+        return true; 
+    }
+
+    // 2. 如果有未保存的内容，弹出工业标准的拦截对话框
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle(QStringLiteral("未保存的更改"));
+    msgBox.setText(QStringLiteral("当前项目有未保存的进度，关闭前是否要保存？"));
+    msgBox.setIcon(QMessageBox::Warning);
+    
+    // 设置三个标准按钮
+    msgBox.setStandardButtons(QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+    msgBox.setDefaultButton(QMessageBox::Save);
+    
+    // 汉化按钮文本以提升用户体验
+    msgBox.setButtonText(QMessageBox::Save, QStringLiteral("保存并关闭"));
+    msgBox.setButtonText(QMessageBox::Discard, QStringLiteral("放弃更改"));
+    msgBox.setButtonText(QMessageBox::Cancel, QStringLiteral("取消"));
+
+    const int ret = msgBox.exec();
+
+    // 3. 根据用户的选择执行相应的动作
+    if (ret == QMessageBox::Save)
+    {
+        // 用户选了保存，调用我们现成的全局保存协调器
+        const RoboSDP::Infrastructure::ProjectSaveSummary summary = m_projectSaveCoordinator.SaveAll();
+        if (!summary.success)
+        {
+            // 如果因为磁盘满了等原因保存失败，必须拦截关闭动作，保护现场
+            QMessageBox::critical(this, QStringLiteral("保存失败"), QStringLiteral("保存项目时发生错误，请检查底部日志信息。"));
+            return false; 
+        }
+        return true; // 保存成功，放行关闭
+    }
+    else if (ret == QMessageBox::Discard)
+    {
+        return true; // 用户明确表示不要了，放行关闭
+    }
+
+    // 用户点了取消，或者按了右上角的 X 关掉对话框，拦截关闭动作
+    return false; 
+}
+// 🔼🔼🔼 【新增结束】 🔼🔼🔼
+// 🔽🔽🔽 【新增：保护整个软件被意外退出的事件】 🔽🔽🔽
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    const bool isProjectOpen = !RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath().isEmpty();
+    
+    // 只有在打开了项目的情况下，才需要检查未保存进度
+    if (isProjectOpen)
+    {
+        if (!PromptForUnsavedChanges())
+        {
+            event->ignore(); // 拦截操作，阻止窗口关闭
+            return;
+        }
+    }
+    
+    // 放行操作，正常退出软件
+    event->accept(); 
+}
 } // namespace RoboSDP::Desktop

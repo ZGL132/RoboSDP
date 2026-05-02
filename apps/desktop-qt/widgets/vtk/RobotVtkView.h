@@ -18,6 +18,7 @@ class vtkAxesActor;
 class vtkGenericOpenGLRenderWindow;
 class vtkOrientationMarkerWidget;
 class vtkRenderer;
+class vtkTextActor;  // <--- 【新增】：前置声明文字 Actor
 #endif
 
 namespace RoboSDP::Desktop::Vtk
@@ -133,6 +134,7 @@ private:
     vtkRenderer* m_renderer = nullptr;
     vtkSmartPointer<vtkAxesActor> m_corner_axes_actor;
     vtkSmartPointer<vtkOrientationMarkerWidget> m_corner_axes_widget;
+    vtkSmartPointer<vtkTextActor> m_watermark_actor; // <--- 【新增】：保存水印对象
     std::map<QString, vtkSmartPointer<vtkActor>> m_link_actors;
     std::map<QString, RoboSDP::Kinematics::Dto::GeometryObjectDto> m_link_mesh_geometries;
 #endif

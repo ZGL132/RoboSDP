@@ -16,6 +16,7 @@
 class QComboBox;
 class QCheckBox;
 class QDoubleSpinBox;
+class QGridLayout; 
 class QGroupBox;
 class QLabel;
 class QLineEdit;
@@ -103,7 +104,9 @@ private:
     QString ResolveOriginalImportedUrdfMasterPath() const;
     QString ResolveDerivedUrdfMasterPath() const;
 
-    std::vector<double> CollectJointInputs(const std::array<QDoubleSpinBox*, 6>& spinBoxes) const;
+    // ✅ 替换为新的签名，并增加一个动态适配方法的声明：
+    std::vector<double> CollectJointInputs(const std::vector<QDoubleSpinBox*>& spinBoxes) const;
+    void AdjustJointInputCount(int jointCount);
     void FillIkTargetFromFkResult();
 
     // =========================================================================
@@ -180,8 +183,13 @@ private:
     QDoubleSpinBox* m_orientation_tolerance_spin = nullptr;
     QDoubleSpinBox* m_step_gain_spin = nullptr;
 
-    std::array<QDoubleSpinBox*, 6> m_fk_joint_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-    std::array<QDoubleSpinBox*, 6> m_ik_seed_joint_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    std::vector<QDoubleSpinBox*> m_fk_joint_spins;
+    std::vector<QLabel*> m_fk_joint_labels;
+    QGridLayout* m_fk_grid = nullptr;
+
+    std::vector<QDoubleSpinBox*> m_ik_seed_joint_spins;
+    std::vector<QLabel*> m_ik_seed_joint_labels;
+    QGridLayout* m_ik_seed_grid = nullptr;
     std::array<QDoubleSpinBox*, 6> m_ik_target_pose_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     QSpinBox* m_workspace_sample_count_spin = nullptr;
 

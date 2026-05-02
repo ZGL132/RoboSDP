@@ -2673,7 +2673,7 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
         model.links[1].alpha = 0.0;
         model.links[1].d = 0.0;
         // 补偿 -90 度，使模型在零位时大臂前伸（与 Topology 预览 L 型对齐）
-        model.links[1].theta_offset = 0.0;
+        model.links[1].theta_offset = 90.0;
 
         // Link 3 (肘关节)
         model.links[2].a = 0.0;
@@ -2746,7 +2746,6 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
 
     return model;
 }
-
 RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeletonPreview(
     const RoboSDP::Topology::Dto::RobotTopologyModelDto& topologyModel,
     const std::vector<double>& jointAnglesDeg)
@@ -2755,25 +2754,35 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     scene.model_name = topologyModel.meta.name.isEmpty() ? QStringLiteral("6R 运动学骨架") : topologyModel.meta.name;
 
     // =====================================================================
-    // 1. 提取拓扑物理尺寸
+    // 1. 提取拓扑物理尺寸 (与运动学模块特性对齐)
     // =====================================================================
     const double d1 = topologyModel.robot_definition.base_height_m;      // 基座高度
     const double a1 = topologyModel.robot_definition.shoulder_offset_m;  // 肩部偏置
     const double a2 = topologyModel.robot_definition.upper_arm_length_m; // 大臂长度
     const double d4 = topologyModel.robot_definition.forearm_length_m;   // 小臂长度
-    const double d6 = topologyModel.robot_definition.wrist_offset_m;     // 腕部偏置
+    double d5 = 0.0;
+    double d6 = topologyModel.robot_definition.wrist_offset_m;           // 腕部偏置
+    double tcpOffsetZ = 0.0;
+
+    // 【新增】：同步运动学模块中的空心手腕补偿特性
+    if (topologyModel.layout.hollow_wrist_required)
+    {
+        d5 = 0.12;
+        d6 = 0.10;
+        tcpOffsetZ = 0.12;
+    }
 
     // =====================================================================
     // 2. 构造标准 D-H (Standard DH) 参数表
     // =====================================================================
     struct DHTableRow { double a, alpha, d, theta; };
     std::array<DHTableRow, 6> dhTable = {{
-        {a1,  90.0,  d1,  0.0},    // Link 1: 腰部旋转，应用肩部偏置 a1
-        {a2,  0.0,   0.0, -90.0},  // Link 2: 肩部俯仰，初始补偿 -90 度
-        {0.0, 90.0,  0.0, 0.0},    // Link 3: 肘部俯仰
-        {0.0, -90.0, d4,  0.0},    // Link 4: 小臂自转
-        {0.0, 90.0,  0.0, 0.0},    // Link 5: 腕部摆动
-        {0.0, 0.0,   d6,  0.0}     // Link 6: 法兰盘自转
+        {a1,  90.0,  d1,  0.0},    // Link 1
+        {a2,  0.0,   0.0, 0.0},    // Link 2 (修改：底层模型中此处偏移为0)
+        {0.0, 90.0,  0.0, 90.0},   // Link 3 (修改：与底层统一，补偿 90 度偏移)
+        {0.0, -90.0, d4,  0.0},    // Link 4
+        {0.0, 90.0,  d5,  0.0},    // Link 5 (引入空心手腕 d5)
+        {0.0, 0.0,   d6,  0.0}     // Link 6
     }};
 
     // =====================================================================
@@ -2782,9 +2791,8 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     if (jointAnglesDeg.size() >= 6) {
         for (int i = 0; i < 6; ++i) { dhTable[i].theta += jointAnglesDeg[i]; }
     } else {
-        // 【视觉优化】：强制给 J2 和 J3 补偿 90 度，呈现易于观察的“L型展开”姿态
+        // 【视觉优化】：强制给 J2 补偿 90 度，呈现易于观察的“L型展开”姿态
         dhTable[1].theta += 90.0; 
-        dhTable[2].theta += 90.0;
     }
 
     // =====================================================================
@@ -2803,14 +2811,20 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     }
     
     Matrix4x4 T_current = PoseToMatrix(basePose);
-    globalTransforms.push_back(T_current);
+    globalTransforms.push_back(T_current); // 索引 0
 
     // 矩阵连乘：T_global_i = T_global_{i-1} * T_local_i
     for (int i = 0; i < 6; ++i) {
         Matrix4x4 T_local = ComputeDHMatrix(dhTable[i].a, dhTable[i].alpha, dhTable[i].d, dhTable[i].theta);
         T_current = T_current * T_local;
-        globalTransforms.push_back(T_current);
+        globalTransforms.push_back(T_current); // 索引 1 到 6
     }
+
+    // 独立计算 TCP 的变换矩阵 (沿 Z 轴的偏移)
+    Matrix4x4 T_tcp_local;
+    T_tcp_local.data[11] = tcpOffsetZ; 
+    Matrix4x4 T_tcp_global = T_current * T_tcp_local;
+    globalTransforms.push_back(T_tcp_global); // 索引 7
 
     // =====================================================================
     // 5. 组装 3D 渲染节点 (Nodes) 与连杆 (Segments)
@@ -2825,44 +2839,53 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     };
 
     auto addSegment = [&scene](const QString& parent, const QString& child, const QString& jointName, 
-                               const Matrix4x4& T_parent, const Matrix4x4& T_child) {
+                               const Matrix4x4& T_parent, const Matrix4x4& T_child, const QString& jointType) {
         RoboSDP::Kinematics::Dto::UrdfPreviewSegmentDto seg;
         seg.parent_link_name = parent;
         seg.child_link_name = child;
         seg.joint_name = jointName;
-        seg.joint_type = QStringLiteral("revolute");
+        seg.joint_type = jointType; // 区分 revolute 和 fixed
         seg.start_position_m = T_parent.GetTranslation();
         seg.end_position_m = T_child.GetTranslation();
         
-        // 拓扑阶段统一采用标准 DH 约定：旋转轴在父坐标系的 Z 轴上
         seg.joint_axis_xyz = T_parent.GetZAxis();
         scene.segments.push_back(seg);
     };
 
-    // 【核心修复】：使用预定义的 7 个节点名称，完美规避 kinematicModel 变量缺失问题
-    const std::array<QString, 7> nodeNames = {
-        QStringLiteral("Base / J1 (轴)"),
-        QStringLiteral("J2 (肩)"),
-        QStringLiteral("J3 (肘)"),
-        QStringLiteral("J4 (小臂中心)"),
-        QStringLiteral("J5 (腕摆中心)"),
-        QStringLiteral("J6 (法兰)"),
-        QStringLiteral("TCP (末端)")
+    // 【修改】：与底层的 Kinematics 阶段完全对齐节点命名
+    const std::array<QString, 8> nodeNames = {
+        QStringLiteral("base_link"),
+        QStringLiteral("link_1"),
+        QStringLiteral("link_2"),
+        QStringLiteral("link_3"),
+        QStringLiteral("link_4"),
+        QStringLiteral("link_5"),
+        QStringLiteral("link_6"),
+        QStringLiteral("tcp_frame")
     };
 
-    // 利用 for 循环动态压入节点
+    // 压入 8 个节点
     for (size_t i = 0; i < nodeNames.size(); ++i) {
         addNode(nodeNames[i], globalTransforms[i]);
     }
 
-    // 利用 for 循环动态压入首尾相连的 6 根连杆
+    // 压入 6 个转动关节连杆
     for (size_t i = 0; i < 6; ++i) {
         addSegment(nodeNames[i], 
                    nodeNames[i+1], 
-                   QStringLiteral("Joint_%1").arg(i + 1), 
+                   QStringLiteral("joint_%1").arg(i + 1), 
                    globalTransforms[i], 
-                   globalTransforms[i+1]);
+                   globalTransforms[i+1],
+                   QStringLiteral("revolute"));
     }
+
+    // 【新增】：压入 TCP 固定连杆（末端）
+    addSegment(nodeNames[6], 
+               nodeNames[7], 
+               QStringLiteral("tcp_fixed_joint"), 
+               globalTransforms[6], 
+               globalTransforms[7],
+               QStringLiteral("fixed")); // 标记为 fixed 后，VTK将不再画多余的绿色旋转轴
 
     return scene;
 }

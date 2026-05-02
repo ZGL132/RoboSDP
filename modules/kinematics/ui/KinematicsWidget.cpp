@@ -363,20 +363,6 @@ void KinematicsWidget::ConnectDirtyTracking()
         // cellChanged 信号：当表格中任意一个单元格的内容发生修改时触发
         connect(table, &QTableWidget::cellChanged, this, [this](int, int) { MarkDirty(); });
     }
-
-    // =====================================================================
-    // 7. 特殊高频交互路由 (通道 B：轻量级位姿更新)
-    // =====================================================================
-    // A/B 通道：将 FK (正运动学) 关节的 6 个拖动滑块单独拎出来绑定
-    for (int i = 0; i < 6; ++i) {
-        if (m_fk_joint_spins[i]) {
-            connect(m_fk_joint_spins[i], static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
-                this, [this](double) {
-                    MarkDirty();    // 1. 标记模型已修改
-                    SyncPoseOnly(); // 2. 【核心】直接呼叫轻量级通道，将角度发给引擎算矩阵，实现 3D 视图的实时联动
-                });
-        }
-    }
 }
 
 void KinematicsWidget::MarkDirty()
@@ -670,28 +656,17 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     solverLayout->addRow(QStringLiteral("步长增益"), m_step_gain_spin);
     layout->addLayout(solverLayout);
 
-    auto* fkGrid = new QGridLayout();
-    fkGrid->addWidget(new QLabel(QStringLiteral("FK 关节输入 [deg]"), groupBox), 0, 0, 1, 6);
-    for (int index = 0; index < 6; ++index)
-    {
-        auto* spinBox = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
-        m_fk_joint_spins[static_cast<std::size_t>(index)] = spinBox;
-        // 注意：此处事件绑定已被统一移入 ConnectDirtyTracking，避免重复绑定。
-        fkGrid->addWidget(new QLabel(QStringLiteral("J%1").arg(index + 1), groupBox), 1, index);
-        fkGrid->addWidget(spinBox, 2, index);
-    }
-    layout->addLayout(fkGrid);
+// ✅ 替换为以下代码：
+    m_fk_grid = new QGridLayout();
+    // 跨度设大一点(1, 10)防止截断
+    m_fk_grid->addWidget(new QLabel(QStringLiteral("FK 关节输入 [deg]"), groupBox), 0, 0, 1, 10);
+    layout->addLayout(m_fk_grid);
 
-    auto* ikSeedGrid = new QGridLayout();
-    ikSeedGrid->addWidget(new QLabel(QStringLiteral("IK 种子关节 [deg]"), groupBox), 0, 0, 1, 6);
-    for (int index = 0; index < 6; ++index)
-    {
-        auto* spinBox = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
-        m_ik_seed_joint_spins[static_cast<std::size_t>(index)] = spinBox;
-        ikSeedGrid->addWidget(new QLabel(QStringLiteral("J%1").arg(index + 1), groupBox), 1, index);
-        ikSeedGrid->addWidget(spinBox, 2, index);
-    }
-    layout->addLayout(ikSeedGrid);
+    m_ik_seed_grid = new QGridLayout();
+    m_ik_seed_grid->addWidget(new QLabel(QStringLiteral("IK 种子关节 [deg]"), groupBox), 0, 0, 1, 10);
+    layout->addLayout(m_ik_seed_grid);
+
+    AdjustJointInputCount(6);
 
     auto* ikTargetGrid = new QGridLayout();
     ikTargetGrid->addWidget(new QLabel(QStringLiteral("IK 目标位姿"), groupBox), 0, 0, 1, 6);
@@ -847,6 +822,8 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsWidget::CollectModelFromFo
 void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicModelDto& model)
 {
     m_is_populating_form = true;
+    // ✅ 新增这一行：根据当前模型的真实轴数动态控制界面滑块！
+    AdjustJointInputCount(model.joint_count);
     m_model_name_edit->setText(model.meta.name);
     const int conventionIndex = m_parameter_convention_combo->findData(model.parameter_convention);
     m_parameter_convention_combo->setCurrentIndex(conventionIndex >= 0 ? conventionIndex : 0);
@@ -1364,13 +1341,15 @@ QString KinematicsWidget::ResolveDerivedUrdfMasterPath() const
     return QDir(projectRootPath).absoluteFilePath(relativePath);
 }
 
-std::vector<double> KinematicsWidget::CollectJointInputs(const std::array<QDoubleSpinBox*, 6>& spinBoxes) const
+std::vector<double> KinematicsWidget::CollectJointInputs(const std::vector<QDoubleSpinBox*>& spinBoxes) const
 {
     std::vector<double> values;
-    values.reserve(spinBoxes.size());
-    for (QDoubleSpinBox* spinBox : spinBoxes)
+    // 获取当前模型实际的自由度
+    int activeCount = m_state.current_model.joint_count; 
+    // 只去拿前 activeCount 个滑块的数值，忽略后面被隐藏的滑块
+    for (int i = 0; i < activeCount && i < static_cast<int>(spinBoxes.size()); ++i)
     {
-        values.push_back(spinBox != nullptr ? spinBox->value() : 0.0);
+        values.push_back(spinBoxes[i]->value());
     }
     return values;
 }
@@ -1432,6 +1411,38 @@ void KinematicsWidget::OnImportUrdfClicked()
         emit PreviewSceneGenerated(m_preview_scene);
         SyncPoseOnly(); // 调用新版矩阵计算通道
         MarkDirty();
+
+        // 🔽🔽🔽 【新增：强警告弹窗逻辑】 🔽🔽🔽
+        // 检查提取出的 DH 草案级别
+        if (m_state.current_model.dh_draft_extraction_level == QStringLiteral("diagnostic_only"))
+        {
+            // 提取出错或近似映射时的警告信息，通常保存在 conversion_diagnostics 中
+            const QString diagnosticsMsg = m_state.current_model.conversion_diagnostics;
+            
+            // 如果诊断信息中包含关于 axis 的警告，则说明是非标准 Z 轴引起的
+            if (diagnosticsMsg.contains(QStringLiteral("axis")))
+            {
+                QMessageBox::warning(
+                    this,
+                    QStringLiteral("非标准旋转轴警告"),
+                    QStringLiteral("导入的 URDF 文件中存在非标准 Z 轴旋转的关节。\n\n"
+                                   "在 D-H (Denavit-Hartenberg) 运动学模型中，所有的关节旋转必须严格围绕 Z 轴进行。\n\n"
+                                   "系统已尝试进行近似映射，但当前的 DH 参数表仅能作为【诊断展示】，强行使用可能导致运动失真。\n\n"
+                                   "建议：请在您的 CAD 软件（如 SolidWorks）或 URDF 编辑器中，将所有活动关节的旋转轴 (axis) 对齐到 Z 轴 (0, 0, 1) 后重新导出。")
+                );
+            }
+            else
+            {
+                // 其他原因导致的 diagnostic_only，也给一个通用提示
+                 QMessageBox::information(
+                    this,
+                    QStringLiteral("DH 参数提取提示"),
+                    QStringLiteral("导入的 URDF 结构较复杂（例如多分支或存在不平行的交叉轴）。\n\n"
+                                   "系统生成的 DH 参数表仅为【诊断参考】，请仔细核对右侧的连杆参数。")
+                );
+            }
+        }
+        // 🔼🔼🔼 【新增结束】 🔼🔼🔼
     }
 
     SetOperationMessage(importResult.message, importResult.IsSuccess());
@@ -1856,4 +1867,73 @@ void KinematicsWidget::OnLoadClicked()
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(loadResult.message));
 }
 
+void KinematicsWidget::AdjustJointInputCount(int jointCount)
+{
+    const int maxGridColumns = 8; // 超过 8 个轴自动换行，保持界面美观
+
+    // 1. 动态补充 FK 滑块（如果模型轴数大于当前滑块数，自动创建）
+    while (m_fk_joint_spins.size() < static_cast<std::size_t>(jointCount))
+    {
+        int index = static_cast<int>(m_fk_joint_spins.size());
+        auto* spinBox = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
+        
+        // 【核心】：新创建的滑块也必须绑定姿态刷新通道！
+        connect(spinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+            this, [this](double) {
+                MarkDirty();
+                SyncPoseOnly(); // 触发三维画面实时更新
+            });
+
+        auto* label = new QLabel(QStringLiteral("J%1").arg(index + 1), m_fk_grid->parentWidget());
+        
+        int rowOffset = (index / maxGridColumns) * 2;
+        int colOffset = index % maxGridColumns;
+        m_fk_grid->addWidget(label, 1 + rowOffset, colOffset);
+        m_fk_grid->addWidget(spinBox, 2 + rowOffset, colOffset);
+
+        m_fk_joint_spins.push_back(spinBox);
+        m_fk_joint_labels.push_back(label);
+    }
+
+    // 2. 动态补充 IK 种子滑块
+    while (m_ik_seed_joint_spins.size() < static_cast<std::size_t>(jointCount))
+    {
+        int index = static_cast<int>(m_ik_seed_joint_spins.size());
+        auto* spinBox = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
+        
+        connect(spinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
+            this, [this](double) { MarkDirty(); });
+
+        auto* label = new QLabel(QStringLiteral("J%1").arg(index + 1), m_ik_seed_grid->parentWidget());
+        int rowOffset = (index / maxGridColumns) * 2;
+        int colOffset = index % maxGridColumns;
+        m_ik_seed_grid->addWidget(label, 1 + rowOffset, colOffset);
+        m_ik_seed_grid->addWidget(spinBox, 2 + rowOffset, colOffset);
+
+        m_ik_seed_joint_spins.push_back(spinBox);
+        m_ik_seed_joint_labels.push_back(label);
+    }
+
+    // 3. 控制显示与隐藏（比如导入了2轴机器人，就把 J3~J6 隐藏并归零）
+    for (std::size_t i = 0; i < m_fk_joint_spins.size(); ++i)
+    {
+        const bool visible = (i < static_cast<std::size_t>(jointCount));
+        m_fk_joint_spins[i]->setVisible(visible);
+        m_fk_joint_labels[i]->setVisible(visible);
+        m_ik_seed_joint_spins[i]->setVisible(visible);
+        m_ik_seed_joint_labels[i]->setVisible(visible);
+
+        // 如果被隐藏了，把数值归零并阻断信号，防止旧数据残留污染后端矩阵
+        if (!visible)
+        {
+            m_fk_joint_spins[i]->blockSignals(true);
+            m_fk_joint_spins[i]->setValue(0.0);
+            m_fk_joint_spins[i]->blockSignals(false);
+
+            m_ik_seed_joint_spins[i]->blockSignals(true);
+            m_ik_seed_joint_spins[i]->setValue(0.0);
+            m_ik_seed_joint_spins[i]->blockSignals(false);
+        }
+    }
+}
 } // namespace RoboSDP::Kinematics::Ui

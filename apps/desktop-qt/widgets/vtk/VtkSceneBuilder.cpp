@@ -27,6 +27,7 @@
 #include <vtkSphereSource.h>
 #include <vtkSmartPointer.h>
 #include <vtkTextProperty.h>
+#include <vtkTextActor.h>       // <--- 【新增这一行】
 #include <vtkTransform.h>
 #include <vtkTransformPolyDataFilter.h>
 #if defined(ROBOSDP_HAVE_VTK_IOGEOMETRY)
@@ -40,6 +41,22 @@ namespace RoboSDP::Desktop::Vtk
 #if defined(ROBOSDP_HAVE_VTK)
 namespace
 {
+// 【新增】：跨平台中文字体寻找器
+static QString GetChineseFontPath()
+{
+    const QStringList fontPaths = {
+        QStringLiteral("C:/Windows/Fonts/msyh.ttc"),       // Windows: 微软雅黑
+        QStringLiteral("C:/Windows/Fonts/simhei.ttf"),     // Windows: 黑体
+        QStringLiteral("/System/Library/Fonts/PingFang.ttc"), // macOS: 苹方
+        QStringLiteral("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"), // Linux: Noto Sans
+        QStringLiteral("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc")          // Linux: 文泉驿
+    };
+    for (const QString& path : fontPaths)
+    {
+        if (QFile::exists(path)) return path;
+    }
+    return QString(); // 没找到则返回空
+}
 
 constexpr double kPi = 3.14159265358979323846;
 
@@ -116,7 +133,7 @@ double ComputeNodeRadius(const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& pr
 {
     if (previewScene.nodes.empty())
     {
-        return 0.04;
+        return 0.02;
     }
 
     const auto minBounds = ComputeSceneMinBounds(previewScene);
@@ -125,7 +142,13 @@ double ComputeNodeRadius(const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& pr
     const double spanY = maxBounds[1] - minBounds[1];
     const double spanZ = maxBounds[2] - minBounds[2];
     const double maxSpan = std::max({spanX, spanY, spanZ, 0.2});
-    return std::max(maxSpan * 0.025, 0.015);
+    // 🔽🔽🔽 【核心修改：调小比例系数】 🔽🔽🔽
+    // 原代码是：return std::max(maxSpan * 0.025, 0.015);
+    // 意思是取最大跨度的 2.5%，且最小不低于 15 毫米。
+    
+    // 【修改 2】：把比例从 0.025 降到 0.012 (即 1.2%)，最小半径保底改为 0.008 (8 毫米)
+    return std::max(maxSpan * 0.012, 0.008); 
+    // 🔼🔼🔼 【修改结束】 🔼🔼🔼
 }
 
 double ComputeLabelOffset(double nodeRadius)
@@ -172,8 +195,25 @@ void AddAxes(vtkRenderer* renderer, double axisLength)
         {
             return;
         }
+        vtkTextProperty* textProp = captionActor->GetCaptionTextProperty();
 
-        captionActor->GetCaptionTextProperty()->SetFontSize(8);
+        // 🔽🔽🔽 【新增】：应用中文字体
+        const QString fontPath = GetChineseFontPath();
+        if (!fontPath.isEmpty()) {
+            textProp->SetFontFamily(VTK_FONT_FILE);
+            textProp->SetFontFile(fontPath.toStdString().c_str());
+        }
+
+        // 🔽🔽🔽 【核心修复：彻底禁用自动缩放】 🔽🔽🔽
+        if (captionActor->GetTextActor())
+        {
+            captionActor->GetTextActor()->SetTextScaleModeToNone();
+        }
+        // 关闭难看的边框和指引线
+        captionActor->BorderOff();
+        captionActor->LeaderOff();
+        // 🔼🔼🔼 【修复结束】 🔼🔼🔼
+        captionActor->GetCaptionTextProperty()->SetFontSize(14);
         captionActor->GetCaptionTextProperty()->SetBold(false);
         captionActor->GetCaptionTextProperty()->SetItalic(false);
         captionActor->GetCaptionTextProperty()->SetColor(0.72, 0.76, 0.80);
@@ -526,17 +566,27 @@ void AddNodeLabel(
     vtkNew<vtkBillboardTextActor3D> labelActor;
     labelActor->SetInput(linkName.toStdString().c_str());
     labelActor->SetPosition(position[0], position[1], position[2]);
+    vtkTextProperty* textProp = labelActor->GetTextProperty();
+
+    // 🔽🔽🔽 【新增】：应用中文字体
+    const QString fontPath = GetChineseFontPath();
+    if (!fontPath.isEmpty()) {
+        textProp->SetFontFamily(VTK_FONT_FILE);
+        textProp->SetFontFile(fontPath.toStdString().c_str());
+    }
+    // 🔼🔼🔼
     labelActor->GetTextProperty()->SetFontSize(13);
     labelActor->GetTextProperty()->SetColor(0.74, 0.84, 0.92);
-    labelActor->GetTextProperty()->SetBold(true); // 稍微加粗更易读
-
-    // 【新增】：开启阴影，防止文字和浅色背景融为一体
+    labelActor->GetTextProperty()->SetBold(true); 
     labelActor->GetTextProperty()->SetShadow(true);
     labelActor->GetTextProperty()->SetShadowOffset(1, -1);
 
-    // 【可选新增】：或者给文字加一个黑色的半透明背景框
-    // labelActor->GetTextProperty()->SetBackgroundColor(0.0, 0.0, 0.0);
-    // labelActor->GetTextProperty()->SetBackgroundOpacity(0.5);
+    // 🔽🔽🔽 【核心修复：关闭深度测试，文字穿透显示】 🔽🔽🔽
+    // labelActor->GetProperty()->SetDisableDepthTest(true);
+    
+    // 因为 Link 标签通常放在连杆中间，我们让它在屏幕上稍微往右偏移一点，避开中间的蓝线
+    labelActor->SetDisplayOffset(15, 0); // 屏幕 2D 坐标向右偏移 15 像素
+    // 🔼🔼🔼 【修复结束】 🔼🔼🔼
 
     renderer->AddActor(labelActor);
 }
@@ -579,21 +629,36 @@ std::array<double, 3> ComputeLinkLabelPosition(
 
 void AddJointLabel(
     vtkRenderer* renderer,
-    const RoboSDP::Kinematics::Dto::UrdfPreviewSegmentDto& segment,
-    double labelOffset)
+    const QString& text,
+    const std::array<double, 3>& position)
 {
     vtkNew<vtkBillboardTextActor3D> labelActor;
-    labelActor->SetInput(segment.joint_name.toStdString().c_str());
-    
-    // 【修复】：将 end_position_m 改为 start_position_m
-    labelActor->SetPosition(
-        segment.start_position_m[0] - labelOffset * 0.0,
-        segment.start_position_m[1] + labelOffset * 0.0,
-        segment.start_position_m[2] + labelOffset * 0.0);
-        
+    labelActor->SetInput(text.toStdString().c_str());
+    labelActor->SetPosition(position[0], position[1], position[2]);
+    vtkTextProperty* textProp = labelActor->GetTextProperty();
+
+    // 🔽🔽🔽 【新增】：应用中文字体
+    const QString fontPath = GetChineseFontPath();
+    if (!fontPath.isEmpty()) {
+        textProp->SetFontFamily(VTK_FONT_FILE);
+        textProp->SetFontFile(fontPath.toStdString().c_str());
+    }
+    // 🔼🔼🔼
     labelActor->GetTextProperty()->SetFontSize(12);
     labelActor->GetTextProperty()->SetColor(0.84, 0.78, 0.42);
     labelActor->GetTextProperty()->SetBold(false);
+    labelActor->GetTextProperty()->SetShadow(true);
+    labelActor->GetTextProperty()->SetShadowOffset(1, -1);
+    
+    // 🔽🔽🔽 【核心修复：关闭深度测试，让文字永远显示在最前面】 🔽🔽🔽
+    // 当为 false 时，文字将无视前面的 3D 球体和圆柱体，直接画在屏幕最顶层
+    // labelActor->GetProperty()->SetDisableDepthTest(true);
+    
+    // 稍微给一点垂直向上的偏移，避免文字中心恰好卡在球心
+    // 注意：这里不用动 Z 轴，而是用 VTK 的内部偏移机制
+    labelActor->SetDisplayOffset(0, 15); // 在屏幕 2D 坐标上向上偏移 15 像素
+    // 🔼🔼🔼 【修复结束】 🔼🔼🔼
+    
     renderer->AddActor(labelActor);
 }
 
@@ -605,7 +670,7 @@ void AddJointHighlight(
     double opacity)
 {
     vtkNew<vtkSphereSource> jointSphere;
-    jointSphere->SetRadius(nodeRadius * 1.0);
+    jointSphere->SetRadius(nodeRadius * 0.2);
     jointSphere->SetThetaResolution(24);
     jointSphere->SetPhiResolution(24);
     jointSphere->SetCenter(
@@ -876,6 +941,26 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
 
     if (displayOptions.show_skeleton)
     {
+        // 🔽🔽🔽 【新增】：重叠位置跟踪器，用于文字智能排版 🔽🔽🔽
+        std::vector<std::pair<std::array<double, 3>, int>> occupiedPositions;
+        auto getShiftedPosition = [&occupiedPositions](const std::array<double, 3>& basePos, double offsetStep) {
+            for (auto& occ : occupiedPositions) {
+                double dx = occ.first[0] - basePos[0];
+                double dy = occ.first[1] - basePos[1];
+                double dz = occ.first[2] - basePos[2];
+                // 如果两点距离极小（小于0.1毫米），认为物理重叠
+                if (std::sqrt(dx*dx + dy*dy + dz*dz) < 1e-4) {
+                    occ.second++; // 增加重叠计数
+                    // 沿着 Z 轴往下排布，形成清晰的文字列表
+                    return std::array<double, 3>{basePos[0], basePos[1], basePos[2] - occ.second * offsetStep};
+                }
+            }
+            // 第一次出现在该位置，记录下来
+            occupiedPositions.push_back({basePos, 0});
+            return basePos;
+        };
+        // 🔼🔼🔼 【新增结束】 🔼🔼🔼
+
         // 中文说明：关节高亮层先画半透明包络球，便于在不引入 mesh 的前提下快速识别关节位置。
         for (const auto& segment : previewScene.segments)
         {
@@ -883,8 +968,10 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
 
             if (displayOptions.show_joint_labels && !segment.joint_name.trimmed().isEmpty())
             {
-                // 中文说明：关节标签直接显示 joint_name，便于识别每段骨架对应的实际关节编号。
-                AddJointLabel(renderer, segment, labelOffset);
+                // 🔽🔽🔽 【修改】：使用防重叠逻辑获取位置，并调用新版绘制函数 🔽🔽🔽
+                auto shiftedPos = getShiftedPosition(segment.start_position_m, labelOffset * 0.8);
+                AddJointLabel(renderer, segment.joint_name, shiftedPos);
+                // 🔼🔼🔼 【修改结束】 🔼🔼🔼
             }
         }
 
@@ -908,8 +995,11 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
 
             if (displayOptions.show_link_labels && !node.link_name.trimmed().isEmpty())
             {
-                // 中文说明：Link 标签放到连杆中段附近，避免与关节端点标签在同一位置堆叠。
-                AddNodeLabel(renderer, node.link_name, ComputeLinkLabelPosition(previewScene, node, labelOffset));
+                // 🔽🔽🔽 【修改】：同样为 Link 标签加上防重叠排版逻辑 🔽🔽🔽
+                auto basePos = ComputeLinkLabelPosition(previewScene, node, labelOffset);
+                auto shiftedPos = getShiftedPosition(basePos, labelOffset * 0.8);
+                AddNodeLabel(renderer, node.link_name, shiftedPos);
+                // 🔼🔼🔼 【修改结束】 🔼🔼🔼
             }
         }
 
@@ -929,7 +1019,7 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
             // 【新增】：使用 vtkTubeFilter 将线条变成 3D 圆管
             vtkNew<vtkTubeFilter> tubeFilter;
             tubeFilter->SetInputConnection(lineSource->GetOutputPort());
-            tubeFilter->SetRadius(nodeRadius * 0.1); // 连杆稍微比关节球细一点
+            tubeFilter->SetRadius(nodeRadius * 0.5); // 连杆稍微比关节球细一点
             tubeFilter->SetNumberOfSides(16);        // 圆柱切面数，保证圆滑
 
             vtkNew<vtkPolyDataMapper> lineMapper;
