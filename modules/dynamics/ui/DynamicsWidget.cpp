@@ -197,19 +197,7 @@ void DynamicsWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* actionLayout = new QHBoxLayout();
-    m_build_from_kinematics_button = new QPushButton(QStringLiteral("从 Kinematics 生成"), this);
-    m_run_analysis_button = new QPushButton(QStringLiteral("执行逆动力学"), this);
-    m_save_button = new QPushButton(QStringLiteral("保存草稿"), this);
-    m_load_button = new QPushButton(QStringLiteral("重新加载"), this);
-    m_build_from_kinematics_button->setObjectName(QStringLiteral("dynamics_build_from_kinematics_button"));
-    m_run_analysis_button->setObjectName(QStringLiteral("dynamics_run_analysis_button"));
-    actionLayout->addWidget(m_build_from_kinematics_button);
-    actionLayout->addWidget(m_run_analysis_button);
-    actionLayout->addWidget(m_save_button);
-    actionLayout->addWidget(m_load_button);
-    actionLayout->addStretch();
-
+    // 操作按钮已迁移至 Ribbon 动力学工具页签，此处仅保留状态提示和多页签面板
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存 Kinematics，再生成 Dynamics 草稿。"), this);
     m_operation_label->setObjectName(QStringLiteral("dynamics_operation_label"));
     m_operation_label->setWordWrap(true);
@@ -225,14 +213,9 @@ void DynamicsWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(CreatePlotGroup()), QStringLiteral("结果曲线"));
     tabs->addTab(CreateScrollableTab(CreateResultGroup()), QStringLiteral("结果摘要"));
 
-    rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 
-    connect(m_build_from_kinematics_button, &QPushButton::clicked, this, [this]() { OnBuildFromKinematicsClicked(); });
-    connect(m_run_analysis_button, &QPushButton::clicked, this, [this]() { OnRunAnalysisClicked(); });
-    connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
-    connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
     connect(m_link_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateTablesAndHighlight(); });
     connect(m_joint_drive_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateTablesAndHighlight(); });
     connect(m_trajectory_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateTablesAndHighlight(); });
@@ -856,6 +839,7 @@ void DynamicsWidget::OnBuildFromKinematicsClicked()
 
     SetOperationMessage(buildResult.message, buildResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Dynamics] %1").arg(buildResult.message));
+    emit StatusChanged();
 }
 
 void DynamicsWidget::OnRunAnalysisClicked()
@@ -891,12 +875,14 @@ void DynamicsWidget::OnRunAnalysisClicked()
     emit LogMessageGenerated(QStringLiteral("%1 %2").arg(
         warning ? QStringLiteral("[Dynamics][Warning]") : QStringLiteral("[Dynamics]"),
         analyzeResult.message));
+    emit StatusChanged();
 }
 
 void DynamicsWidget::OnSaveDraftClicked()
 {
     const auto saveResult = SaveCurrentDraft();
     emit LogMessageGenerated(QStringLiteral("[Dynamics] %1").arg(saveResult.message));
+    emit StatusChanged();
 }
 
 void DynamicsWidget::OnLoadClicked()
@@ -916,6 +902,21 @@ void DynamicsWidget::OnLoadClicked()
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Dynamics] %1").arg(loadResult.message));
+    emit StatusChanged();
+}
+
+// ── Ribbon 按钮状态查询实现 ──
+
+bool DynamicsWidget::CanBuildFromKinematics() const
+{
+    // 从运动学构建动力学需要已解析运动学草稿引用
+    return m_kinematic_ref_edit != nullptr && !m_kinematic_ref_edit->text().trimmed().isEmpty();
+}
+
+bool DynamicsWidget::CanRunAnalysis() const
+{
+    // 执行逆动力学分析需要连杆表中有数据行
+    return m_link_table != nullptr && m_link_table->rowCount() > 0;
 }
 
 } // namespace RoboSDP::Dynamics::Ui

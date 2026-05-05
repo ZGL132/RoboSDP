@@ -43,6 +43,9 @@ public:
     /// @brief 返回当前 Selection 页面是否存在未保存变更。
     bool HasUnsavedChanges() const override;
 
+    /// @brief 由 Ribbon 按钮触发选型（职责分离：Widget 不持有 action 按钮）。
+    void TriggerRunSelection() { OnRunSelectionClicked(); }
+
 signals:
     void LogMessageGenerated(const QString& message);
 
@@ -71,9 +74,6 @@ private:
 
     QLineEdit* m_catalog_root_edit = nullptr;
     QPushButton* m_browse_catalog_button = nullptr;
-    QPushButton* m_run_button = nullptr;
-    QPushButton* m_save_button = nullptr;
-    QPushButton* m_load_button = nullptr;
     QLabel* m_operation_label = nullptr;
     QTableWidget* m_result_table = nullptr;
     QPlainTextEdit* m_summary_edit = nullptr;

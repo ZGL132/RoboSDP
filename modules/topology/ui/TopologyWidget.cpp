@@ -235,25 +235,12 @@ void TopologyWidget::BuildUi()
     rootLayout->setSpacing(8);
 
     // 1. 顶部：模板选择区
+    // 操作按钮已迁移至 Ribbon 构型工具页签，此处仅保留模板下拉框
     auto* templateLayout = new QHBoxLayout();
     auto* templateLabel = new QLabel(QStringLiteral("构型模板"), this);
     m_template_combo = new QComboBox(this);
-    m_refresh_template_button = new QPushButton(QStringLiteral("刷新模板"), this);
     templateLayout->addWidget(templateLabel);
     templateLayout->addWidget(m_template_combo, 1);
-    templateLayout->addWidget(m_refresh_template_button);
-
-    // 2. 次顶部：核心操作按钮区
-    auto* actionLayout = new QHBoxLayout();
-    m_generate_button = new QPushButton(QStringLiteral("生成候选"), this);
-    m_validate_button = new QPushButton(QStringLiteral("校验"), this);
-    m_save_button = new QPushButton(QStringLiteral("保存草稿"), this);
-    m_load_button = new QPushButton(QStringLiteral("重新加载"), this);
-    actionLayout->addWidget(m_generate_button);
-    actionLayout->addWidget(m_validate_button);
-    actionLayout->addWidget(m_save_button);
-    actionLayout->addWidget(m_load_button);
-    actionLayout->addStretch();
 
     // 状态提示条
     m_operation_label = new QLabel(
@@ -261,7 +248,7 @@ void TopologyWidget::BuildUi()
         this);
     m_operation_label->setWordWrap(true);
 
-    // 3. 中部：多页签面板区
+    // 2. 中部：多页签面板区
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
     // 按业务域拆分页面视图，将长表单放进 ScrollArea 中
@@ -271,20 +258,8 @@ void TopologyWidget::BuildUi()
 
     // 将所有布局添加到主根布局
     rootLayout->addLayout(templateLayout);
-    rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
-
-    // 4. 绑定按钮信号与槽
-    connect(
-        m_refresh_template_button,
-        &QPushButton::clicked,
-        this,
-        [this]() { OnRefreshTemplatesClicked(); });
-    connect(m_generate_button, &QPushButton::clicked, this, [this]() { OnGenerateClicked(); });
-    connect(m_validate_button, &QPushButton::clicked, this, [this]() { OnValidateClicked(); });
-    connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
-    connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
 }
 
 QWidget* TopologyWidget::CreateScrollableTab(QWidget* contentWidget)
@@ -690,6 +665,7 @@ void TopologyWidget::OnRefreshTemplatesClicked()
     RefreshTemplateOptions();
     SetOperationMessage(QStringLiteral("构型模板列表已刷新。"), true);
     emit LogMessageGenerated(QStringLiteral("[Topology] 构型模板列表已刷新。"));
+    emit StatusChanged();
 }
 
 void TopologyWidget::OnGenerateClicked()
@@ -713,6 +689,7 @@ void TopologyWidget::OnGenerateClicked()
 
     SetOperationMessage(generateResult.message, generateResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Topology] %1").arg(generateResult.message));
+    emit StatusChanged();
 }
 
 void TopologyWidget::OnValidateClicked()
@@ -732,12 +709,14 @@ void TopologyWidget::OnValidateClicked()
         validationResult.IsValid()
             ? QStringLiteral("[Topology] 基础校验通过。")
             : QStringLiteral("[Topology] 基础校验发现 %1 条问题。").arg(validationResult.issues.size()));
+    emit StatusChanged();
 }
 
 void TopologyWidget::OnSaveDraftClicked()
 {
     const auto saveResult = SaveCurrentDraft();
     emit LogMessageGenerated(QStringLiteral("[Topology] %1").arg(saveResult.message));
+    emit StatusChanged();
 }
 
 void TopologyWidget::OnLoadClicked()
@@ -757,6 +736,22 @@ void TopologyWidget::OnLoadClicked()
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Topology] %1").arg(loadResult.message));
+    emit StatusChanged();
+}
+
+
+// ── Ribbon 按钮状态查询实现 ──
+
+bool TopologyWidget::CanGenerate() const
+{
+    // 构型生成需要已选中有效模板
+    return m_template_combo != nullptr && m_template_combo->currentIndex() >= 0;
+}
+
+bool TopologyWidget::CanValidate() const
+{
+    // 校验构型需要至少已填写构型名称
+    return m_topology_name_edit != nullptr && !m_topology_name_edit->text().trimmed().isEmpty();
 }
 
 

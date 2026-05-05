@@ -25,16 +25,48 @@ void RibbonBarWidget::BuildUi()
     m_tabs = new QTabWidget(this);
     m_tabs->setDocumentMode(true);
     m_tabs->setTabPosition(QTabWidget::North);
+
+    // 页签顺序：文件 → 需求校验 → 构型工具 → 运动学工具 → 动力学工具 → 视图 → 选型工具
+    int index = 0;
     m_tabs->addTab(CreateFileTab(), QStringLiteral("文件"));
-    m_tabs->addTab(CreateModelingTab(), QStringLiteral("建模"));
-    m_tabs->addTab(CreateDynamicsTab(), QStringLiteral("动力学"));
-    m_tabs->addTab(CreateDriveSelectionTab(), QStringLiteral("驱动选型"));
-    m_tabs->addTab(CreatePlanningAnalysisTab(), QStringLiteral("规划与分析"));
-    m_tabs->addTab(CreateResultExportTab(), QStringLiteral("结果与导出"));
+    m_moduleTabIndexMap.insert(QStringLiteral("File"), index++);
+
+    m_tabs->insertTab(index, CreateRequirementTab(), QStringLiteral("需求校验"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Requirement"), index++);
+
+    m_tabs->addTab(CreateTopologyTab(), QStringLiteral("构型工具"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Topology"), index++);
+
+    m_tabs->addTab(CreateKinematicsTab(), QStringLiteral("运动学工具"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Kinematics"), index++);
+
+    m_tabs->addTab(CreateDynamicsTab(), QStringLiteral("动力学工具"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Dynamics"), index++);
+
     m_tabs->addTab(CreateViewTab(), QStringLiteral("视图"));
+    m_moduleTabIndexMap.insert(QStringLiteral("View"), index++);
+
+    m_tabs->insertTab(index, CreateSelectionTab(), QStringLiteral("选型工具"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Selection"), index++);
+
+    m_tabs->addTab(CreatePlanningTab(), QStringLiteral("规划工具"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Planning"), index++);
+
+    m_tabs->addTab(CreateSchemeTab(), QStringLiteral("方案导出"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Scheme"), index++);
 
     rootLayout->addWidget(m_tabs);
     setMaximumHeight(128);
+}
+
+void RibbonBarWidget::SwitchToContextTab(const QString& moduleName)
+{
+    // 根据模块名快速定位并切换到对应的 Ribbon 页签
+    auto it = m_moduleTabIndexMap.constFind(moduleName);
+    if (it != m_moduleTabIndexMap.constEnd())
+    {
+        m_tabs->setCurrentIndex(it.value());
+    }
 }
 
 QWidget* RibbonBarWidget::CreateFileTab()
@@ -56,37 +88,120 @@ QWidget* RibbonBarWidget::CreateFileTab()
     return tab;
 }
 
-QWidget* RibbonBarWidget::CreateModelingTab()
+QWidget* RibbonBarWidget::CreateTopologyTab()
 {
     auto* tab = new QWidget(this);
     auto* layout = new QHBoxLayout(tab);
     layout->setContentsMargins(8, 4, 8, 6);
     layout->setSpacing(8);
 
+    m_topologyRefreshBtn = CreateActionButton(
+        QStringLiteral("刷新模板"),
+        QStringLiteral("从模板库重新加载可用构型模板。"));
+    connect(m_topologyRefreshBtn, &QToolButton::clicked, this, [this]() {
+        emit signalTopologyRefreshTemplates();
+    });
+
+    m_topologyGenerateBtn = CreateActionButton(
+        QStringLiteral("生成构型"),
+        QStringLiteral("基于当前选中的模板和轴参数生成机器人构型。"));
+    connect(m_topologyGenerateBtn, &QToolButton::clicked, this, [this]() {
+        emit signalTopologyGenerate();
+    });
+
+    m_topologyValidateBtn = CreateActionButton(
+        QStringLiteral("校验"),
+        QStringLiteral("校验当前构型参数是否完整有效。"));
+    connect(m_topologyValidateBtn, &QToolButton::clicked, this, [this]() {
+        emit signalTopologyValidate();
+    });
+
+    m_topologySaveBtn = CreateActionButton(
+        QStringLiteral("保存草稿"),
+        QStringLiteral("将当前构型草稿保存到项目。"));
+    connect(m_topologySaveBtn, &QToolButton::clicked, this, [this]() {
+        emit signalTopologySaveDraft();
+    });
+
     layout->addWidget(CreateButtonGroup(
-        QStringLiteral("需求与构型"),
-        {
-            CreateNavigationButton(
-                QStringLiteral("需求定义"),
-                QStringLiteral("切换到 Requirement 页面。"),
-                &RibbonBarWidget::signalNavigateToRequirement),
-            CreateNavigationButton(
-                QStringLiteral("构型设计"),
-                QStringLiteral("切换到 Topology 页面。"),
-                &RibbonBarWidget::signalNavigateToTopology),
-        }));
+        QStringLiteral("构型操作"),
+        { m_topologyRefreshBtn, m_topologyGenerateBtn, m_topologyValidateBtn, m_topologySaveBtn }));
+    layout->addStretch();
+    return tab;
+}
+
+QWidget* RibbonBarWidget::CreateKinematicsTab()
+{
+    auto* tab = new QWidget(this);
+    auto* layout = new QHBoxLayout(tab);
+    layout->setContentsMargins(8, 4, 8, 6);
+    layout->setSpacing(8);
+
+    m_kinematicsImportUrdfBtn = CreateActionButton(
+        QStringLiteral("导入 URDF"),
+        QStringLiteral("从文件系统导入 URDF 文件构建运动学模型。"));
+    connect(m_kinematicsImportUrdfBtn, &QToolButton::clicked, this, [this]() {
+        emit signalKinematicsImportUrdf();
+    });
+
+    m_kinematicsBuildFromTopologyBtn = CreateActionButton(
+        QStringLiteral("从构型构建"),
+        QStringLiteral("基于拓扑构型结果自动生成运动学模型。"));
+    connect(m_kinematicsBuildFromTopologyBtn, &QToolButton::clicked, this, [this]() {
+        emit signalKinematicsBuildFromTopology();
+    });
+
+    m_kinematicsPromoteDhBtn = CreateActionButton(
+        QStringLiteral("DH 主模型"),
+        QStringLiteral("提升当前 DH 草稿为主模型。"));
+    connect(m_kinematicsPromoteDhBtn, &QToolButton::clicked, this, [this]() {
+        emit signalKinematicsPromoteToDhMaster();
+    });
+
+    m_kinematicsSwitchUrdfBtn = CreateActionButton(
+        QStringLiteral("URDF 主模型"),
+        QStringLiteral("切换回 URDF 主模型。"));
+    connect(m_kinematicsSwitchUrdfBtn, &QToolButton::clicked, this, [this]() {
+        emit signalKinematicsSwitchToUrdfMaster();
+    });
+
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("运动学建模"),
-        {
-            CreateNavigationButton(
-                QStringLiteral("DH/MDH 建模"),
-                QStringLiteral("切换到 Kinematics 页面编辑 DH/MDH 参数。"),
-                &RibbonBarWidget::signalNavigateToKinematics),
-            CreateNavigationButton(
-                QStringLiteral("导入 URDF"),
-                QStringLiteral("切换到 Kinematics 页面，下一阶段接入项目级 URDF 导入服务。"),
-                &RibbonBarWidget::signalNavigateToKinematics),
-        }));
+        { m_kinematicsImportUrdfBtn, m_kinematicsBuildFromTopologyBtn,
+          m_kinematicsPromoteDhBtn, m_kinematicsSwitchUrdfBtn }));
+
+    m_kinematicsRunFkBtn = CreateActionButton(
+        QStringLiteral("正运动学"),
+        QStringLiteral("基于当前关节角度执行正运动学求解。"));
+    connect(m_kinematicsRunFkBtn, &QToolButton::clicked, this, [this]() {
+        emit signalKinematicsRunFk();
+    });
+
+    m_kinematicsRunIkBtn = CreateActionButton(
+        QStringLiteral("逆运动学"),
+        QStringLiteral("基于末端位姿执行逆运动学求解。"));
+    connect(m_kinematicsRunIkBtn, &QToolButton::clicked, this, [this]() {
+        emit signalKinematicsRunIk();
+    });
+
+    m_kinematicsSampleWorkspaceBtn = CreateActionButton(
+        QStringLiteral("采样工作空间"),
+        QStringLiteral("采样并显示工作空间点云。"));
+    connect(m_kinematicsSampleWorkspaceBtn, &QToolButton::clicked, this, [this]() {
+        emit signalKinematicsSampleWorkspace();
+    });
+
+    m_kinematicsSaveBtn = CreateActionButton(
+        QStringLiteral("保存草稿"),
+        QStringLiteral("将当前运动学草稿保存到项目。"));
+    connect(m_kinematicsSaveBtn, &QToolButton::clicked, this, [this]() {
+        emit signalKinematicsSaveDraft();
+    });
+
+    layout->addWidget(CreateButtonGroup(
+        QStringLiteral("求解与验证"),
+        { m_kinematicsRunFkBtn, m_kinematicsRunIkBtn,
+          m_kinematicsSampleWorkspaceBtn, m_kinematicsSaveBtn }));
     layout->addStretch();
     return tab;
 }
@@ -98,84 +213,202 @@ QWidget* RibbonBarWidget::CreateDynamicsTab()
     layout->setContentsMargins(8, 4, 8, 6);
     layout->setSpacing(8);
 
+    m_dynamicsBuildFromKinematicsBtn = CreateActionButton(
+        QStringLiteral("从运动学构建"),
+        QStringLiteral("基于运动学模型自动构建动力学参数。"));
+    connect(m_dynamicsBuildFromKinematicsBtn, &QToolButton::clicked, this, [this]() {
+        emit signalDynamicsBuildFromKinematics();
+    });
+
+    m_dynamicsRunAnalysisBtn = CreateActionButton(
+        QStringLiteral("运行分析"),
+        QStringLiteral("执行动力学分析计算。"));
+    connect(m_dynamicsRunAnalysisBtn, &QToolButton::clicked, this, [this]() {
+        emit signalDynamicsRunAnalysis();
+    });
+
+    m_dynamicsSaveBtn = CreateActionButton(
+        QStringLiteral("保存草稿"),
+        QStringLiteral("将当前动力学草稿保存到项目。"));
+    connect(m_dynamicsSaveBtn, &QToolButton::clicked, this, [this]() {
+        emit signalDynamicsSaveDraft();
+    });
+
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("动力学分析"),
-        {
-            CreateNavigationButton(
-                QStringLiteral("动力学分析"),
-                QStringLiteral("切换到 Dynamics 页面。"),
-                &RibbonBarWidget::signalNavigateToDynamics),
-        }));
+        { m_dynamicsBuildFromKinematicsBtn, m_dynamicsRunAnalysisBtn, m_dynamicsSaveBtn }));
     layout->addStretch();
     return tab;
 }
 
-QWidget* RibbonBarWidget::CreateDriveSelectionTab()
+QWidget* RibbonBarWidget::CreateRequirementTab()
 {
     auto* tab = new QWidget(this);
     auto* layout = new QHBoxLayout(tab);
     layout->setContentsMargins(8, 4, 8, 6);
     layout->setSpacing(8);
+
+    auto* validateBtn = CreateActionButton(
+        QStringLiteral("执行校验"),
+        QStringLiteral("校验当前需求参数是否完整有效。"));
+    connect(validateBtn, &QToolButton::clicked, this, [this]() {
+        emit signalRequirementValidate();
+    });
+
+    auto* saveBtn = CreateActionButton(
+        QStringLiteral("保存本页"),
+        QStringLiteral("将当前需求草稿保存到项目。"));
+    connect(saveBtn, &QToolButton::clicked, this, [this]() {
+        emit signalRequirementSaveDraft();
+    });
 
     layout->addWidget(CreateButtonGroup(
-        QStringLiteral("驱动链"),
-        {
-            CreateDisabledButton(QStringLiteral("电机选型"), QStringLiteral("二期建设中，等待电机库与项目级选型服务接入。")),
-            CreateDisabledButton(QStringLiteral("减速器选型"), QStringLiteral("二期建设中，等待减速器库与项目级选型服务接入。")),
-            CreateDisabledButton(QStringLiteral("驱动链匹配"), QStringLiteral("等待驱动链匹配服务纳入顶部全局编排。")),
-        }));
+        QStringLiteral("需求校验"),
+        { validateBtn, saveBtn }));
     layout->addStretch();
     return tab;
 }
 
-QWidget* RibbonBarWidget::CreatePlanningAnalysisTab()
+QWidget* RibbonBarWidget::CreateSelectionTab()
 {
     auto* tab = new QWidget(this);
     auto* layout = new QHBoxLayout(tab);
     layout->setContentsMargins(8, 4, 8, 6);
     layout->setSpacing(8);
+
+    auto* runBtn = CreateActionButton(
+        QStringLiteral("执行选型"),
+        QStringLiteral("基于当前参数执行驱动选型计算。"));
+    connect(runBtn, &QToolButton::clicked, this, [this]() {
+        emit signalSelectionRun();
+    });
+
+    auto* saveBtn = CreateActionButton(
+        QStringLiteral("保存本页"),
+        QStringLiteral("将当前选型草稿保存到项目。"));
+    connect(saveBtn, &QToolButton::clicked, this, [this]() {
+        emit signalSelectionSaveDraft();
+    });
+
+    layout->addWidget(CreateButtonGroup(
+        QStringLiteral("选型操作"),
+        { runBtn, saveBtn }));
+    layout->addStretch();
+    return tab;
+}
+
+QWidget* RibbonBarWidget::CreatePlanningTab()
+{
+    auto* tab = new QWidget(this);
+    auto* layout = new QHBoxLayout(tab);
+    layout->setContentsMargins(8, 4, 8, 6);
+    layout->setSpacing(8);
+
+    auto* buildSceneBtn = CreateActionButton(
+        QStringLiteral("构建场景"),
+        QStringLiteral("基于当前运动学和动力学结果构建规划场景。"));
+    connect(buildSceneBtn, &QToolButton::clicked, this, [this]() {
+        emit signalPlanningBuildScene();
+    });
+
+    auto* runVerificationBtn = CreateActionButton(
+        QStringLiteral("执行验证"),
+        QStringLiteral("执行规划路径验证计算。"));
+    connect(runVerificationBtn, &QToolButton::clicked, this, [this]() {
+        emit signalPlanningRunVerification();
+    });
+
+    auto* saveBtn = CreateActionButton(
+        QStringLiteral("保存本页"),
+        QStringLiteral("将当前规划草稿保存到项目。"));
+    connect(saveBtn, &QToolButton::clicked, this, [this]() {
+        emit signalPlanningSaveDraft();
+    });
 
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("规划验证"),
-        {
-            CreateNavigationButton(
-                QStringLiteral("规划场景"),
-                QStringLiteral("切换到 Planning 页面编辑规划场景。"),
-                &RibbonBarWidget::signalNavigateToPlanning),
-            CreateNavigationButton(
-                QStringLiteral("路径规划"),
-                QStringLiteral("切换到 Planning 页面执行最小规划验证。"),
-                &RibbonBarWidget::signalNavigateToPlanning),
-            CreateNavigationButton(
-                QStringLiteral("碰撞检测"),
-                QStringLiteral("切换到 Planning 页面查看碰撞检测结果表。"),
-                &RibbonBarWidget::signalNavigateToPlanning),
-        }));
+        { buildSceneBtn, runVerificationBtn, saveBtn }));
     layout->addStretch();
     return tab;
 }
 
-QWidget* RibbonBarWidget::CreateResultExportTab()
+QWidget* RibbonBarWidget::CreateSchemeTab()
 {
     auto* tab = new QWidget(this);
     auto* layout = new QHBoxLayout(tab);
     layout->setContentsMargins(8, 4, 8, 6);
     layout->setSpacing(8);
 
+    auto* generateSnapshotBtn = CreateActionButton(
+        QStringLiteral("生成快照"),
+        QStringLiteral("生成当前方案快照。"));
+    connect(generateSnapshotBtn, &QToolButton::clicked, this, [this]() {
+        emit signalSchemeGenerateSnapshot();
+    });
+
+    auto* regenerateSaveBtn = CreateActionButton(
+        QStringLiteral("重新生成并保存"),
+        QStringLiteral("重新生成方案快照并保存到项目。"));
+    connect(regenerateSaveBtn, &QToolButton::clicked, this, [this]() {
+        emit signalSchemeRegenerateAndSave();
+    });
+
+    auto* loadSnapshotBtn = CreateActionButton(
+        QStringLiteral("加载快照"),
+        QStringLiteral("从项目加载已保存的方案快照。"));
+    connect(loadSnapshotBtn, &QToolButton::clicked, this, [this]() {
+        emit signalSchemeLoadSnapshot();
+    });
+
+    auto* exportJsonBtn = CreateActionButton(
+        QStringLiteral("导出 JSON"),
+        QStringLiteral("将当前方案导出为 JSON 文件。"));
+    connect(exportJsonBtn, &QToolButton::clicked, this, [this]() {
+        emit signalSchemeExportJson();
+    });
+
     layout->addWidget(CreateButtonGroup(
-        QStringLiteral("方案结果"),
-        {
-            CreateNavigationButton(
-                QStringLiteral("方案快照"),
-                QStringLiteral("切换到 Scheme 页面生成方案快照。"),
-                &RibbonBarWidget::signalNavigateToScheme),
-            CreateNavigationButton(
-                QStringLiteral("导出结果"),
-                QStringLiteral("切换到 Scheme 页面执行结果导出。"),
-                &RibbonBarWidget::signalNavigateToScheme),
-        }));
+        QStringLiteral("方案操作"),
+        { generateSnapshotBtn, regenerateSaveBtn, loadSnapshotBtn, exportJsonBtn }));
     layout->addStretch();
     return tab;
+}
+
+// ── 按钮状态更新 ────────────────────────────────────────────────────
+
+void RibbonBarWidget::SetTopologyButtonsEnabled(bool refreshEnabled, bool generateEnabled, bool validateEnabled, bool saveEnabled)
+{
+    if (m_topologyRefreshBtn) m_topologyRefreshBtn->setEnabled(refreshEnabled);
+    if (m_topologyGenerateBtn) m_topologyGenerateBtn->setEnabled(generateEnabled);
+    if (m_topologyValidateBtn) m_topologyValidateBtn->setEnabled(validateEnabled);
+    if (m_topologySaveBtn) m_topologySaveBtn->setEnabled(saveEnabled);
+}
+
+void RibbonBarWidget::SetKinematicsButtonsEnabled(
+    bool importUrdfEnabled,
+    bool buildFromTopologyEnabled,
+    bool promoteDhEnabled,
+    bool switchUrdfEnabled,
+    bool runFkEnabled,
+    bool runIkEnabled,
+    bool sampleWorkspaceEnabled,
+    bool saveEnabled)
+{
+    if (m_kinematicsImportUrdfBtn) m_kinematicsImportUrdfBtn->setEnabled(importUrdfEnabled);
+    if (m_kinematicsBuildFromTopologyBtn) m_kinematicsBuildFromTopologyBtn->setEnabled(buildFromTopologyEnabled);
+    if (m_kinematicsPromoteDhBtn) m_kinematicsPromoteDhBtn->setEnabled(promoteDhEnabled);
+    if (m_kinematicsSwitchUrdfBtn) m_kinematicsSwitchUrdfBtn->setEnabled(switchUrdfEnabled);
+    if (m_kinematicsRunFkBtn) m_kinematicsRunFkBtn->setEnabled(runFkEnabled);
+    if (m_kinematicsRunIkBtn) m_kinematicsRunIkBtn->setEnabled(runIkEnabled);
+    if (m_kinematicsSampleWorkspaceBtn) m_kinematicsSampleWorkspaceBtn->setEnabled(sampleWorkspaceEnabled);
+    if (m_kinematicsSaveBtn) m_kinematicsSaveBtn->setEnabled(saveEnabled);
+}
+
+void RibbonBarWidget::SetDynamicsButtonsEnabled(bool buildFromKinematicsEnabled, bool runAnalysisEnabled, bool saveEnabled)
+{
+    if (m_dynamicsBuildFromKinematicsBtn) m_dynamicsBuildFromKinematicsBtn->setEnabled(buildFromKinematicsEnabled);
+    if (m_dynamicsRunAnalysisBtn) m_dynamicsRunAnalysisBtn->setEnabled(runAnalysisEnabled);
+    if (m_dynamicsSaveBtn) m_dynamicsSaveBtn->setEnabled(saveEnabled);
 }
 
 QWidget* RibbonBarWidget::CreateViewTab()
@@ -376,18 +609,6 @@ QToolButton* RibbonBarWidget::CreateCameraPresetButton(
     return button;
 }
 
-QToolButton* RibbonBarWidget::CreateNavigationButton(
-    const QString& text,
-    const QString& tooltip,
-    void (RibbonBarWidget::*navigationSignal)())
-{
-    auto* button = CreateActionButton(text, tooltip);
-    connect(button, &QToolButton::clicked, this, [this, navigationSignal]() {
-        // 中文说明：顶部功能区只表达导航意图，具体页面状态切换由 MainWindow 统一处理。
-        (this->*navigationSignal)();
-    });
-    return button;
-}
 
 QToolButton* RibbonBarWidget::CreateDisabledButton(const QString& text, const QString& reason)
 {

@@ -198,3 +198,31 @@ add_test(
         "PATH=${ROBOSDP_KINEMATICS_TEST_PATH}"
         $<TARGET_FILE:robosdp_kinematics_workspace_switch_smoke>
 )
+
+# ── 信号路由综合测试 ──────────────────────────────────────
+# 验证 KinematicsWidget / TopologyWidget / DynamicsWidget 的 StatusChanged 信号发射
+# 以及 CanXxx() 方法初始返回值正确性
+add_executable(robosdp_kinematics_signal_routing
+    KinematicsSignalRoutingTest.cpp
+)
+
+target_include_directories(robosdp_kinematics_signal_routing
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}
+)
+
+target_link_libraries(robosdp_kinematics_signal_routing
+    PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        robosdp_kinematics
+        robosdp_topology
+        robosdp_dynamics
+)
+
+add_test(
+    NAME robosdp_kinematics_signal_routing
+    COMMAND
+        ${CMAKE_COMMAND} -E env
+        "PATH=${ROBOSDP_KINEMATICS_TEST_PATH}"
+        $<TARGET_FILE:robosdp_kinematics_signal_routing>
+)

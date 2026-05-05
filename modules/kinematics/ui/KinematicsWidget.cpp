@@ -390,28 +390,7 @@ void KinematicsWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* actionLayout = new QHBoxLayout();
-    m_import_urdf_button = new QPushButton(QStringLiteral("导入 URDF"), this);
-    m_build_from_topology_button = new QPushButton(QStringLiteral("从 Topology 生成"), this);
-    m_promote_dh_draft_button = new QPushButton(QStringLiteral("切换为 DH/MDH 主模型"), this);
-    m_switch_to_urdf_master_button = new QPushButton(QStringLiteral("切换为 URDF 主模型"), this);
-    m_run_fk_button = new QPushButton(QStringLiteral("执行 FK"), this);
-    m_run_ik_button = new QPushButton(QStringLiteral("执行 IK"), this);
-    m_sample_workspace_button = new QPushButton(QStringLiteral("采样工作空间"), this);
-    m_save_button = new QPushButton(QStringLiteral("保存草稿"), this);
-    m_load_button = new QPushButton(QStringLiteral("重新加载"), this);
-    
-    actionLayout->addWidget(m_import_urdf_button);
-    actionLayout->addWidget(m_build_from_topology_button);
-    actionLayout->addWidget(m_promote_dh_draft_button);
-    actionLayout->addWidget(m_switch_to_urdf_master_button);
-    actionLayout->addWidget(m_run_fk_button);
-    actionLayout->addWidget(m_run_ik_button);
-    actionLayout->addWidget(m_sample_workspace_button);
-    actionLayout->addWidget(m_save_button);
-    actionLayout->addWidget(m_load_button);
-    actionLayout->addStretch();
-
+    // 操作按钮已迁移至 Ribbon 运动学工具页签，此处仅保留状态提示和多页签面板
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存 Topology，再生成 KinematicModel。"), this);
     m_operation_label->setWordWrap(true);
 
@@ -423,21 +402,10 @@ void KinematicsWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(CreateSolverGroup()), QStringLiteral("FK / IK 求解"));
     tabs->addTab(CreateScrollableTab(CreateResultGroup()), QStringLiteral("结果摘要"));
 
-    rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 
-    connect(m_import_urdf_button, &QPushButton::clicked, this, [this]() { OnImportUrdfClicked(); });
-    connect(m_build_from_topology_button, &QPushButton::clicked, this, [this]() { OnBuildFromTopologyClicked(); });
-    connect(m_promote_dh_draft_button, &QPushButton::clicked, this, [this]() { OnPromoteDhDraftToMasterClicked(); });
-    connect(m_switch_to_urdf_master_button, &QPushButton::clicked, this, [this]() { OnSwitchToUrdfMasterClicked(); });
-    connect(m_run_fk_button, &QPushButton::clicked, this, [this]() { OnRunFkClicked(); });
-    connect(m_run_ik_button, &QPushButton::clicked, this, [this]() { OnRunIkClicked(); });
-    connect(m_sample_workspace_button, &QPushButton::clicked, this, [this]() { OnSampleWorkspaceClicked(); });
-    connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
-    connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
-
-    // A/B 通道：将涉及“结构变动”的输入项绑定至重量级通道 SyncStructureAndPreview
+    // A/B 通道：将涉及"结构变动"的输入项绑定至重量级通道 SyncStructureAndPreview
     connect(
         m_parameter_convention_combo,
         static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
@@ -934,26 +902,6 @@ void KinematicsWidget::RefreshEditingState()
         SetEditorsEnabled(m_workpiece_frame_spins, dhEditable && m_workpiece_frame_enabled_check->isChecked());
     }
 
-    if (m_promote_dh_draft_button != nullptr)
-    {
-        const bool canPromote =
-            isUrdfDraftReadOnly &&
-            !m_state.current_model.links.empty();
-        m_promote_dh_draft_button->setEnabled(canPromote);
-        m_promote_dh_draft_button->setToolTip(
-            canPromote
-                ? QStringLiteral("将当前 URDF 提取草案提升为可编辑的 DH/MDH 主模型，并开始由参数表驱动中央骨架与派生 URDF。")
-                : QStringLiteral("仅当当前主模型为 URDF，且已提取出可展示的 DH/MDH 草案时可执行此切换。"));
-    }
-
-    if (m_switch_to_urdf_master_button != nullptr)
-    {
-        m_switch_to_urdf_master_button->setEnabled(canSwitchBackToUrdf);
-        m_switch_to_urdf_master_button->setToolTip(
-            canSwitchBackToUrdf
-                ? QStringLiteral("将当前项目回切到 URDF 主模型模式，并重新以工程模型预览驱动中央视图。")
-                : QStringLiteral("仅当当前主模型为 DH/MDH，且存在可用的派生 URDF 文件时可执行回切。"));
-    }
 
     if (m_dh_readonly_banner_label != nullptr)
     {
@@ -1447,10 +1395,11 @@ void KinematicsWidget::OnImportUrdfClicked()
 
     SetOperationMessage(importResult.message, importResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(importResult.message));
+    emit StatusChanged();
 }
 
 /**
- * @brief 槽函数：响应用户点击“从 Topology 生成”按钮的事件。
+ * @brief 槽函数：响应用户点击"从 Topology 生成"按钮的事件。
  * @details 
  * 该函数负责调用底层服务，读取当前项目的拓扑配置文件，将其映射为标准的 DH/MDH 运动学参数，
  * 并驱动界面的数据表格和右侧的 3D VTK 视图进行一次“重量级”的同步刷新（通道 A）。
@@ -1500,6 +1449,7 @@ void KinematicsWidget::OnBuildFromTopologyClicked()
     
     // 5. 记录系统日志，抛给主窗口的 Console 面板
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(buildResult.message));
+    emit StatusChanged();
 }
 
 void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
@@ -1605,6 +1555,7 @@ void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
     SetOperationMessage(message, true);
     EmitTelemetryStatus(QStringLiteral("DH/MDH 主模型"), message, false);
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(message));
+    emit StatusChanged();
 }
 
 void KinematicsWidget::OnSwitchToUrdfMasterClicked()
@@ -1754,6 +1705,7 @@ void KinematicsWidget::OnSwitchToUrdfMasterClicked()
     SetOperationMessage(message, true);
     EmitTelemetryStatus(QStringLiteral("URDF 主模型"), message, false);
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(message));
+    emit StatusChanged();
 }
 
 void KinematicsWidget::OnRunFkClicked()
@@ -1777,6 +1729,7 @@ void KinematicsWidget::OnRunFkClicked()
     emit LogMessageGenerated(QStringLiteral("%1 %2").arg(
         warning ? QStringLiteral("[Kinematics][Warning]") : QStringLiteral("[Kinematics]"),
         m_state.last_fk_result.message));
+    emit StatusChanged();
 }
 
 void KinematicsWidget::OnRunIkClicked()
@@ -1808,6 +1761,7 @@ void KinematicsWidget::OnRunIkClicked()
     emit LogMessageGenerated(QStringLiteral("%1 %2").arg(
         warning ? QStringLiteral("[Kinematics][Warning]") : QStringLiteral("[Kinematics]"),
         m_state.last_ik_result.message));
+    emit StatusChanged();
 }
 
 void KinematicsWidget::OnSampleWorkspaceClicked()
@@ -1830,12 +1784,14 @@ void KinematicsWidget::OnSampleWorkspaceClicked()
     emit LogMessageGenerated(QStringLiteral("%1 %2").arg(
         warning ? QStringLiteral("[Kinematics][Warning]") : QStringLiteral("[Kinematics]"),
         m_state.last_workspace_result.message));
+    emit StatusChanged();
 }
 
 void KinematicsWidget::OnSaveDraftClicked()
 {
     const auto saveResult = SaveCurrentDraft();
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(saveResult.message));
+    emit StatusChanged();
 }
 
 void KinematicsWidget::OnLoadClicked()
@@ -1865,6 +1821,7 @@ void KinematicsWidget::OnLoadClicked()
 
     SetOperationMessage(loadResult.message, loadResult.IsSuccess());
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(loadResult.message));
+    emit StatusChanged();
 }
 
 void KinematicsWidget::AdjustJointInputCount(int jointCount)
@@ -1936,4 +1893,54 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
         }
     }
 }
+
+// ── Ribbon 按钮状态查询 ────────────────────────────────────────────────────
+
+bool KinematicsWidget::CanBuildFromTopology() const
+{
+    // 当 m_topology_ref_edit 非空时说明存在拓扑引用，允许从拓扑构建
+    return m_topology_ref_edit != nullptr && !m_topology_ref_edit->text().trimmed().isEmpty();
+}
+
+bool KinematicsWidget::CanPromoteToDhMaster() const
+{
+    // URDF 只读模式下（master_model_type=="urdf" && !dh_editable）且模型已加载时可提升
+    return !m_state.current_model.dh_editable &&
+           m_state.current_model.master_model_type == QStringLiteral("urdf") &&
+           !m_state.current_model.links.empty();
+}
+
+bool KinematicsWidget::CanSwitchToUrdfMaster() const
+{
+    // DH/MDH 主模型模式下，且存在可用的 URDF 源文件时可回切
+    if (m_state.current_model.master_model_type != QStringLiteral("dh_mdh"))
+    {
+        return false;
+    }
+    const QString urdfPath = ResolveOriginalImportedUrdfMasterPath().trimmed().isEmpty()
+        ? ResolveDerivedUrdfMasterPath()
+        : ResolveOriginalImportedUrdfMasterPath();
+    return !urdfPath.trimmed().isEmpty() && QFileInfo::exists(urdfPath);
+}
+
+bool KinematicsWidget::CanRunFk() const
+{
+    return !m_state.current_model.links.empty();
+}
+
+bool KinematicsWidget::CanRunIk() const
+{
+    return !m_state.current_model.links.empty();
+}
+
+bool KinematicsWidget::CanSampleWorkspace() const
+{
+    return !m_state.current_model.links.empty();
+}
+
+bool KinematicsWidget::CanSaveDraft() const
+{
+    return !m_state.current_model.links.empty() && m_has_unsaved_changes;
+}
+
 } // namespace RoboSDP::Kinematics::Ui

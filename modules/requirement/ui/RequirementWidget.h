@@ -44,6 +44,9 @@ public:
     /// @brief 返回当前 Requirement 表单是否存在未保存变更。
     bool HasUnsavedChanges() const override;
 
+    /// @brief 由 Ribbon 按钮触发校验（职责分离：Widget 不持有 action 按钮）。
+    void TriggerValidate() { OnValidateClicked(); }
+
 signals:
     /// 将 Requirement 操作消息抛给主窗口底部日志面板。
     void LogMessageGenerated(const QString& message);
@@ -116,9 +119,6 @@ private:
     int m_current_key_pose_index = -1;
     bool m_has_unsaved_changes = false;
 
-    QPushButton* m_validate_button = nullptr;
-    QPushButton* m_save_button = nullptr;
-    QPushButton* m_load_button = nullptr;
     QLabel* m_operation_label = nullptr;
     QLabel* m_validation_summary_label = nullptr;
     QListWidget* m_validation_issue_list = nullptr;

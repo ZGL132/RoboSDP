@@ -60,8 +60,42 @@ public:
     /// @brief 返回当前 Kinematics 页面是否存在未保存变更。
     bool HasUnsavedChanges() const override;
 
-    /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有“导入 URDF”流程，不在 MainWindow 中复制业务逻辑。
+    /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有"导入 URDF"流程，不在 MainWindow 中复制业务逻辑。
     void TriggerImportUrdf();
+
+    // ── 以下方法由 RibbonBarWidget 工具按钮信号触发，委托到内部槽函数 ──
+    /// @brief Ribbon 接口：从拓扑构型构建运动学。
+    void TriggerBuildFromTopology() { OnBuildFromTopologyClicked(); }
+    /// @brief Ribbon 接口：提升为 DH 主模型。
+    void TriggerPromoteToDhMaster() { OnPromoteDhDraftToMasterClicked(); }
+    /// @brief Ribbon 接口：切换回 URDF 主模型。
+    void TriggerSwitchToUrdfMaster() { OnSwitchToUrdfMasterClicked(); }
+    /// @brief Ribbon 接口：执行正运动学求解。
+    void TriggerRunFk() { OnRunFkClicked(); }
+    /// @brief Ribbon 接口：执行逆运动学求解。
+    void TriggerRunIk() { OnRunIkClicked(); }
+    /// @brief Ribbon 接口：采样工作空间。
+    void TriggerSampleWorkspace() { OnSampleWorkspaceClicked(); }
+    /// @brief Ribbon 接口：保存运动学草稿。
+    void TriggerSaveDraft() { OnSaveDraftClicked(); }
+
+    // ── Ribbon 按钮状态查询 ──────────────────────────────────
+    /// @brief 查询是否可导入 URDF（通常始终可用）。
+    bool CanImportUrdf() const { return true; }
+    /// @brief 查询是否可从拓扑构型构建运动学。
+    bool CanBuildFromTopology() const;
+    /// @brief 查询是否可提升为 DH 主模型。
+    bool CanPromoteToDhMaster() const;
+    /// @brief 查询是否可切换回 URDF 主模型。
+    bool CanSwitchToUrdfMaster() const;
+    /// @brief 查询是否可执行正运动学（模型已加载）。
+    bool CanRunFk() const;
+    /// @brief 查询是否可执行逆运动学（模型已加载）。
+    bool CanRunIk() const;
+    /// @brief 查询是否可采样工作空间。
+    bool CanSampleWorkspace() const;
+    /// @brief 查询当前草稿是否可保存。
+    bool CanSaveDraft() const;
 
 signals:
     /// @brief 将 Kinematics 操作消息抛给主窗口底部日志面板。
@@ -75,6 +109,9 @@ signals:
 
     /// @brief 将共享内核 FK 输出的 link 全局位姿发送给中央三维视图，用于只更新 Actor 矩阵。
     void PreviewPosesUpdated(const RoboSDP::Kinematics::Ui::PreviewPoseMap& linkWorldPoses);
+
+    /// @brief Kinematics 页面内部状态变更信号，通知 MainWindow 重新查询按钮启用状态。
+    void StatusChanged();
 
 private:
     void BuildUi();
@@ -104,7 +141,7 @@ private:
     QString ResolveOriginalImportedUrdfMasterPath() const;
     QString ResolveDerivedUrdfMasterPath() const;
 
-    // ✅ 替换为新的签名，并增加一个动态适配方法的声明：
+    // 替换为新的签名，并增加一个动态适配方法的声明：
     std::vector<double> CollectJointInputs(const std::vector<QDoubleSpinBox*>& spinBoxes) const;
     void AdjustJointInputCount(int jointCount);
     void FillIkTargetFromFkResult();
@@ -143,15 +180,6 @@ private:
     bool m_is_populating_form = false;
     QString m_preview_source_mode = QStringLiteral("none");
 
-    QPushButton* m_import_urdf_button = nullptr;
-    QPushButton* m_build_from_topology_button = nullptr;
-    QPushButton* m_promote_dh_draft_button = nullptr;
-    QPushButton* m_switch_to_urdf_master_button = nullptr;
-    QPushButton* m_run_fk_button = nullptr;
-    QPushButton* m_run_ik_button = nullptr;
-    QPushButton* m_sample_workspace_button = nullptr;
-    QPushButton* m_save_button = nullptr;
-    QPushButton* m_load_button = nullptr;
     QLabel* m_operation_label = nullptr;
 
     QLineEdit* m_model_name_edit = nullptr;

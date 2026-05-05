@@ -47,6 +47,11 @@ public:
     /// @brief 返回当前 Planning 页面是否存在未保存变更。
     bool HasUnsavedChanges() const override;
 
+    /// @brief 供 Ribbon 按钮调用的公共触发方法。
+    void TriggerBuildScene() { OnBuildSceneClicked(); }
+    /// @brief 供 Ribbon 按钮调用的公共触发方法。
+    void TriggerRunVerification() { OnRunVerificationClicked(); }
+
 signals:
     void LogMessageGenerated(const QString& message);
 
@@ -81,10 +86,6 @@ private:
     RoboSDP::Planning::Dto::PlanningWorkspaceStateDto m_state;
     bool m_has_unsaved_changes = false;
 
-    QPushButton* m_build_scene_button = nullptr;
-    QPushButton* m_run_verification_button = nullptr;
-    QPushButton* m_save_button = nullptr;
-    QPushButton* m_load_button = nullptr;
     QLabel* m_operation_label = nullptr;
 
     QLineEdit* m_kinematic_ref_edit = nullptr;

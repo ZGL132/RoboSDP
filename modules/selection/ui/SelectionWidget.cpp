@@ -133,15 +133,6 @@ void SelectionWidget::BuildUi()
     catalogLayout->addWidget(m_catalog_root_edit, 1);
     catalogLayout->addWidget(m_browse_catalog_button);
 
-    auto* actionLayout = new QHBoxLayout();
-    m_run_button = new QPushButton(QStringLiteral("执行选型"), this);
-    m_save_button = new QPushButton(QStringLiteral("保存草稿"), this);
-    m_load_button = new QPushButton(QStringLiteral("重新加载"), this);
-    actionLayout->addWidget(m_run_button);
-    actionLayout->addWidget(m_save_button);
-    actionLayout->addWidget(m_load_button);
-    actionLayout->addStretch();
-
     m_operation_label = new QLabel(QStringLiteral("就绪：请先通过顶部功能区新建或打开项目，再选择样例目录后执行驱动选型。"), this);
     m_operation_label->setWordWrap(true);
 
@@ -168,14 +159,10 @@ void SelectionWidget::BuildUi()
     scrollArea->setWidget(content);
 
     rootLayout->addLayout(catalogLayout);
-    rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
 
     connect(m_browse_catalog_button, &QPushButton::clicked, this, [this]() { OnBrowseCatalogRootClicked(); });
-    connect(m_run_button, &QPushButton::clicked, this, [this]() { OnRunSelectionClicked(); });
-    connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
-    connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
 }
 
 void SelectionWidget::SetupResultTableColumns()

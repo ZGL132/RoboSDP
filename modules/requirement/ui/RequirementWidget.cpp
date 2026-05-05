@@ -114,15 +114,6 @@ void RequirementWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* actionLayout = new QHBoxLayout();
-    m_validate_button = new QPushButton(QStringLiteral("校验"), this);
-    m_save_button = new QPushButton(QStringLiteral("保存草稿"), this);
-    m_load_button = new QPushButton(QStringLiteral("重新加载"), this);
-    actionLayout->addWidget(m_validate_button);
-    actionLayout->addWidget(m_save_button);
-    actionLayout->addWidget(m_load_button);
-    actionLayout->addStretch();
-
     m_operation_label = new QLabel(QStringLiteral("就绪：请录入 Requirement 基础字段。"), this);
     m_operation_label->setWordWrap(true);
 
@@ -137,13 +128,8 @@ void RequirementWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(CreateReliabilityGroup()), QStringLiteral("可靠性"));
     tabs->addTab(CreateScrollableTab(CreateValidationGroup()), QStringLiteral("校验结果"));
 
-    rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
-
-    connect(m_validate_button, &QPushButton::clicked, this, [this]() { OnValidateClicked(); });
-    connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
-    connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
 }
 
 QWidget* RequirementWidget::CreateScrollableTab(QWidget* contentWidget)

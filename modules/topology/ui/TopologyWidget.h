@@ -58,12 +58,35 @@ public:
     /// @brief 外部接口：强制触发一次实时预览信号（可供主窗口加载完毕后主动拉取画面）。
     void ForceEmitPreview() { UpdateLivePreview(); }
 
+    // ── 以下方法由 RibbonBarWidget 工具按钮信号触发，委托到内部槽函数 ──
+    /// @brief Ribbon 接口：刷新构型模板列表。
+    void TriggerRefreshTemplates() { OnRefreshTemplatesClicked(); }
+    /// @brief Ribbon 接口：执行构型生成。
+    void TriggerGenerate() { OnGenerateClicked(); }
+    /// @brief Ribbon 接口：校验当前构型。
+    void TriggerValidate() { OnValidateClicked(); }
+    /// @brief Ribbon 接口：保存构型草稿。
+    void TriggerSaveDraft() { OnSaveDraftClicked(); }
+
+    // ── Ribbon 按钮状态查询方法 ──
+    /// @brief Ribbon 按钮状态查询：刷新模板列表按钮是否可用（始终可用）。
+    bool CanRefreshTemplates() const { return true; }
+    /// @brief Ribbon 按钮状态查询：执行构型生成按钮是否可用（需已选中有效模板）。
+    bool CanGenerate() const;
+    /// @brief Ribbon 按钮状态查询：校验构型按钮是否可用（需已填写至少构型名称）。
+    bool CanValidate() const;
+    /// @brief Ribbon 按钮状态查询：保存草稿按钮是否可用（需存在未保存变更）。
+    bool CanSaveDraft() const { return m_has_unsaved_changes; }
+
 signals:
     /// @brief 信号：将 Topology 模块的操作日志发给主窗口底部的日志面板。
     void LogMessageGenerated(const QString& message);
 
     /// @brief 信号：向外（通常是主窗口的三维视图区）广播当前的拓扑骨架预览场景，用于实时渲染。
     void TopologyPreviewGenerated(const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene);
+
+    /// @brief 信号：模块内部状态（表单字段、脏标志）发生变化时发射，通知 MainWindow 刷新 Ribbon 按钮启用/禁用状态。
+    void StatusChanged();
 
 private:
     // ==================== UI 构建与初始化 ====================
@@ -132,11 +155,6 @@ private:
 
     // ==================== UI 控件指针 ====================
     QComboBox* m_template_combo = nullptr;
-    QPushButton* m_refresh_template_button = nullptr;
-    QPushButton* m_generate_button = nullptr;
-    QPushButton* m_validate_button = nullptr;
-    QPushButton* m_save_button = nullptr;
-    QPushButton* m_load_button = nullptr;
     QLabel* m_operation_label = nullptr;
 
     QLineEdit* m_topology_name_edit = nullptr;

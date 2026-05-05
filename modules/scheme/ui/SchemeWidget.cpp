@@ -120,17 +120,6 @@ void SchemeWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* actionLayout = new QHBoxLayout();
-    m_generate_snapshot_button = new QPushButton(QStringLiteral("生成 Snapshot"), this);
-    m_regenerate_save_snapshot_button = new QPushButton(QStringLiteral("重新生成并保存"), this);
-    m_load_snapshot_button = new QPushButton(QStringLiteral("加载 Snapshot"), this);
-    m_export_json_button = new QPushButton(QStringLiteral("导出 JSON"), this);
-    actionLayout->addWidget(m_generate_snapshot_button);
-    actionLayout->addWidget(m_regenerate_save_snapshot_button);
-    actionLayout->addWidget(m_load_snapshot_button);
-    actionLayout->addWidget(m_export_json_button);
-    actionLayout->addStretch();
-
     m_operation_label = new QLabel(
         QStringLiteral("就绪：请先通过顶部功能区新建或打开项目，然后生成或加载 SchemeSnapshot。"),
         this);
@@ -187,30 +176,8 @@ void SchemeWidget::BuildUi()
     contentLayout->addStretch();
     scrollArea->setWidget(contentWidget);
 
-    rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
-
-    connect(
-        m_generate_snapshot_button,
-        &QPushButton::clicked,
-        this,
-        [this]() { OnGenerateSnapshotClicked(); });
-    connect(
-        m_regenerate_save_snapshot_button,
-        &QPushButton::clicked,
-        this,
-        [this]() { OnRegenerateAndSaveSnapshotClicked(); });
-    connect(
-        m_load_snapshot_button,
-        &QPushButton::clicked,
-        this,
-        [this]() { OnLoadSnapshotClicked(); });
-    connect(
-        m_export_json_button,
-        &QPushButton::clicked,
-        this,
-        [this]() { OnExportJsonClicked(); });
 }
 
 void SchemeWidget::RenderSnapshotSummary()

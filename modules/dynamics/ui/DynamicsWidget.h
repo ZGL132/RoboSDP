@@ -49,8 +49,22 @@ public:
     /// @brief 返回当前 Dynamics 页面是否存在未保存变更。
     bool HasUnsavedChanges() const override;
 
-    /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有“执行逆动力学”流程，不在 MainWindow 中复制业务逻辑。
+    /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有"执行逆动力学"流程，不在 MainWindow 中复制业务逻辑。
     void TriggerRunAnalysis();
+
+    // ── 以下方法由 RibbonBarWidget 工具按钮信号触发，委托到内部槽函数 ──
+    /// @brief Ribbon 接口：从运动学模型构建动力学。
+    void TriggerBuildFromKinematics() { OnBuildFromKinematicsClicked(); }
+    /// @brief Ribbon 接口：保存动力学草稿。
+    void TriggerSaveDraft() { OnSaveDraftClicked(); }
+
+    // ── Ribbon 按钮状态查询方法 ──
+    /// @brief Ribbon 按钮状态查询：从运动学构建动力学按钮是否可用（需已加载运动学草稿）。
+    bool CanBuildFromKinematics() const;
+    /// @brief Ribbon 按钮状态查询：执行逆动力学分析按钮是否可用（需已有连杆数据）。
+    bool CanRunAnalysis() const;
+    /// @brief Ribbon 按钮状态查询：保存草稿按钮是否可用（需存在未保存变更）。
+    bool CanSaveDraft() const { return m_has_unsaved_changes; }
 
 signals:
     /// @brief 将 Dynamics 操作消息抛给主窗口日志面板。
@@ -58,6 +72,9 @@ signals:
 
     /// @brief 将 Dynamics 当前引擎状态遥测同步给主窗口状态栏。
     void TelemetryStatusGenerated(const QString& message, bool warning);
+
+    /// @brief 信号：模块内部状态发生变化时发射，通知 MainWindow 刷新 Ribbon 按钮启用/禁用状态。
+    void StatusChanged();
 
 private:
     void BuildUi();
@@ -103,10 +120,6 @@ private:
     RoboSDP::Dynamics::Dto::DynamicsWorkspaceStateDto m_state;
     bool m_has_unsaved_changes = false;
 
-    QPushButton* m_build_from_kinematics_button = nullptr;
-    QPushButton* m_run_analysis_button = nullptr;
-    QPushButton* m_save_button = nullptr;
-    QPushButton* m_load_button = nullptr;
     QLabel* m_operation_label = nullptr;
 
     QLineEdit* m_model_name_edit = nullptr;

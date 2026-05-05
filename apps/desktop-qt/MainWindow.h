@@ -106,13 +106,10 @@ private:
     /// 清空项目树节点指针，避免树重建后保留悬空地址。
     void ResetProjectTreeItemPointers();
 
-    /// 根据项目树选中节点切换属性页。
+    /// 根据项目树选中节点切换属性页，同时切换 Ribbon 上下文页签。
     void HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem);
 
-    /// 响应顶部功能区导航请求，统一复用左侧项目树和右侧属性页切换逻辑。
-    void HandleRibbonNavigateTo(QTreeWidgetItem* targetItem, const QString& targetName);
-
-    /// 响应顶部功能区“新建项目”命令，创建最小项目目录骨架。
+    /// 响应顶部功能区"新建项目"命令，创建最小项目目录骨架。
     void HandleCreateNewProjectRequested();
 
     /// 响应顶部功能区“打开项目”命令，校验 project.json 后更新全局项目上下文。

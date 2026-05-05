@@ -138,17 +138,6 @@ void PlanningWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    auto* actionLayout = new QHBoxLayout();
-    m_build_scene_button = new QPushButton(QStringLiteral("构建 PlanningScene"), this);
-    m_run_verification_button = new QPushButton(QStringLiteral("执行点到点验证"), this);
-    m_save_button = new QPushButton(QStringLiteral("保存草稿"), this);
-    m_load_button = new QPushButton(QStringLiteral("重新加载"), this);
-    actionLayout->addWidget(m_build_scene_button);
-    actionLayout->addWidget(m_run_verification_button);
-    actionLayout->addWidget(m_save_button);
-    actionLayout->addWidget(m_load_button);
-    actionLayout->addStretch();
-
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存上游草稿，再构建 PlanningScene 并执行验证。"), this);
     m_operation_label->setWordWrap(true);
 
@@ -212,14 +201,9 @@ void PlanningWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(selfCollisionGroup), QStringLiteral("自碰撞检测"));
     tabs->addTab(CreateScrollableTab(resultGroup), QStringLiteral("验证摘要"));
 
-    rootLayout->addLayout(actionLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 
-    connect(m_build_scene_button, &QPushButton::clicked, this, [this]() { OnBuildSceneClicked(); });
-    connect(m_run_verification_button, &QPushButton::clicked, this, [this]() { OnRunVerificationClicked(); });
-    connect(m_save_button, &QPushButton::clicked, this, [this]() { OnSaveDraftClicked(); });
-    connect(m_load_button, &QPushButton::clicked, this, [this]() { OnLoadClicked(); });
     connect(m_joint_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateJointTableAndHighlight(); });
 }
 

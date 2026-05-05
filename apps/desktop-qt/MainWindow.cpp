@@ -93,41 +93,71 @@ void MainWindow::CreateRibbonBar()
         &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalGlobalSaveRequested,
         this,
         [this]() { HandleGlobalSaveRequested(); });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToRequirement,
-        this,
-        [this]() { HandleRibbonNavigateTo(m_requirementTreeItem, QStringLiteral("需求定义")); });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToTopology,
-        this,
-        [this]() { HandleRibbonNavigateTo(m_topologyTreeItem, QStringLiteral("构型设计")); });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToKinematics,
-        this,
-        [this]() { HandleRibbonNavigateTo(m_kinematicsTreeItem, QStringLiteral("运动学建模")); });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToDynamics,
-        this,
-        [this]() { HandleRibbonNavigateTo(m_dynamicsTreeItem, QStringLiteral("动力学分析")); });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToSelection,
-        this,
-        [this]() { HandleRibbonNavigateTo(m_selectionTreeItem, QStringLiteral("驱动选型")); });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToPlanning,
-        this,
-        [this]() { HandleRibbonNavigateTo(m_planningTreeItem, QStringLiteral("规划与分析")); });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalNavigateToScheme,
-        this,
-        [this]() { HandleRibbonNavigateTo(m_schemeTreeItem, QStringLiteral("结果与导出")); });
+    // ── 构型工具信号路由 ──────────────────────────────────────
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalTopologyRefreshTemplates,
+            this, [this]() { if (m_topologyWidget) m_topologyWidget->TriggerRefreshTemplates(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalTopologyGenerate,
+            this, [this]() { if (m_topologyWidget) m_topologyWidget->TriggerGenerate(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalTopologyValidate,
+            this, [this]() { if (m_topologyWidget) m_topologyWidget->TriggerValidate(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalTopologySaveDraft,
+            this, [this]() { if (m_topologyWidget) m_topologyWidget->TriggerSaveDraft(); });
+
+    // ── 运动学工具信号路由 ────────────────────────────────────
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalKinematicsImportUrdf,
+            this, [this]() { if (m_kinematicsWidget) m_kinematicsWidget->TriggerImportUrdf(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalKinematicsBuildFromTopology,
+            this, [this]() { if (m_kinematicsWidget) m_kinematicsWidget->TriggerBuildFromTopology(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalKinematicsPromoteToDhMaster,
+            this, [this]() { if (m_kinematicsWidget) m_kinematicsWidget->TriggerPromoteToDhMaster(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalKinematicsSwitchToUrdfMaster,
+            this, [this]() { if (m_kinematicsWidget) m_kinematicsWidget->TriggerSwitchToUrdfMaster(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalKinematicsRunFk,
+            this, [this]() { if (m_kinematicsWidget) m_kinematicsWidget->TriggerRunFk(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalKinematicsRunIk,
+            this, [this]() { if (m_kinematicsWidget) m_kinematicsWidget->TriggerRunIk(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalKinematicsSampleWorkspace,
+            this, [this]() { if (m_kinematicsWidget) m_kinematicsWidget->TriggerSampleWorkspace(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalKinematicsSaveDraft,
+            this, [this]() { if (m_kinematicsWidget) m_kinematicsWidget->TriggerSaveDraft(); });
+
+    // ── 动力学工具信号路由 ────────────────────────────────────
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalDynamicsBuildFromKinematics,
+            this, [this]() { if (m_dynamicsWidget) m_dynamicsWidget->TriggerBuildFromKinematics(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalDynamicsRunAnalysis,
+            this, [this]() { if (m_dynamicsWidget) m_dynamicsWidget->TriggerRunAnalysis(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalDynamicsSaveDraft,
+            this, [this]() { if (m_dynamicsWidget) m_dynamicsWidget->TriggerSaveDraft(); });
+
+    // ── 需求校验工具信号路由 ──────────────────────────────────
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalRequirementValidate,
+            this, [this]() { if (m_requirementWidget) m_requirementWidget->TriggerValidate(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalRequirementSaveDraft,
+            this, [this]() { if (m_requirementWidget) { m_requirementWidget->SaveCurrentDraft(); } });
+
+    // ── 选型工具信号路由 ──────────────────────────────────────
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSelectionRun,
+            this, [this]() { if (m_selectionWidget) m_selectionWidget->TriggerRunSelection(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSelectionSaveDraft,
+            this, [this]() { if (m_selectionWidget) { m_selectionWidget->SaveCurrentDraft(); } });
+
+    // ── 规划工具信号路由 ──────────────────────────────────────
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalPlanningBuildScene,
+            this, [this]() { if (m_planningWidget) m_planningWidget->TriggerBuildScene(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalPlanningRunVerification,
+            this, [this]() { if (m_planningWidget) m_planningWidget->TriggerRunVerification(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalPlanningSaveDraft,
+            this, [this]() { if (m_planningWidget) { m_planningWidget->SaveCurrentDraft(); } });
+
+    // ── 方案导出工具信号路由 ──────────────────────────────────
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSchemeGenerateSnapshot,
+            this, [this]() { if (m_schemeWidget) m_schemeWidget->TriggerGenerateSnapshot(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSchemeRegenerateAndSave,
+            this, [this]() { if (m_schemeWidget) m_schemeWidget->TriggerRegenerateAndSaveSnapshot(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSchemeLoadSnapshot,
+            this, [this]() { if (m_schemeWidget) m_schemeWidget->TriggerLoadSnapshot(); });
+    connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSchemeExportJson,
+            this, [this]() { if (m_schemeWidget) m_schemeWidget->TriggerExportJson(); });
 
     const auto visibilityText = [](bool visible) {
         return visible ? QStringLiteral("开启") : QStringLiteral("关闭");
@@ -405,6 +435,20 @@ void MainWindow::CreatePropertyDock()
         this,
         [this](const QString& message) { AppendLogLine(message); });
 
+    // ── Topology 状态变更 → 刷新 Ribbon 构型按钮启用/禁用 ──
+    connect(
+        m_topologyWidget,
+        &RoboSDP::Topology::Ui::TopologyWidget::StatusChanged,
+        this,
+        [this]() {
+            if (m_topologyWidget == nullptr || m_ribbonBar == nullptr) return;
+            m_ribbonBar->SetTopologyButtonsEnabled(
+                m_topologyWidget->CanRefreshTemplates(),
+                m_topologyWidget->CanGenerate(),
+                m_topologyWidget->CanValidate(),
+                m_topologyWidget->CanSaveDraft());
+        });
+
     // --- 新增：接收 Topology 的实时预览并发送给 VTK 视图 ---
     connect(
         m_topologyWidget,
@@ -431,6 +475,24 @@ void MainWindow::CreatePropertyDock()
         &RoboSDP::Kinematics::Ui::KinematicsWidget::LogMessageGenerated,
         this,
         [this](const QString& message) { AppendLogLine(message); });
+
+    // ── Kinematics 状态变更 → 刷新 Ribbon 运动学按钮启用/禁用 ──
+    connect(
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::StatusChanged,
+        this,
+        [this]() {
+            if (m_kinematicsWidget == nullptr || m_ribbonBar == nullptr) return;
+            m_ribbonBar->SetKinematicsButtonsEnabled(
+                m_kinematicsWidget->CanImportUrdf(),
+                m_kinematicsWidget->CanBuildFromTopology(),
+                m_kinematicsWidget->CanPromoteToDhMaster(),
+                m_kinematicsWidget->CanSwitchToUrdfMaster(),
+                m_kinematicsWidget->CanRunFk(),
+                m_kinematicsWidget->CanRunIk(),
+                m_kinematicsWidget->CanSampleWorkspace(),
+                m_kinematicsWidget->CanSaveDraft());
+        });
 
     connect(
         m_kinematicsWidget,
@@ -501,6 +563,19 @@ void MainWindow::CreatePropertyDock()
         &RoboSDP::Dynamics::Ui::DynamicsWidget::LogMessageGenerated,
         this,
         [this](const QString& message) { AppendLogLine(message); });
+
+    // ── Dynamics 状态变更 → 刷新 Ribbon 动力学按钮启用/禁用 ──
+    connect(
+        m_dynamicsWidget,
+        &RoboSDP::Dynamics::Ui::DynamicsWidget::StatusChanged,
+        this,
+        [this]() {
+            if (m_dynamicsWidget == nullptr || m_ribbonBar == nullptr) return;
+            m_ribbonBar->SetDynamicsButtonsEnabled(
+                m_dynamicsWidget->CanBuildFromKinematics(),
+                m_dynamicsWidget->CanRunAnalysis(),
+                m_dynamicsWidget->CanSaveDraft());
+        });
 
     connect(
         m_dynamicsWidget,
@@ -644,6 +719,7 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     if (currentItem == m_requirementTreeItem)
     {
         m_propertyStack->setCurrentWidget(m_requirementWidget);
+        m_ribbonBar->SwitchToContextTab(QStringLiteral("Requirement"));
         statusBar()->showMessage(QStringLiteral("当前页面：Requirement"));
         return;
     }
@@ -651,6 +727,7 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     if (currentItem == m_topologyTreeItem)
     {
         m_propertyStack->setCurrentWidget(m_topologyWidget);
+        m_ribbonBar->SwitchToContextTab(QStringLiteral("Topology"));
         statusBar()->showMessage(QStringLiteral("当前页面：Topology"));
         // 优化逻辑：判断是否是首次进入
         if (m_isFirstTopologyEntry)
@@ -659,7 +736,7 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
             m_shouldResetNextPreview = true;
             
             // 2. 触发 TopologyWidget 生成初始预览信号
-            m_topologyWidget->ForceEmitPreview(); 
+            m_topologyWidget->ForceEmitPreview();
             
             // 3. 标记已完成首次进入，后续再切回来将不再重置视角
             m_isFirstTopologyEntry = false;
@@ -674,6 +751,7 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     if (currentItem == m_kinematicsTreeItem)
     {
         m_propertyStack->setCurrentWidget(m_kinematicsWidget);
+        m_ribbonBar->SwitchToContextTab(QStringLiteral("Kinematics"));
         statusBar()->showMessage(QStringLiteral("当前页面：Kinematics"));
         return;
     }
@@ -681,6 +759,7 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     if (currentItem == m_dynamicsTreeItem)
     {
         m_propertyStack->setCurrentWidget(m_dynamicsWidget);
+        m_ribbonBar->SwitchToContextTab(QStringLiteral("Dynamics"));
         statusBar()->showMessage(QStringLiteral("当前页面：Dynamics"));
         return;
     }
@@ -688,6 +767,7 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     if (currentItem == m_selectionTreeItem)
     {
         m_propertyStack->setCurrentWidget(m_selectionWidget);
+        m_ribbonBar->SwitchToContextTab(QStringLiteral("Selection"));
         statusBar()->showMessage(QStringLiteral("当前页面：Selection"));
         return;
     }
@@ -695,6 +775,7 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     if (currentItem == m_planningTreeItem)
     {
         m_propertyStack->setCurrentWidget(m_planningWidget);
+        m_ribbonBar->SwitchToContextTab(QStringLiteral("Planning"));
         statusBar()->showMessage(QStringLiteral("当前页面：Planning"));
         return;
     }
@@ -702,40 +783,16 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
     if (currentItem == m_schemeTreeItem)
     {
         m_propertyStack->setCurrentWidget(m_schemeWidget);
+        m_ribbonBar->SwitchToContextTab(QStringLiteral("Scheme"));
         statusBar()->showMessage(QStringLiteral("当前页面：Scheme"));
         return;
     }
 
     m_propertyStack->setCurrentWidget(m_placeholderPropertyPanel);
+    m_ribbonBar->SwitchToContextTab(QStringLiteral("File"));
     statusBar()->showMessage(QStringLiteral("当前节点尚未实现编辑页面"));
 }
 
-void MainWindow::HandleRibbonNavigateTo(QTreeWidgetItem* targetItem, const QString& targetName)
-{
-    if (m_projectTree == nullptr)
-    {
-        return;
-    }
-
-    if (RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath().trimmed().isEmpty())
-    {
-        const QString message = QStringLiteral("请先新建或打开 RoboSDP 项目，再进入%1。").arg(targetName);
-        AppendLogLine(QStringLiteral("[WARN] [顶部功能区] %1").arg(message));
-        statusBar()->setStyleSheet(QStringLiteral("QStatusBar{color:#b54708;font-weight:600;}"));
-        statusBar()->showMessage(message);
-        return;
-    }
-
-    if (targetItem == nullptr)
-    {
-        AppendLogLine(QStringLiteral("[WARN] [顶部功能区] 导航目标尚未接入项目树：%1").arg(targetName));
-        return;
-    }
-
-    // 中文说明：Ribbon 只发起导航请求，真正的属性页切换仍复用项目树现有逻辑，避免双份状态。
-    AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至%1").arg(targetName));
-    m_projectTree->setCurrentItem(targetItem);
-}
 
 void MainWindow::HandleCreateNewProjectRequested()
 {

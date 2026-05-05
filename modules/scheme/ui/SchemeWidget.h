@@ -49,6 +49,15 @@ public:
     /// @brief 返回当前 Scheme 快照是否存在未保存变更。
     bool HasUnsavedChanges() const override;
 
+    /// @brief 供 Ribbon 按钮调用的公共触发方法。
+    void TriggerGenerateSnapshot() { OnGenerateSnapshotClicked(); }
+    /// @brief 供 Ribbon 按钮调用的公共触发方法。
+    void TriggerRegenerateAndSaveSnapshot() { OnRegenerateAndSaveSnapshotClicked(); }
+    /// @brief 供 Ribbon 按钮调用的公共触发方法。
+    void TriggerLoadSnapshot() { OnLoadSnapshotClicked(); }
+    /// @brief 供 Ribbon 按钮调用的公共触发方法。
+    void TriggerExportJson() { OnExportJsonClicked(); }
+
 signals:
     /// 向主窗口输出一条简短日志消息。
     void LogMessageGenerated(const QString& message);
@@ -97,10 +106,6 @@ private:
     bool m_has_snapshot = false;
     bool m_has_unsaved_changes = false;
 
-    QPushButton* m_generate_snapshot_button = nullptr;
-    QPushButton* m_regenerate_save_snapshot_button = nullptr;
-    QPushButton* m_load_snapshot_button = nullptr;
-    QPushButton* m_export_json_button = nullptr;
     QLabel* m_operation_label = nullptr;
     QLineEdit* m_scheme_id_edit = nullptr;
     QLineEdit* m_snapshot_file_edit = nullptr;
