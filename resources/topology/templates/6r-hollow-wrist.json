@@ -20,8 +20,12 @@
         "spraying"
       ],
       "base_mount_type": "floor",
-      "base_height_m": 0.0,
+      "base_height_m": 0.30,
       "base_orientation": [0.0, 0.0, 0.0],
+      "shoulder_offset_m": 0.08,
+      "upper_arm_length_m": 0.35,
+      "forearm_length_m": 0.30,
+      "wrist_offset_m": 0.08,
       "j1_rotation_range_deg": [-170.0, 170.0]
     },
     "layout": {

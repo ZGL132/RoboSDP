@@ -20,12 +20,16 @@
         "assembly"
       ],
       "base_mount_type": "floor",
-      "base_height_m": 0.0,
+      "base_height_m": 0.35,
       "base_orientation": [
         0.0,
         0.0,
         0.0
       ],
+      "shoulder_offset_m": 0.15,
+      "upper_arm_length_m": 0.50,
+      "forearm_length_m": 0.40,
+      "wrist_offset_m": 0.12,
       "j1_rotation_range_deg": [
         -185.0,
         185.0

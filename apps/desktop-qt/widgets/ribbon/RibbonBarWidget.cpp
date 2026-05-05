@@ -103,8 +103,8 @@ QWidget* RibbonBarWidget::CreateTopologyTab()
     });
 
     m_topologyGenerateBtn = CreateActionButton(
-        QStringLiteral("生成构型"),
-        QStringLiteral("基于当前选中的模板和轴参数生成机器人构型。"));
+        QStringLiteral("基于模板生成"), // <--- 改名：强调是从模板重置
+        QStringLiteral("警告：这将清空当前的手动修改，并根据需求和模板库重新生成初始基线方案。"));
     connect(m_topologyGenerateBtn, &QToolButton::clicked, this, [this]() {
         emit signalTopologyGenerate();
     });

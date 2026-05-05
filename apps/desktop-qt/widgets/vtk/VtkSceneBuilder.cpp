@@ -991,6 +991,10 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
             nodeActor->SetMapper(nodeMapper);
             nodeActor->GetProperty()->SetColor(colors->GetColor3d("Orange").GetData());
             nodeActor->GetProperty()->SetOpacity(skeletonNodeOpacity);
+            // 【新增】：添加金属光泽，提升节点球体的视觉质感
+            nodeActor->GetProperty()->SetSpecular(0.6);
+            nodeActor->GetProperty()->SetSpecularPower(40.0);
+            nodeActor->GetProperty()->SetAmbient(0.1);
             renderer->AddActor(nodeActor);
 
             if (displayOptions.show_link_labels && !node.link_name.trimmed().isEmpty())
@@ -1030,8 +1034,9 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
             lineActor->GetProperty()->SetColor(colors->GetColor3d("DeepSkyBlue").GetData());
             // 【新增】：添加高光和漫反射，增强 3D 金属/塑料质感
             lineActor->GetProperty()->SetDiffuse(0.8);
-            lineActor->GetProperty()->SetSpecular(0.3);
-            lineActor->GetProperty()->SetSpecularPower(20.0);
+            lineActor->GetProperty()->SetSpecular(0.8);
+            lineActor->GetProperty()->SetSpecularPower(50.0);
+            lineActor->GetProperty()->SetAmbient(0.15);
             lineActor->GetProperty()->SetOpacity(skeletonSegmentOpacity);
             renderer->AddActor(lineActor);
         }

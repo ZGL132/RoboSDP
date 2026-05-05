@@ -20,8 +20,12 @@
         "welding"
       ],
       "base_mount_type": "wall",
-      "base_height_m": 0.35,
+      "base_height_m": 0.25,
       "base_orientation": [90.0, 0.0, 0.0],
+      "shoulder_offset_m": 0.05,
+      "upper_arm_length_m": 0.25,
+      "forearm_length_m": 0.20,
+      "wrist_offset_m": 0.06,
       "j1_rotation_range_deg": [-160.0, 160.0]
     },
     "layout": {

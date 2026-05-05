@@ -10,6 +10,8 @@ class QLabel;
 class QVBoxLayout;
 
 #if defined(ROBOSDP_HAVE_VTK)
+#include <vtkActor.h>
+#include <vtkProperty.h>
 #include <vtkSmartPointer.h>
 
 class QVTKOpenGLNativeWidget;
@@ -66,6 +68,9 @@ public:
 
     /// @brief 设置 collision mesh 层显示状态，供顶部视图页签统一控制。
     void SetCollisionMeshVisible(bool visible);
+
+    /// @brief 供自定义 VTK 交互器调用，处理用户在 3D 视图中点击 Actor 后的高亮和状态栏输出。
+    void HandleActorClicked(vtkActor* clickedActor);
 
     /// @brief 设置关节轴诊断层显示状态，供顶部视图页签统一控制。
     void SetJointAxesVisible(bool visible);
@@ -137,6 +142,13 @@ private:
     vtkSmartPointer<vtkTextActor> m_watermark_actor; // <--- 【新增】：保存水印对象
     std::map<QString, vtkSmartPointer<vtkActor>> m_link_actors;
     std::map<QString, RoboSDP::Kinematics::Dto::GeometryObjectDto> m_link_mesh_geometries;
+
+    /// @brief 记录上一次被点击高亮的 Actor，用于恢复原始颜色。
+    vtkActor* m_last_picked_actor = nullptr;
+    /// @brief 上一次被点击 Actor 的原始颜色（R/G/B），用于恢复。
+    double m_last_picked_color[3] = {0.0, 0.0, 0.0};
+    /// @brief 上一次被点击 Actor 的原始环境光系数，用于恢复。
+    double m_last_picked_ambient = 0.0;
 #endif
 };
 

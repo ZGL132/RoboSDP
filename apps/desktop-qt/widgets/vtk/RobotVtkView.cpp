@@ -14,12 +14,52 @@
 #include <vtkCamera.h>
 #include <vtkCaptionActor2D.h>
 #include <vtkGenericOpenGLRenderWindow.h>
+#include <vtkInteractorStyleTrackballCamera.h>
 #include <vtkNew.h>
 #include <vtkOrientationMarkerWidget.h>
 #include <vtkProperty.h>
+#include <vtkPropPicker.h>
+#include <vtkRenderWindowInteractor.h>
 #include <vtkRenderer.h>
 #include <vtkTextProperty.h>
-#include <vtkTextActor.h>   // <--- 【新增】
+#include <vtkTextActor.h>
+
+/// @brief 自定义 VTK 鼠标交互器，支持左键点击拾取 3D Actor 并通知父视图高亮。
+class VtkClickInteractorStyle : public vtkInteractorStyleTrackballCamera
+{
+public:
+    /// @brief 工厂方法（手动实现而非 vtkStandardNewMacro，兼容 MinGW）。
+    static VtkClickInteractorStyle* New()
+    {
+        auto* ret = new VtkClickInteractorStyle;
+        ret->InitializeObjectBase();
+        return ret;
+    }
+
+    vtkTypeMacro(VtkClickInteractorStyle, vtkInteractorStyleTrackballCamera);
+
+    /// @brief 指向所属的 RobotVtkView，用于回调 HandleActorClicked。
+    RoboSDP::Desktop::Vtk::RobotVtkView* parentView = nullptr;
+    /// @brief 当前渲染器，用于 vtkPropPicker 拾取。
+    vtkRenderer* renderer = nullptr;
+
+    void OnLeftButtonDown() override
+    {
+        // 中文说明：左键按下时先执行拾取，再传递给父类保持视角旋转功能。
+        if (renderer != nullptr && parentView != nullptr && this->GetInteractor() != nullptr)
+        {
+            const int* clickPos = this->GetInteractor()->GetEventPosition();
+            vtkNew<vtkPropPicker> picker;
+            picker->Pick(clickPos[0], clickPos[1], 0, renderer);
+
+            vtkActor* clickedActor = picker->GetActor();
+            parentView->HandleActorClicked(clickedActor);
+        }
+        // 保留原有的视角旋转/平移功能
+        vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
+    }
+};
+
 #endif
 
 namespace RoboSDP::Desktop::Vtk
@@ -310,6 +350,8 @@ void RobotVtkView::BuildVtkView()
     m_vtkWidget->setMinimumSize(640, 480);
 
     vtkNew<vtkGenericOpenGLRenderWindow> renderWindow;
+    // 中文说明：开启 8x MSAA 多重采样抗锯齿，平滑 3D 骨架边缘棱角，提升渲染画质。
+    renderWindow->SetMultiSamples(8);
     m_vtkWidget->setRenderWindow(renderWindow);
     m_renderWindow = renderWindow;
 
@@ -341,7 +383,77 @@ void RobotVtkView::BuildVtkView()
 
 
     m_layout->addWidget(m_vtkWidget, 1);
+
+    // 中文说明：绑定自定义拾取交互器，替换默认相机操作风格，支持左键点击高亮。
+    vtkNew<VtkClickInteractorStyle> clickStyle;
+    clickStyle->parentView = this;
+    clickStyle->renderer = m_renderer;
+    clickStyle->SetDefaultRenderer(m_renderer);
+    m_vtkWidget->interactor()->SetInteractorStyle(clickStyle);
+
     RefreshScene();
+#endif
+}
+
+void RobotVtkView::HandleActorClicked(vtkActor* clickedActor)
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    // 中文说明：恢复上一个被选中对象的原始颜色和环境光系数。
+    if (m_last_picked_actor != nullptr && m_last_picked_actor->GetProperty() != nullptr)
+    {
+        m_last_picked_actor->GetProperty()->SetColor(m_last_picked_color);
+        m_last_picked_actor->GetProperty()->SetAmbient(m_last_picked_ambient);
+    }
+
+    if (clickedActor == nullptr)
+    {
+        // 点击空白区域，清除选中状态
+        m_last_picked_actor = nullptr;
+        if (m_statusLabel != nullptr)
+        {
+            m_statusLabel->setText(BuildStatusText());
+        }
+        return;
+    }
+
+    // 记录新选中对象的原始属性
+    m_last_picked_actor = clickedActor;
+    clickedActor->GetProperty()->GetColor(m_last_picked_color);
+    m_last_picked_ambient = clickedActor->GetProperty()->GetAmbient();
+
+    // 设置高亮效果：青色 + 高环境光，模拟"发光发亮"的选中状态
+    clickedActor->GetProperty()->SetColor(0.0, 1.0, 1.0); // Cyan
+    clickedActor->GetProperty()->SetAmbient(0.8);
+
+    // 在 m_link_actors 字典中反向查找被点击 Actor 的实体名称
+    QString pickedName = QStringLiteral("未知实体");
+    for (auto it = m_link_actors.begin(); it != m_link_actors.end(); ++it)
+    {
+        if (it->second.Get() == clickedActor)
+        {
+            pickedName = it->first;
+            break;
+        }
+    }
+
+    // 如果在 Actor 字典中未找到，可能是骨架中的关节球或连杆圆柱
+    if (pickedName == QStringLiteral("未知实体"))
+    {
+        pickedName = QStringLiteral("骨架段/关节");
+    }
+
+    if (m_statusLabel != nullptr)
+    {
+        m_statusLabel->setText(
+            QStringLiteral("中央三维主视图区：已选中 [ %1 ]").arg(pickedName));
+    }
+
+    if (m_renderWindow != nullptr)
+    {
+        m_renderWindow->Render();
+    }
+#else
+    Q_UNUSED(clickedActor);
 #endif
 }
 
