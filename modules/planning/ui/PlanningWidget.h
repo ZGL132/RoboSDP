@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/infrastructure/ProjectSaveCoordinator.h"
-#include "core/logging/ConsoleLogger.h"
+#include "core/logging/ILogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/kinematics/persistence/KinematicJsonStorage.h"
 #include "modules/planning/persistence/PlanningJsonStorage.h"
@@ -36,7 +36,7 @@ class PlanningWidget : public QWidget, public RoboSDP::Infrastructure::IProjectS
     Q_OBJECT
 
 public:
-    explicit PlanningWidget(QWidget* parent = nullptr);
+    explicit PlanningWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent = nullptr);
 
     /// @brief 返回全局保存日志使用的模块名称。
     QString ModuleName() const override;
@@ -77,7 +77,7 @@ private:
     void OnLoadClicked();
 
 private:
-    RoboSDP::Logging::ConsoleLogger m_logger;
+    RoboSDP::Logging::ILogger* m_logger = nullptr;
     RoboSDP::Repository::LocalJsonRepository m_repository;
     RoboSDP::Planning::Persistence::PlanningJsonStorage m_planning_storage;
     RoboSDP::Kinematics::Persistence::KinematicJsonStorage m_kinematic_storage;

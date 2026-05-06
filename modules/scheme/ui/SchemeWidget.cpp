@@ -16,7 +16,7 @@
 namespace RoboSDP::Scheme::Ui
 {
 
-SchemeWidget::SchemeWidget(QWidget* parent)
+SchemeWidget::SchemeWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent)
     : QWidget(parent)
     , m_requirement_storage(m_repository)
     , m_topology_storage(m_repository)
@@ -25,6 +25,7 @@ SchemeWidget::SchemeWidget(QWidget* parent)
     , m_selection_storage(m_repository)
     , m_planning_storage(m_repository)
     , m_scheme_storage(m_repository)
+    , m_logger(logger)
     , m_snapshot_service(
           m_scheme_storage,
           m_requirement_storage,
@@ -33,8 +34,8 @@ SchemeWidget::SchemeWidget(QWidget* parent)
           m_dynamic_storage,
           m_selection_storage,
           m_planning_storage,
-          &m_logger)
-    , m_export_service(m_scheme_storage, &m_logger)
+          m_logger)
+    , m_export_service(m_scheme_storage, m_logger)
     , m_snapshot(m_snapshot_service.CreateDefaultSnapshot())
 {
     BuildUi();

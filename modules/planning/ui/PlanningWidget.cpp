@@ -54,12 +54,13 @@ QString ReadTableString(QTableWidget* table, int row, int column, const QString&
 
 } // namespace
 
-PlanningWidget::PlanningWidget(QWidget* parent)
+PlanningWidget::PlanningWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent)
     : QWidget(parent)
     , m_planning_storage(m_repository)
     , m_kinematic_storage(m_repository)
     , m_selection_storage(m_repository)
-    , m_service(m_planning_storage, m_kinematic_storage, m_selection_storage, &m_logger)
+    , m_logger(logger)
+    , m_service(m_planning_storage, m_kinematic_storage, m_selection_storage, m_logger)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();

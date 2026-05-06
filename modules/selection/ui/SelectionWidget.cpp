@@ -66,11 +66,12 @@ void SetReadOnlyItem(QTableWidgetItem* item)
 
 } // namespace
 
-SelectionWidget::SelectionWidget(QWidget* parent)
+SelectionWidget::SelectionWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent)
     : QWidget(parent)
     , m_dynamic_storage(m_repository)
     , m_selection_storage(m_repository)
-    , m_service(m_selection_storage, m_dynamic_storage, &m_logger)
+    , m_logger(logger)
+    , m_service(m_selection_storage, m_dynamic_storage, m_logger)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();

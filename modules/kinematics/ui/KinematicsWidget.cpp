@@ -273,11 +273,12 @@ std::optional<RoboSDP::Kinematics::Dto::CartesianPoseDto> ReadOptionalPoseEditor
 
 } // namespace
 
-KinematicsWidget::KinematicsWidget(QWidget* parent)
+KinematicsWidget::KinematicsWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent)
     : QWidget(parent)
     , m_topology_storage(m_repository)
     , m_kinematic_storage(m_repository)
-    , m_service(m_kinematic_storage, m_topology_storage, &m_logger)
+    , m_logger(logger)
+    , m_service(m_kinematic_storage, m_topology_storage, m_logger)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
@@ -623,6 +624,23 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     solverLayout->addRow(QStringLiteral("姿态容差 [deg]"), m_orientation_tolerance_spin);
     solverLayout->addRow(QStringLiteral("步长增益"), m_step_gain_spin);
     layout->addLayout(solverLayout);
+
+    // ── 滚轮灵敏度设置 ──────────────────────────────────────
+    auto* sensitivityLayout = new QFormLayout();
+    m_scroll_step_spin = CreateDoubleSpinBox(0.1, 10.0, 1, 0.1);
+    m_scroll_step_spin->setValue(1.0);
+    m_scroll_step_spin->setToolTip(QStringLiteral(
+        "设置鼠标滚轮每格对应的关节角度增量（度/格）。\n"
+        "同时同步影响 FK 关节输入框的上下箭头步进值。"));
+    sensitivityLayout->addRow(QStringLiteral("滚轮灵敏度 [°/格]"), m_scroll_step_spin);
+    layout->addLayout(sensitivityLayout);
+
+    // 灵敏度值变更 → 同步 FK 输入框步进 + 通知 3D 视图
+    connect(m_scroll_step_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+        this, [this](double newStep) {
+            ApplyStepToAllSpinBoxes(newStep);
+            emit signalScrollStepChanged(newStep);
+        });
 
 // ✅ 替换为以下代码：
     m_fk_grid = new QGridLayout();
@@ -1199,6 +1217,51 @@ void KinematicsWidget::SyncPoseOnly()
         emit LogMessageGenerated(QStringLiteral("[Kinematics][Warning] URDF 姿态刷新被拦截：%1").arg(updateResult.message));
     }
 }
+
+// =========================================================================
+// 【逆向驱动】3D 视图滚轮 → FK 滑块联动
+// =========================================================================
+void KinematicsWidget::HandleJointAngleScrolled(int jointIndex, double deltaDeg)
+{
+    // 防表单填充期间误触发
+    if (m_is_populating_form) return;
+
+    // 边界检查：确保索引在有效范围内
+    if (jointIndex < 0 || jointIndex >= static_cast<int>(m_fk_joint_spins.size()))
+    {
+        return;
+    }
+
+    // 中文说明：读取当前值，叠加增量，再设回 spinbox。
+    // spinbox 的 setValue 会自动触发 valueChanged → signal → markDirty。
+    const double newValue = m_fk_joint_spins[jointIndex]->value() + deltaDeg;
+    m_fk_joint_spins[jointIndex]->setValue(newValue);
+
+    // 触发通道 B：轻量级姿态刷新（仅更新 vtkTransform，不重建场景）
+    SyncPoseOnly();
+}
+
+// =========================================================================
+// 【逆向驱动】TCP Gizmo 拖动 → IK 求解联动
+// =========================================================================
+void KinematicsWidget::HandleTcpPoseDragged(
+    const RoboSDP::Kinematics::Dto::CartesianPoseDto& newPose)
+{
+    // 防表单填充期间误触发
+    if (m_is_populating_form) return;
+
+    // 将 Gizmo 拖动产生的新位姿填充到 IK 目标 spinbox 中
+    m_ik_target_pose_spins[0]->setValue(newPose.position_m[0]);
+    m_ik_target_pose_spins[1]->setValue(newPose.position_m[1]);
+    m_ik_target_pose_spins[2]->setValue(newPose.position_m[2]);
+    m_ik_target_pose_spins[3]->setValue(newPose.rpy_deg[0]);
+    m_ik_target_pose_spins[4]->setValue(newPose.rpy_deg[1]);
+    m_ik_target_pose_spins[5]->setValue(newPose.rpy_deg[2]);
+
+    // 触发 IK 求解：求解结果将通过 RenderResults 自动刷新 FK 滑块和 3D 视图
+    OnRunIkClicked();
+}
+
 void KinematicsWidget::ClearPreviewContext()
 {
     // 从 Topology/JSON 切换模型结构时，旧中央预览上下文不能继续留在视图里。
@@ -1890,6 +1953,24 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
             m_ik_seed_joint_spins[i]->blockSignals(true);
             m_ik_seed_joint_spins[i]->setValue(0.0);
             m_ik_seed_joint_spins[i]->blockSignals(false);
+        }
+    }
+
+    // 4. 同步当前灵敏度值到所有 FK 输入框（确保新建的输入框跟随当前设置）
+    if (m_scroll_step_spin != nullptr)
+    {
+        ApplyStepToAllSpinBoxes(m_scroll_step_spin->value());
+    }
+}
+
+/// @brief 将所有 FK 关节输入框的 singleStep 设置为指定值。
+void KinematicsWidget::ApplyStepToAllSpinBoxes(double stepDeg)
+{
+    for (auto* spinBox : m_fk_joint_spins)
+    {
+        if (spinBox != nullptr)
+        {
+            spinBox->setSingleStep(stepDeg);
         }
     }
 }

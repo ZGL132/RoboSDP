@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "core/infrastructure/ProjectSaveCoordinator.h"
-#include "core/logging/ConsoleLogger.h"
+#include "core/logging/ILogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/kinematics/dto/UrdfPreviewSceneDto.h"
 #include "modules/kinematics/persistence/KinematicJsonStorage.h"
@@ -49,7 +49,7 @@ class KinematicsWidget : public QWidget, public RoboSDP::Infrastructure::IProjec
     Q_OBJECT
 
 public:
-    explicit KinematicsWidget(QWidget* parent = nullptr);
+    explicit KinematicsWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent = nullptr);
 
     /// @brief 返回全局保存日志使用的模块名称。
     QString ModuleName() const override;
@@ -97,6 +97,16 @@ public:
     /// @brief 查询当前草稿是否可保存。
     bool CanSaveDraft() const;
 
+    // ============================================================
+    // 【逆向驱动】槽：由 VTK 3D 视图信号触发
+    // ============================================================
+
+    /// @brief 3D 视图中鼠标滚轮滚动关节角度时触发，修改 FK 滑块值并刷新姿态。
+    void HandleJointAngleScrolled(int jointIndex, double deltaDeg);
+
+    /// @brief TCP Gizmo 拖动时触发，填充 IK 目标位姿并执行逆运动学求解。
+    void HandleTcpPoseDragged(const RoboSDP::Kinematics::Dto::CartesianPoseDto& newPose);
+
 signals:
     /// @brief 将 Kinematics 操作消息抛给主窗口底部日志面板。
     void LogMessageGenerated(const QString& message);
@@ -112,6 +122,9 @@ signals:
 
     /// @brief Kinematics 页面内部状态变更信号，通知 MainWindow 重新查询按钮启用状态。
     void StatusChanged();
+
+    /// @brief 用户调整滚轮灵敏度时发射，通知 3D 视图更新步长。
+    void signalScrollStepChanged(double stepDeg);
 
 private:
     void BuildUi();
@@ -144,6 +157,10 @@ private:
     // 替换为新的签名，并增加一个动态适配方法的声明：
     std::vector<double> CollectJointInputs(const std::vector<QDoubleSpinBox*>& spinBoxes) const;
     void AdjustJointInputCount(int jointCount);
+
+    /// @brief 将所有 FK 关节输入框的 singleStep 设置为指定值。
+    void ApplyStepToAllSpinBoxes(double stepDeg);
+
     void FillIkTargetFromFkResult();
 
     // =========================================================================
@@ -166,7 +183,7 @@ private:
     void OnLoadClicked();
 
 private:
-    RoboSDP::Logging::ConsoleLogger m_logger;
+    RoboSDP::Logging::ILogger* m_logger = nullptr;
     RoboSDP::Repository::LocalJsonRepository m_repository;
     RoboSDP::Topology::Persistence::TopologyJsonStorage m_topology_storage;
     RoboSDP::Kinematics::Persistence::KinematicJsonStorage m_kinematic_storage;
@@ -214,6 +231,9 @@ private:
     std::vector<QDoubleSpinBox*> m_fk_joint_spins;
     std::vector<QLabel*> m_fk_joint_labels;
     QGridLayout* m_fk_grid = nullptr;
+
+    /// @brief 滚轮灵敏度（度/滚轮格），默认 1.0°；联动控制 3D 视图滚轮步长与 FK 输入框 singleStep。
+    QDoubleSpinBox* m_scroll_step_spin = nullptr;
 
     std::vector<QDoubleSpinBox*> m_ik_seed_joint_spins;
     std::vector<QLabel*> m_ik_seed_joint_labels;

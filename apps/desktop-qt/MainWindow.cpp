@@ -159,196 +159,48 @@ void MainWindow::CreateRibbonBar()
     connect(m_ribbonBar, &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSchemeExportJson,
             this, [this]() { if (m_schemeWidget) m_schemeWidget->TriggerExportJson(); });
 
+    // ── 可见性与相机设置信号路由（使用辅助 lambda 消除重复模式）──
     const auto visibilityText = [](bool visible) {
         return visible ? QStringLiteral("开启") : QStringLiteral("关闭");
     };
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetSkeletonVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetSkeletonVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示骨架：%1").arg(visibilityText(visible)));
+    auto bindVtkToggle = [this, visibilityText](auto signal, auto setter, const QString& name) {
+        connect(m_ribbonBar, signal, this, [this, setter, name, visibilityText](bool visible) {
+            if (m_robotVtkView) (m_robotVtkView->*setter)(visible);
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] %1%2").arg(name, visibilityText(visible)));
         });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetVisualMeshVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetVisualMeshVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示 Visual Mesh：%1").arg(visibilityText(visible)));
+    };
+    auto bindDockToggle = [this, visibilityText](auto signal, QDockWidget* dock, const QString& name) {
+        connect(m_ribbonBar, signal, this, [this, dock, name, visibilityText](bool visible) {
+            if (dock) dock->setVisible(visible);
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] %1%2").arg(name, visibilityText(visible)));
         });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetCollisionMeshVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetCollisionMeshVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示 Collision Mesh：%1").arg(visibilityText(visible)));
+    };
+    auto bindCamera = [this](auto signal, auto setter, const QString& name) {
+        connect(m_ribbonBar, signal, this, [this, setter, name]() {
+            if (m_robotVtkView) (m_robotVtkView->*setter)();
+            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] %1").arg(name));
         });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetJointAxesVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetJointAxesVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示关节轴：%1").arg(visibilityText(visible)));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetAxesVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetAxesVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示坐标系：%1").arg(visibilityText(visible)));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetGroundGridVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetGroundGridVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示地面网格：%1").arg(visibilityText(visible)));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetCornerAxesVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetCornerAxesVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示角落坐标轴：%1").arg(visibilityText(visible)));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetLinkLabelsVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetLinkLabelsVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示 Link 标签：%1").arg(visibilityText(visible)));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetJointLabelsVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetJointLabelsVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 显示 Joint 标签：%1").arg(visibilityText(visible)));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalResetCameraRequested,
-        this,
-        [this]() {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->ResetCameraToCurrentScene();
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求重置三维相机"));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCameraFrontViewRequested,
-        this,
-        [this]() {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetFrontCameraView();
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至正视图"));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCameraSideViewRequested,
-        this,
-        [this]() {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetSideCameraView();
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至侧视图"));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCameraTopViewRequested,
-        this,
-        [this]() {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetTopCameraView();
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至俯视图"));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalCameraIsometricViewRequested,
-        this,
-        [this]() {
-            if (m_robotVtkView != nullptr)
-            {
-                m_robotVtkView->SetIsometricCameraView();
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 用户请求切换至等轴测视图"));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetProjectTreeVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_projectTreeDock != nullptr)
-            {
-                m_projectTreeDock->setVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 项目树面板：%1").arg(visibilityText(visible)));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetPropertyPanelVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_propertyDock != nullptr)
-            {
-                m_propertyDock->setVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 属性面板：%1").arg(visibilityText(visible)));
-        });
-    connect(
-        m_ribbonBar,
-        &RoboSDP::Desktop::Ribbon::RibbonBarWidget::signalSetOutputPanelVisible,
-        this,
-        [this, visibilityText](bool visible) {
-            if (m_logDock != nullptr)
-            {
-                m_logDock->setVisible(visible);
-            }
-            AppendLogLine(QStringLiteral("[INFO] [顶部功能区] 输出信息面板：%1").arg(visibilityText(visible)));
-        });
+    };
+
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetSkeletonVisible, &Vtk::RobotVtkView::SetSkeletonVisible, QStringLiteral("显示骨架"));
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetVisualMeshVisible, &Vtk::RobotVtkView::SetVisualMeshVisible, QStringLiteral("显示 Visual Mesh"));
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetCollisionMeshVisible, &Vtk::RobotVtkView::SetCollisionMeshVisible, QStringLiteral("显示 Collision Mesh"));
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetJointAxesVisible, &Vtk::RobotVtkView::SetJointAxesVisible, QStringLiteral("显示关节轴"));
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetAxesVisible, &Vtk::RobotVtkView::SetAxesVisible, QStringLiteral("显示坐标系"));
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetGroundGridVisible, &Vtk::RobotVtkView::SetGroundGridVisible, QStringLiteral("显示地面网格"));
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetCornerAxesVisible, &Vtk::RobotVtkView::SetCornerAxesVisible, QStringLiteral("显示角落坐标轴"));
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetLinkLabelsVisible, &Vtk::RobotVtkView::SetLinkLabelsVisible, QStringLiteral("显示 Link 标签"));
+    bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetJointLabelsVisible, &Vtk::RobotVtkView::SetJointLabelsVisible, QStringLiteral("显示 Joint 标签"));
+
+    bindCamera(&Ribbon::RibbonBarWidget::signalResetCameraRequested, &Vtk::RobotVtkView::ResetCameraToCurrentScene, QStringLiteral("用户请求重置三维相机"));
+    bindCamera(&Ribbon::RibbonBarWidget::signalCameraFrontViewRequested, &Vtk::RobotVtkView::SetFrontCameraView, QStringLiteral("用户请求切换至正视图"));
+    bindCamera(&Ribbon::RibbonBarWidget::signalCameraSideViewRequested, &Vtk::RobotVtkView::SetSideCameraView, QStringLiteral("用户请求切换至侧视图"));
+    bindCamera(&Ribbon::RibbonBarWidget::signalCameraTopViewRequested, &Vtk::RobotVtkView::SetTopCameraView, QStringLiteral("用户请求切换至俯视图"));
+    bindCamera(&Ribbon::RibbonBarWidget::signalCameraIsometricViewRequested, &Vtk::RobotVtkView::SetIsometricCameraView, QStringLiteral("用户请求切换至等轴测视图"));
+
+    bindDockToggle(&Ribbon::RibbonBarWidget::signalSetProjectTreeVisible, m_projectTreeDock, QStringLiteral("项目树面板"));
+    bindDockToggle(&Ribbon::RibbonBarWidget::signalSetPropertyPanelVisible, m_propertyDock, QStringLiteral("属性面板"));
+    bindDockToggle(&Ribbon::RibbonBarWidget::signalSetOutputPanelVisible, m_logDock, QStringLiteral("输出信息面板"));
 }
 
 void MainWindow::CreateCentralView()
@@ -387,13 +239,13 @@ void MainWindow::CreatePropertyDock()
     m_propertyStack = new QStackedWidget(m_propertyDock);
 
     m_emptyProjectWidget = new RoboSDP::Desktop::Widgets::ProjectEmptyStateWidget(m_propertyStack);
-    m_requirementWidget = new RoboSDP::Requirement::Ui::RequirementWidget(m_propertyStack);
-    m_topologyWidget = new RoboSDP::Topology::Ui::TopologyWidget(m_propertyStack);
-    m_kinematicsWidget = new RoboSDP::Kinematics::Ui::KinematicsWidget(m_propertyStack);
-    m_dynamicsWidget = new RoboSDP::Dynamics::Ui::DynamicsWidget(m_propertyStack);
-    m_selectionWidget = new RoboSDP::Selection::Ui::SelectionWidget(m_propertyStack);
-    m_planningWidget = new RoboSDP::Planning::Ui::PlanningWidget(m_propertyStack);
-    m_schemeWidget = new RoboSDP::Scheme::Ui::SchemeWidget(m_propertyStack);
+    m_requirementWidget = new RoboSDP::Requirement::Ui::RequirementWidget(&m_logger, m_propertyStack);
+    m_topologyWidget = new RoboSDP::Topology::Ui::TopologyWidget(&m_logger, m_propertyStack);
+    m_kinematicsWidget = new RoboSDP::Kinematics::Ui::KinematicsWidget(&m_logger, m_propertyStack);
+    m_dynamicsWidget = new RoboSDP::Dynamics::Ui::DynamicsWidget(&m_logger, m_propertyStack);
+    m_selectionWidget = new RoboSDP::Selection::Ui::SelectionWidget(&m_logger, m_propertyStack);
+    m_planningWidget = new RoboSDP::Planning::Ui::PlanningWidget(&m_logger, m_propertyStack);
+    m_schemeWidget = new RoboSDP::Scheme::Ui::SchemeWidget(&m_logger, m_propertyStack);
     m_placeholderPropertyPanel = new QPlainTextEdit(m_propertyStack);
     m_placeholderPropertyPanel->setReadOnly(true);
     m_placeholderPropertyPanel->setPlainText(
@@ -555,9 +407,34 @@ void MainWindow::CreatePropertyDock()
                 m_robotVtkView->SetJointLabelsVisible(true);   // 显示关节名称标签
                 
                 // 依然不重置相机，保持观察连续性
-                m_robotVtkView->ShowPreviewScene(scene, false); 
+                m_robotVtkView->ShowPreviewScene(scene, false);
             }
         });
+
+    // ── 【逆向驱动】VTK 3D 视图 → Kinematics 信号桥接 ────────────
+    // 中文说明：3D 视图中选中连杆后滚动滚轮 → 直接修改 Kinematics FK 关节滑块
+    connect(
+        m_robotVtkView,
+        &RoboSDP::Desktop::Vtk::RobotVtkView::signalJointAngleScrolled,
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::HandleJointAngleScrolled);
+
+    // 中文说明：TCP 3D Gizmo 拖动 → 填充 IK 目标位姿并自动求解
+    connect(
+        m_robotVtkView,
+        &RoboSDP::Desktop::Vtk::RobotVtkView::signalTcpPoseDragged,
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::HandleTcpPoseDragged);
+    // ── 【逆向驱动】信号桥接结束 ────────────────────────────────
+
+    // ── 滚轮灵敏度同步：Kinematics 灵敏度控件 → VTK 3D 视图 ──
+    // 中文说明：当用户在运动学面板调整滚轮灵敏度时，通知 3D 视图更新滚轮步进值。
+    connect(
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::signalScrollStepChanged,
+        m_robotVtkView,
+        &RoboSDP::Desktop::Vtk::RobotVtkView::SetScrollStep);
+
     connect(
         m_dynamicsWidget,
         &RoboSDP::Dynamics::Ui::DynamicsWidget::LogMessageGenerated,

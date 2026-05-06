@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 #include "core/infrastructure/ProjectSaveCoordinator.h"
-#include "core/logging/ConsoleLogger.h"
+#include "core/logging/ILogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/dynamics/persistence/DynamicJsonStorage.h"
 #include "modules/selection/persistence/SelectionJsonStorage.h"
@@ -32,7 +32,7 @@ class SelectionWidget : public QWidget, public RoboSDP::Infrastructure::IProject
     Q_OBJECT
 
 public:
-    explicit SelectionWidget(QWidget* parent = nullptr);
+    explicit SelectionWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent = nullptr);
 
     /// @brief 返回全局保存日志使用的模块名称。
     QString ModuleName() const override;
@@ -64,7 +64,7 @@ private:
     void OnLoadClicked();
 
 private:
-    RoboSDP::Logging::ConsoleLogger m_logger;
+    RoboSDP::Logging::ILogger* m_logger = nullptr;
     RoboSDP::Repository::LocalJsonRepository m_repository;
     RoboSDP::Dynamics::Persistence::DynamicJsonStorage m_dynamic_storage;
     RoboSDP::Selection::Persistence::SelectionJsonStorage m_selection_storage;

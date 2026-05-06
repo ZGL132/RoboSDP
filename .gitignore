@@ -92,3 +92,4 @@ selection-smoke-project/
 
 # Historical local backup folder, not part of the current CMake target graph
 modules/kinematics/source/
+modules/dynamics/source/

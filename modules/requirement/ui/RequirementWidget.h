@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/infrastructure/ProjectSaveCoordinator.h"
-#include "core/logging/ConsoleLogger.h"
+#include "core/logging/ILogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/requirement/service/RequirementService.h"
 
@@ -33,7 +33,7 @@ class RequirementWidget : public QWidget, public RoboSDP::Infrastructure::IProje
     Q_OBJECT
 
 public:
-    explicit RequirementWidget(QWidget* parent = nullptr);
+    explicit RequirementWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent = nullptr);
 
     /// @brief 返回全局保存日志使用的模块名称。
     QString ModuleName() const override;
@@ -108,7 +108,7 @@ private:
     void OnKeyPoseSelectionChanged(int currentRow);
 
 private:
-    RoboSDP::Logging::ConsoleLogger m_logger;
+    RoboSDP::Logging::ILogger* m_logger = nullptr;
     RoboSDP::Repository::LocalJsonRepository m_repository;
     RoboSDP::Requirement::Validation::RequirementValidator m_validator;
     RoboSDP::Requirement::Persistence::RequirementJsonStorage m_storage;

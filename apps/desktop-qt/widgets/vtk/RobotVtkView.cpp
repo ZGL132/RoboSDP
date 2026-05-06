@@ -6,13 +6,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #if defined(ROBOSDP_HAVE_VTK)
 #include <QVTKOpenGLNativeWidget.h>
 #include <vtkActor.h>
 #include <vtkAxesActor.h>
+#include <vtkBoxWidget2.h>
+#include <vtkBoxRepresentation.h>
 #include <vtkCamera.h>
 #include <vtkCaptionActor2D.h>
+#include <vtkCallbackCommand.h>
+#include <vtkCommand.h>
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkInteractorStyleTrackballCamera.h>
 #include <vtkNew.h>
@@ -23,8 +28,9 @@
 #include <vtkRenderer.h>
 #include <vtkTextProperty.h>
 #include <vtkTextActor.h>
+#include <vtkTransform.h>
 
-/// @brief 自定义 VTK 鼠标交互器，支持左键点击拾取 3D Actor 并通知父视图高亮。
+/// @brief 自定义 VTK 鼠标交互器，支持左键点击拾取 3D Actor、滚轮关节驱动、虚线框选等。
 class VtkClickInteractorStyle : public vtkInteractorStyleTrackballCamera
 {
 public:
@@ -53,10 +59,37 @@ public:
             picker->Pick(clickPos[0], clickPos[1], 0, renderer);
 
             vtkActor* clickedActor = picker->GetActor();
-            parentView->HandleActorClicked(clickedActor);
+            // 中文说明：传递拾取位置（世界坐标），供 HandleActorClicked 在骨架节点查找时使用。
+            const double* pickPos = picker->GetPickPosition();
+            parentView->HandleActorClicked(clickedActor, pickPos);
         }
         // 保留原有的视角旋转/平移功能
         vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
+    }
+
+    // ── 【逆向驱动】鼠标滚轮事件重写 ──────────────────────────────
+    /// @brief 滚轮向前滚动：如果已选中连杆，则发射关节正转信号，否则保留默认视角缩放。
+    ///        步长由 parentView->GetScrollStep() 控制，默认 1.0°。
+    void OnMouseWheelForward() override
+    {
+        if (parentView != nullptr && !parentView->GetPickedLinkName().isEmpty())
+        {
+            parentView->EmitJointScroll(parentView->GetScrollStep()); // 正转 +step 度
+            return; // 不传递给基类，避免视角缩放干扰
+        }
+        vtkInteractorStyleTrackballCamera::OnMouseWheelForward();
+    }
+
+    /// @brief 滚轮向后滚动：如果已选中连杆，则发射关节反转信号。
+    ///        步长由 parentView->GetScrollStep() 控制，默认 -1.0°。
+    void OnMouseWheelBackward() override
+    {
+        if (parentView != nullptr && !parentView->GetPickedLinkName().isEmpty())
+        {
+            parentView->EmitJointScroll(-parentView->GetScrollStep()); // 反转 -step 度
+            return;
+        }
+        vtkInteractorStyleTrackballCamera::OnMouseWheelBackward();
     }
 };
 
@@ -89,7 +122,11 @@ void RobotVtkView::ShowPreviewScene(const PreviewSceneDto& scene, bool resetCame
     // 清理旧的 Actor 缓存（如 Mesh），但不一定会重置相机
     ClearCache();
     m_currentScene = scene;
-    
+
+    // 【修复】场景数据更新后，重建 link_name → joint_index 映射表，
+    // 供 EmitJointScroll 在滚轮驱动时快速查找关节索引。
+    RebuildLinkToJointMap();
+
     // 将 resetCamera 参数透传给实际的刷新函数
     RefreshScene(resetCamera);
 }
@@ -182,9 +219,16 @@ void RobotVtkView::ClearCache()
         }
     }
 
+    // 【修复】清除 m_link_actors 后，m_last_picked_actor 指向的 Actor 可能已被销毁，
+    // 必须置空以避免后续点击时野指针崩溃。
+    m_last_picked_actor = nullptr;
     m_link_actors.clear();
     m_link_mesh_geometries.clear();
+    m_link_to_joint_index.clear();
 #endif
+
+    // 【修复】模型场景切换时，清除当前选中的连杆名称，避免旧引用残留。
+    m_current_picked_link.clear();
 }
 
 void RobotVtkView::ResetCameraToCurrentScene()
@@ -395,7 +439,7 @@ void RobotVtkView::BuildVtkView()
 #endif
 }
 
-void RobotVtkView::HandleActorClicked(vtkActor* clickedActor)
+void RobotVtkView::HandleActorClicked(vtkActor* clickedActor, const double pickPosition[3])
 {
 #if defined(ROBOSDP_HAVE_VTK)
     // 中文说明：恢复上一个被选中对象的原始颜色和环境光系数。
@@ -407,8 +451,9 @@ void RobotVtkView::HandleActorClicked(vtkActor* clickedActor)
 
     if (clickedActor == nullptr)
     {
-        // 点击空白区域，清除选中状态
+        // 【修复】点击空白区域，同时清除选中状态和当前选中连杆名称
         m_last_picked_actor = nullptr;
+        m_current_picked_link.clear();    // <--- 【新增】清理选中连杆
         if (m_statusLabel != nullptr)
         {
             m_statusLabel->setText(BuildStatusText());
@@ -425,27 +470,61 @@ void RobotVtkView::HandleActorClicked(vtkActor* clickedActor)
     clickedActor->GetProperty()->SetColor(0.0, 1.0, 1.0); // Cyan
     clickedActor->GetProperty()->SetAmbient(0.8);
 
-    // 在 m_link_actors 字典中反向查找被点击 Actor 的实体名称
-    QString pickedName = QStringLiteral("未知实体");
+    // ── 在 m_link_actors 字典中反向查找被点击 Actor 的实体名称 ──────────
+    // 【修复】从复合键 "visual:link_1:0" 中提取纯 link_name（中间段），
+    // 格式为 "layerName:linkName:geometryIndex"，使用 section(':', 1, 1) 取 linkName。
+    QString pickedLinkName;
     for (auto it = m_link_actors.begin(); it != m_link_actors.end(); ++it)
     {
         if (it->second.Get() == clickedActor)
         {
-            pickedName = it->first;
+            // 提取复合键的第二段：layer:link_name:index → link_name
+            pickedLinkName = it->first.section(QLatin1Char(':'), 1, 1);
             break;
         }
     }
 
-    // 如果在 Actor 字典中未找到，可能是骨架中的关节球或连杆圆柱
-    if (pickedName == QStringLiteral("未知实体"))
+    // ── 如果在 Mesh Actor 字典中未找到，尝试按拾取位置查找最近骨架节点 ──
+    if (pickedLinkName.isEmpty() && pickPosition != nullptr)
     {
-        pickedName = QStringLiteral("骨架段/关节");
+        // 中文说明：遍历所有骨架节点，找距离拾取位置最近的节点，
+        // 如果距离小于合理阈值（2cm），认为点击了该骨架球。
+        double minDistSq = std::numeric_limits<double>::max();
+        int nearestNodeIndex = -1;
+        for (int i = 0; i < static_cast<int>(m_currentScene.nodes.size()); ++i)
+        {
+            const auto& node = m_currentScene.nodes[i];
+            const double dx = node.position_m[0] - pickPosition[0];
+            const double dy = node.position_m[1] - pickPosition[1];
+            const double dz = node.position_m[2] - pickPosition[2];
+            const double distSq = dx*dx + dy*dy + dz*dz;
+            if (distSq < minDistSq)
+            {
+                minDistSq = distSq;
+                nearestNodeIndex = i;
+            }
+        }
+        if (nearestNodeIndex >= 0)
+        {
+            const double threshold = 0.02; // 2cm 阈值，覆盖骨架球半径
+            if (std::sqrt(minDistSq) < threshold)
+            {
+                pickedLinkName = m_currentScene.nodes[nearestNodeIndex].link_name;
+            }
+        }
     }
 
+    // 【逆向驱动】保存当前选中连杆名称（纯 link_name），供滚轮关节驱动使用。
+    m_current_picked_link = pickedLinkName;
+
+    // 中文说明：状态栏显示，便于用户确认当前选中了哪个连杆/骨架。
+    const QString displayName = pickedLinkName.isEmpty()
+        ? QStringLiteral("骨架段/关节")
+        : pickedLinkName;
     if (m_statusLabel != nullptr)
     {
         m_statusLabel->setText(
-            QStringLiteral("中央三维主视图区：已选中 [ %1 ]").arg(pickedName));
+            QStringLiteral("中央三维主视图区：已选中 [ %1 ]").arg(displayName));
     }
 
     if (m_renderWindow != nullptr)
@@ -454,6 +533,7 @@ void RobotVtkView::HandleActorClicked(vtkActor* clickedActor)
     }
 #else
     Q_UNUSED(clickedActor);
+    Q_UNUSED(pickPosition);
 #endif
 }
 
@@ -545,6 +625,12 @@ void RobotVtkView::RefreshScene(bool resetCamera)
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderer != nullptr)
     {
+        // 【修复】场景重建会调用 RemoveAllViewProps()，之前缓存的 Actor 指针全部失效，
+        // 必须清空 m_last_picked_actor 避免后续点击时野指针崩溃。
+        // 注意：不清除 m_current_picked_link（QString），因为它不是指针类型，
+        // 在场景重建后仍保持有效。模型切换时的清理由 ClearCache() 负责。
+        m_last_picked_actor = nullptr;
+
         UrdfPreviewDisplayOptions displayOptions;
         displayOptions.show_skeleton = m_showSkeleton;
         displayOptions.show_visual_meshes = m_showVisualMesh;
@@ -593,6 +679,84 @@ void RobotVtkView::RefreshScene(bool resetCamera)
         // 所以每次刷新后，必须重新把水印层注册进渲染器。
         m_renderer->AddActor2D(m_watermark_actor);
         // 🔼🔼🔼 【修复结束】 🔼🔼🔼
+
+        // ── 【逆向驱动】TCP 3D Gizmo 初始化（vtkBoxWidget2）────────────
+        if (m_currentScene.IsEmpty())
+        {
+            // 空场景下禁用 Gizmo
+            if (m_tcp_gizmo_widget != nullptr)
+            {
+                m_tcp_gizmo_widget->SetEnabled(0);
+            }
+        }
+        else
+        {
+            // 有机器人场景 → 确保 Gizmo 创建并启用
+            if (m_tcp_gizmo_widget == nullptr)
+            {
+                // 创建 vtkBoxRepresentation（变换框的表现层）
+                vtkNew<vtkBoxRepresentation> boxRep;
+
+                // 创建 vtkBoxWidget2（变换框的交互控件）
+                m_tcp_gizmo_widget = vtkSmartPointer<vtkBoxWidget2>::New();
+                m_tcp_gizmo_widget->SetInteractor(m_vtkWidget->interactor());
+                m_tcp_gizmo_widget->SetRepresentation(boxRep);
+                m_tcp_gizmo_widget->SetTranslationEnabled(1);
+                m_tcp_gizmo_widget->SetRotationEnabled(1);
+                m_tcp_gizmo_widget->SetScalingEnabled(0);   // 不缩放
+                m_tcp_gizmo_widget->SetMoveFacesEnabled(1);
+
+                // 注册 InteractionEvent 回调：拖动时发射位姿信号
+                vtkNew<vtkCallbackCommand> tcpDragCallback;
+                tcpDragCallback->SetCallback([](vtkObject* caller,
+                                                 long unsigned int,
+                                                 void* clientData,
+                                                 void*) {
+                    auto* widget = vtkBoxWidget2::SafeDownCast(caller);
+                    if (widget == nullptr) return;
+                    auto* view = static_cast<RoboSDP::Desktop::Vtk::RobotVtkView*>(clientData);
+                    if (view == nullptr) return;
+                    // 从关联的 Representation 中提取变换矩阵
+                    auto* rep = vtkBoxRepresentation::SafeDownCast(
+                        widget->GetRepresentation());
+                    if (rep == nullptr) return;
+                    vtkNew<vtkTransform> tcpTransform;
+                    rep->GetTransform(tcpTransform);
+                    view->EmitTcpDrag(tcpTransform);
+                });
+                tcpDragCallback->SetClientData(this);
+                m_tcp_gizmo_widget->AddObserver(vtkCommand::InteractionEvent, tcpDragCallback);
+            }
+
+            // 将 Gizmo 定位到末端（取场景中最后一个节点的位置）
+            if (!m_currentScene.nodes.empty())
+            {
+                const auto& lastNode = m_currentScene.nodes.back();
+                const auto& pos = lastNode.world_pose.position_m;
+                // 用小包围盒放置，然后通过 SetTransform 移动到 TCP 位置
+                const double boxHalfSize = 0.05; // 5cm 的半边长
+                double bounds[6] = {
+                    -boxHalfSize, boxHalfSize,
+                    -boxHalfSize, boxHalfSize,
+                    -boxHalfSize, boxHalfSize
+                };
+                auto* boxRep = vtkBoxRepresentation::SafeDownCast(
+                    m_tcp_gizmo_widget->GetRepresentation());
+                if (boxRep != nullptr)
+                {
+                    boxRep->PlaceWidget(bounds);
+                    // 用 SetTransform 将 Gizmo 平移到末端位置
+                    vtkNew<vtkTransform> tcpTransform;
+                    tcpTransform->Translate(pos[0], pos[1], pos[2]);
+                    boxRep->SetTransform(tcpTransform);
+                }
+            }
+
+            // 启用 Gizmo 使其可交互
+            m_tcp_gizmo_widget->SetEnabled(1);
+            m_tcp_gizmo_widget->SetProcessEvents(1);
+        }
+        // ── 【逆向驱动】TCP Gizmo 初始化结束 ──────────────────────
 
         if (resetCamera)
         {
@@ -678,6 +842,99 @@ void RobotVtkView::ApplyCameraPreset(
     Q_UNUSED(upX);
     Q_UNUSED(upY);
     Q_UNUSED(upZ);
+#endif
+}
+
+// =========================================================================
+// 【逆向驱动】滚轮关节角度发射（修复版）
+// =========================================================================
+void RobotVtkView::EmitJointScroll(double deltaDeg)
+{
+    const QString& linkName = m_current_picked_link;
+    if (linkName.isEmpty())
+    {
+        return;
+    }
+
+    // 中文说明：优先使用 m_link_to_joint_index 映射表查关节索引。
+    // 该映射由 RebuildLinkToJointMap() 从 m_currentScene.segments 构建，
+    // 以子 link 名称（child_link_name）为键，segment 索引（=joint 索引）为值。
+    // 支持任意 link 命名约定（URDF 导入、拓扑构型生成等）。
+    int jointIndex = -1;
+    auto it = m_link_to_joint_index.find(linkName);
+    if (it != m_link_to_joint_index.end())
+    {
+        jointIndex = it->second;
+    }
+    else
+    {
+        // 降级：兼容旧式命名规则 "J1", "J2", ...（拓扑构型生成）
+        // 以及 "Link_1", "Link_2", ...（旧版 URDF 导入约定）
+        if (linkName.startsWith(QLatin1Char('J')))
+        {
+            bool ok = false;
+            const int idx = linkName.mid(1).toInt(&ok);
+            if (ok && idx >= 1) jointIndex = idx - 1;
+        }
+        else if (linkName.startsWith(QStringLiteral("Link_")))
+        {
+            bool ok = false;
+            const int idx = linkName.mid(5).toInt(&ok);
+            if (ok && idx >= 1) jointIndex = idx - 1;
+        }
+    }
+
+    if (jointIndex >= 0)
+    {
+        emit signalJointAngleScrolled(jointIndex, deltaDeg);
+    }
+}
+
+// =========================================================================
+// 【逆向驱动】link_name → joint_index 映射表重建
+// =========================================================================
+void RobotVtkView::RebuildLinkToJointMap()
+{
+    // 中文说明：遍历所有骨架段，以 child_link_name 为键，segment 索引为值。
+    // 对于串联机械臂，segment[i] 的子 link 对应的 joint 索引即为 i。
+    m_link_to_joint_index.clear();
+    for (int i = 0; i < static_cast<int>(m_currentScene.segments.size()); ++i)
+    {
+        const auto& segment = m_currentScene.segments[i];
+        const QString& childName = segment.child_link_name;
+        if (!childName.isEmpty())
+        {
+            // 如果多个 segment 共享同一个子 link 名（分支拓扑），只保留第一个。
+            if (m_link_to_joint_index.find(childName) == m_link_to_joint_index.end())
+            {
+                m_link_to_joint_index[childName] = i;
+            }
+        }
+    }
+}
+
+// =========================================================================
+// 【逆向驱动】TCP Gizmo 拖动位姿发射
+// =========================================================================
+void RobotVtkView::EmitTcpDrag(vtkTransform* transform)
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (transform == nullptr) return;
+
+    // 提取 vtkTransform 的位置和 Z-Y-X 欧拉角（VTK 原生格式）
+    const double* pos = transform->GetPosition();
+    const double* orientation = transform->GetOrientation(); // Z-Y-X 度数
+
+    RoboSDP::Kinematics::Dto::CartesianPoseDto pose;
+    pose.position_m = {pos[0], pos[1], pos[2]};
+    // 注意：VTK GetOrientation() 返回 Z-Y-X Euler 角（度），
+    // 当前 IK 求解器统一使用 RPY 约定，此处直接透传。
+    // 若后续需要坐标系转换，在此处增加适配逻辑。
+    pose.rpy_deg = {orientation[0], orientation[1], orientation[2]};
+
+    emit signalTcpPoseDragged(pose);
+#else
+    Q_UNUSED(transform);
 #endif
 }
 

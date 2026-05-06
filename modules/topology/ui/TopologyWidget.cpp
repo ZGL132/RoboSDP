@@ -128,11 +128,12 @@ QString BuildAxisRelationsText(const std::vector<RoboSDP::Topology::Dto::Topolog
 
 // ==================== 生命周期与初始化 ====================
 
-TopologyWidget::TopologyWidget(QWidget* parent)
+TopologyWidget::TopologyWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent)
     : QWidget(parent)
     , m_requirement_storage(m_repository)
     , m_topology_storage(m_repository)
-    , m_service(m_topology_storage, m_validator, m_template_loader, m_requirement_storage, &m_logger)
+    , m_logger(logger)
+    , m_service(m_topology_storage, m_validator, m_template_loader, m_requirement_storage, m_logger)
     , m_state(m_service.CreateDefaultState())
 {
     // 1. 搭建 UI 组件树

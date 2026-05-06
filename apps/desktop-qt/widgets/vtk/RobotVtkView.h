@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "modules/kinematics/dto/KinematicModelDto.h"
 #include "modules/kinematics/dto/UrdfPreviewSceneDto.h"
 
 #include <QWidget>
@@ -9,18 +10,23 @@
 class QLabel;
 class QVBoxLayout;
 
+// vtkActor / vtkTransform 前置声明放在宏外，因为 HandleActorClicked / EmitTcpDrag
+// 的公有 API 使用指针参数，仅前置声明即可通过编译。
+class vtkActor;
+class vtkTransform;
+
 #if defined(ROBOSDP_HAVE_VTK)
 #include <vtkActor.h>
 #include <vtkProperty.h>
 #include <vtkSmartPointer.h>
 
 class QVTKOpenGLNativeWidget;
-class vtkActor;
 class vtkAxesActor;
+class vtkBoxWidget2;
 class vtkGenericOpenGLRenderWindow;
 class vtkOrientationMarkerWidget;
 class vtkRenderer;
-class vtkTextActor;  // <--- 【新增】：前置声明文字 Actor
+class vtkTextActor;
 #endif
 
 namespace RoboSDP::Desktop::Vtk
@@ -36,9 +42,15 @@ using PreviewSceneDto = RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto;
  * 1. 默认显示最小 VTK 测试场景；
  * 2. 在运动学模块同步预览场景后切换到骨架预览场景；
  * 3. 若 VTK 不可用，则稳定退化为文字摘要视图。
+ *
+ * 【逆向驱动】新增职责：
+ * 4. 关节直接拖动：点击连杆后鼠标滚轮修改关节角度；
+ * 5. TCP 3D Gizmo：末端可拖拽坐标轴触发 IK。
  */
 class RobotVtkView : public QWidget
 {
+    Q_OBJECT  // <--- 【新增】启用 Qt 信号/槽机制
+
 public:
     explicit RobotVtkView(QWidget* parent = nullptr);
     ~RobotVtkView() override;
@@ -70,7 +82,29 @@ public:
     void SetCollisionMeshVisible(bool visible);
 
     /// @brief 供自定义 VTK 交互器调用，处理用户在 3D 视图中点击 Actor 后的高亮和状态栏输出。
-    void HandleActorClicked(vtkActor* clickedActor);
+    /// @param clickedActor 被点击的 Actor（nullptr 表示点击空白区域）。
+    /// @param pickPosition 拾取位置（世界坐标），用于骨架节点查找，可为 null。
+    void HandleActorClicked(vtkActor* clickedActor, const double pickPosition[3] = nullptr);
+
+    // ============================================================
+    // 【逆向驱动】接口：供 VtkClickInteractorStyle 回调
+    // ============================================================
+
+    /// @brief 获取当前选中的连杆名称（供滚轮关节驱动解析关节索引）。
+    QString GetPickedLinkName() const { return m_current_picked_link; }
+
+    /// @brief 获取当前滚轮关节驱动角度步长（度/滚轮格）。
+    double GetScrollStep() const { return m_scroll_step_deg; }
+
+    /// @brief 设置滚轮关节驱动的角度步长（度/滚轮格）。
+    /// @param stepDeg 步长值（度），建议范围 0.1 ~ 10.0
+    void SetScrollStep(double stepDeg) { m_scroll_step_deg = stepDeg; }
+
+    /// @brief 鼠标滚轮滚动时调用，解析连杆名称 → 发射 signalJointAngleScrolled。
+    void EmitJointScroll(double deltaDeg);
+
+    /// @brief TCP Gizmo 拖动时调用，提取 vtkTransform 位姿 → 发射 signalTcpPoseDragged。
+    void EmitTcpDrag(vtkTransform* transform);
 
     /// @brief 设置关节轴诊断层显示状态，供顶部视图页签统一控制。
     void SetJointAxesVisible(bool visible);
@@ -101,6 +135,13 @@ public:
 
     /// @brief 将相机切换到等轴测视图，从 (1, -1, 1) 方向观察。
     void SetIsometricCameraView();
+
+signals:
+    /// @brief 3D 视图中点击连杆后鼠标滚轮滚动 → 发出关节角度变更信号。
+    void signalJointAngleScrolled(int jointIndex, double deltaDeg);
+
+    /// @brief TCP Gizmo 被拖动 → 发出目标位姿信号，由 KinematicsWidget 的 IK 槽处理。
+    void signalTcpPoseDragged(const RoboSDP::Kinematics::Dto::CartesianPoseDto& newPose);
 
 private:
     void BuildLayout();
@@ -140,6 +181,7 @@ private:
     vtkSmartPointer<vtkAxesActor> m_corner_axes_actor;
     vtkSmartPointer<vtkOrientationMarkerWidget> m_corner_axes_widget;
     vtkSmartPointer<vtkTextActor> m_watermark_actor; // <--- 【新增】：保存水印对象
+    /// @brief 所有 Mesh Actor 映射表：复合键 "layer:link_name:index" → Actor。
     std::map<QString, vtkSmartPointer<vtkActor>> m_link_actors;
     std::map<QString, RoboSDP::Kinematics::Dto::GeometryObjectDto> m_link_mesh_geometries;
 
@@ -149,7 +191,26 @@ private:
     double m_last_picked_color[3] = {0.0, 0.0, 0.0};
     /// @brief 上一次被点击 Actor 的原始环境光系数，用于恢复。
     double m_last_picked_ambient = 0.0;
+
+    /// @brief TCP 3D Gizmo 控件（vtkBoxWidget2）：在末端生成可拖拽的 3D 变换框，拖动触发 IK。
+    vtkSmartPointer<vtkBoxWidget2> m_tcp_gizmo_widget;
 #endif
+
+    // ── 以下成员不使用 VTK 类型，放在宏外以便非 VTK 编译路径也能访问 ──
+
+    /// @brief link_name → joint_index 映射表，由 m_currentScene.segments 构建。
+    ///        用于 HandleActorClicked → EmitJointScroll 的关节索引查找。
+    std::map<QString, int> m_link_to_joint_index;
+
+    /// @brief 当前选中的连杆名称（纯 link_name，用于逆向驱动确定关节索引）。
+    QString m_current_picked_link;
+
+    /// @brief 滚轮关节驱动的角度步长（度/滚轮格），默认 1.0°。
+    ///        由 KinematicsWidget 的步长控件通过 SetScrollStep() 设置。
+    double m_scroll_step_deg = 1.0;
+
+    /// @brief 从 m_currentScene.segments 重建 m_link_to_joint_index 映射表。
+    void RebuildLinkToJointMap();
 };
 
 } // namespace RoboSDP::Desktop::Vtk

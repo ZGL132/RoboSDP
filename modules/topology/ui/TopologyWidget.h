@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/infrastructure/ProjectSaveCoordinator.h"
-#include "core/logging/ConsoleLogger.h"
+#include "core/logging/ILogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/requirement/persistence/RequirementJsonStorage.h"
 #include "modules/topology/persistence/TopologyJsonStorage.h"
@@ -43,7 +43,7 @@ class TopologyWidget : public QWidget, public RoboSDP::Infrastructure::IProjectS
     Q_OBJECT
 
 public:
-    explicit TopologyWidget(QWidget* parent = nullptr);
+    explicit TopologyWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent = nullptr);
 
     /// @brief 实现接口：返回全局保存日志使用的模块名称。
     QString ModuleName() const override;
@@ -139,7 +139,7 @@ private:
 
 private:
     // 后端依赖与服务注入
-    RoboSDP::Logging::ConsoleLogger m_logger;
+    RoboSDP::Logging::ILogger* m_logger = nullptr;
     RoboSDP::Repository::LocalJsonRepository m_repository;
     RoboSDP::Requirement::Persistence::RequirementJsonStorage m_requirement_storage;
     RoboSDP::Topology::Persistence::TopologyJsonStorage m_topology_storage;

@@ -24,10 +24,11 @@
 namespace RoboSDP::Requirement::Ui
 {
 
-RequirementWidget::RequirementWidget(QWidget* parent)
+RequirementWidget::RequirementWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent)
     : QWidget(parent)
     , m_storage(m_repository)
-    , m_service(m_storage, m_validator, &m_logger)
+    , m_logger(logger)
+    , m_service(m_storage, m_validator, m_logger)
 {
     BuildUi();
     PopulateForm(m_service.CreateDefaultModel());

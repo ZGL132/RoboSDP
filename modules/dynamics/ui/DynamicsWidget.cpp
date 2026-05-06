@@ -106,11 +106,12 @@ QString FormatEnvelopeLine(const RoboSDP::Dynamics::Dto::LoadEnvelopeJointDto& j
 
 } // namespace
 
-DynamicsWidget::DynamicsWidget(QWidget* parent)
+DynamicsWidget::DynamicsWidget(RoboSDP::Logging::ILogger* logger, QWidget* parent)
     : QWidget(parent)
     , m_dynamic_storage(m_repository)
     , m_kinematic_storage(m_repository)
-    , m_service(m_dynamic_storage, m_kinematic_storage, &m_logger)
+    , m_logger(logger)
+    , m_service(m_dynamic_storage, m_kinematic_storage, m_logger)
     , m_state(m_service.CreateDefaultState())
 {
     BuildUi();
