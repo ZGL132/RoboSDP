@@ -1,0 +1,8 @@
+robosdp_repository_autogen/timestamp: \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/CMakeLists.txt \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/IJsonRepository.h \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/LocalJsonRepository.cpp \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/LocalJsonRepository.h \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/ProjectService.cpp \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/ProjectService.h \
+	D:/software/CMake/bin/cmake.exe

@@ -120,6 +120,10 @@ signals:
     /// @brief 将共享内核 FK 输出的 link 全局位姿发送给中央三维视图，用于只更新 Actor 矩阵。
     void PreviewPosesUpdated(const RoboSDP::Kinematics::Ui::PreviewPoseMap& linkWorldPoses);
 
+    /// @brief 将工作空间采样点云数据发送给中央三维视图，用于渲染 3D 散点图。
+    /// @param tcpPositions 所有可达采样点的 TCP 位置坐标列表，每个元素为 [x, y, z]。
+    void WorkspacePointCloudGenerated(const std::vector<std::array<double, 3>>& tcpPositions);
+
     /// @brief Kinematics 页面内部状态变更信号，通知 MainWindow 重新查询按钮启用状态。
     void StatusChanged();
 
@@ -162,6 +166,12 @@ private:
     void ApplyStepToAllSpinBoxes(double stepDeg);
 
     void FillIkTargetFromFkResult();
+
+    /// @brief 从关节限位表读取 soft_limit 并更新 FK 滑块标签显示范围。
+    void UpdateFkJointLimitLabels();
+
+    /// @brief 检查 FK 关节角度是否超出 soft_limit，越界时设置红色背景提示。
+    void UpdateJointLimitWarningStyle();
 
     // =========================================================================
     // 核心生命周期分流 (单向数据流核心)
@@ -242,6 +252,13 @@ private:
     QSpinBox* m_workspace_sample_count_spin = nullptr;
 
     QPlainTextEdit* m_result_summary_edit = nullptr;
+
+    /// @brief 结构化结果展示：各分类 QGroupBox 内的信息标签
+    QLabel* m_result_model_label = nullptr;      // 模型概要
+    QLabel* m_result_diag_label = nullptr;       // 诊断信息
+    QLabel* m_result_fk_label = nullptr;         // FK 结果
+    QLabel* m_result_ik_label = nullptr;         // IK 结果
+    QLabel* m_result_ws_label = nullptr;         // 工作空间结果
 };
 
 } // namespace RoboSDP::Kinematics::Ui

@@ -674,7 +674,7 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
 
     auto* workspaceLayout = new QFormLayout();
     m_workspace_sample_count_spin = new QSpinBox(groupBox);
-    m_workspace_sample_count_spin->setRange(1, 5000);
+    m_workspace_sample_count_spin->setRange(1, 100000);
     workspaceLayout->addRow(QStringLiteral("采样点数"), m_workspace_sample_count_spin);
     layout->addLayout(workspaceLayout);
 
@@ -685,8 +685,48 @@ QGroupBox* KinematicsWidget::CreateResultGroup()
 {
     auto* groupBox = new QGroupBox(QStringLiteral("结果摘要"), this);
     auto* layout = new QVBoxLayout(groupBox);
+
+    // FK 结果 → IK 种子一键填入按钮
+    auto* btnLayout = new QHBoxLayout();
+    auto* fkToIkBtn = new QPushButton(QStringLiteral("⇥ 填入 IK 种子"), groupBox);
+    fkToIkBtn->setToolTip(QStringLiteral("将 FK 求解结果关节角复制到 IK 种子输入框，方便直接进行逆解。"));
+    connect(fkToIkBtn, &QPushButton::clicked, this, &KinematicsWidget::FillIkTargetFromFkResult);
+    btnLayout->addWidget(fkToIkBtn);
+    btnLayout->addStretch();
+    layout->addLayout(btnLayout);
+
+    // 结构化展示区域：滚动容器内含分类 QGroupBox
+    auto* scrollArea = new QScrollArea(groupBox);
+    scrollArea->setWidgetResizable(true);
+    auto* scrollContent = new QWidget(scrollArea);
+    auto* scrollLayout = new QVBoxLayout(scrollContent);
+    scrollLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto createSection = [&](const QString& title, QLabel*& labelRef) -> QGroupBox* {
+        auto* section = new QGroupBox(title, scrollContent);
+        auto* sectionLayout = new QVBoxLayout(section);
+        labelRef = new QLabel(QStringLiteral("尚未执行"), section);
+        labelRef->setWordWrap(true);
+        labelRef->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        sectionLayout->addWidget(labelRef);
+        return section;
+    };
+
+    scrollLayout->addWidget(createSection(QStringLiteral("模型概要"), m_result_model_label));
+    scrollLayout->addWidget(createSection(QStringLiteral("诊断信息"), m_result_diag_label));
+    scrollLayout->addWidget(createSection(QStringLiteral("正运动学 FK"), m_result_fk_label));
+    scrollLayout->addWidget(createSection(QStringLiteral("逆运动学 IK"), m_result_ik_label));
+    scrollLayout->addWidget(createSection(QStringLiteral("工作空间"), m_result_ws_label));
+    scrollLayout->addStretch();
+
+    scrollArea->setWidget(scrollContent);
+    layout->addWidget(scrollArea, 1);
+
+    // 底部保留纯文本详情（折叠为精简模式，默认隐藏）
     m_result_summary_edit = new QPlainTextEdit(groupBox);
     m_result_summary_edit->setReadOnly(true);
+    m_result_summary_edit->setMaximumHeight(120);
+    m_result_summary_edit->hide();
     layout->addWidget(m_result_summary_edit);
     return groupBox;
 }
@@ -861,6 +901,7 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
     
     m_is_populating_form = false;
     RefreshEditingState();
+    UpdateFkJointLimitLabels();
     RefreshModelStatusLabels();
 }
 
@@ -943,134 +984,145 @@ void KinematicsWidget::RefreshBackendDiagnostics()
 
 void KinematicsWidget::RenderResults()
 {
-    QStringList lines;
-    lines.push_back(QStringLiteral("模型：%1").arg(m_state.current_model.meta.name));
-    lines.push_back(QStringLiteral("草稿主模型：%1").arg(FormatMasterModelType(m_state.current_model.master_model_type)));
-    lines.push_back(QStringLiteral("派生状态：%1").arg(FormatDerivedModelState(m_state.current_model.derived_model_state)));
-    lines.push_back(QStringLiteral("中央预览来源：%1").arg(FormatPreviewSourceMode(m_preview_source_mode)));
-    lines.push_back(QStringLiteral("主模型切换状态：%1").arg(
-        FormatMasterSwitchState(m_state.current_model, m_preview_source_mode)));
-    lines.push_back(QStringLiteral("URDF 来源类型：%1").arg(
-        FormatUrdfMasterSourceType(m_state.current_model.urdf_master_source_type)));
-    lines.push_back(QStringLiteral("DH 草案级别：%1").arg(FormatDhDraftExtractionLevel(m_state.current_model.dh_draft_extraction_level)));
-    lines.push_back(QStringLiteral("参数约定：%1").arg(m_state.current_model.parameter_convention));
-    lines.push_back(QStringLiteral("Base Frame 位置[m] = %1").arg(FormatArray3(m_state.current_model.base_frame.position_m, 4)));
-    lines.push_back(QStringLiteral("Flange Frame 位置[m] = %1").arg(FormatArray3(m_state.current_model.flange_frame.position_m, 4)));
-    lines.push_back(QStringLiteral("Tool Frame：%1").arg(m_state.current_model.tool_frame.has_value()
-        ? FormatArray3(m_state.current_model.tool_frame->position_m, 4)
-        : QStringLiteral("未启用")));
-    lines.push_back(QStringLiteral("Workpiece Frame：%1").arg(m_state.current_model.workpiece_frame.has_value()
-        ? FormatArray3(m_state.current_model.workpiece_frame->position_m, 4)
-        : QStringLiteral("未启用")));
-    lines.push_back(QStringLiteral("TCP Frame 偏移[m] = %1").arg(FormatArray3(m_state.current_model.tcp_frame.translation_m, 4)));
-    lines.push_back(QStringLiteral("骨架预览：%1").arg(FormatPreviewSceneSummary(m_preview_scene)));
-    
-    if (!m_preview_scene.IsEmpty())
+    // ── 模型概要 ──────────────────────────────────────────────
     {
-        lines.push_back(QStringLiteral("预览模型名：%1").arg(m_preview_scene.model_name));
-        if (!m_preview_scene.urdf_file_path.trimmed().isEmpty())
+        QStringList lines;
+        lines.push_back(QStringLiteral("模型：%1").arg(m_state.current_model.meta.name));
+        lines.push_back(QStringLiteral("草稿主模型：%1").arg(FormatMasterModelType(m_state.current_model.master_model_type)));
+        lines.push_back(QStringLiteral("派生状态：%1").arg(FormatDerivedModelState(m_state.current_model.derived_model_state)));
+        lines.push_back(QStringLiteral("中央预览来源：%1").arg(FormatPreviewSourceMode(m_preview_source_mode)));
+        lines.push_back(QStringLiteral("参数约定：%1").arg(m_state.current_model.parameter_convention));
+        lines.push_back(QStringLiteral("骨架预览：%1").arg(FormatPreviewSceneSummary(m_preview_scene)));
+        if (!m_preview_scene.IsEmpty())
         {
-            lines.push_back(QStringLiteral("URDF 文件：%1").arg(m_preview_scene.urdf_file_path));
+            lines.push_back(QStringLiteral("预览模型名：%1").arg(m_preview_scene.model_name));
+            if (!m_preview_scene.urdf_file_path.trimmed().isEmpty())
+            {
+                lines.push_back(QStringLiteral("URDF 文件：%1").arg(m_preview_scene.urdf_file_path));
+            }
+        }
+        if (!m_state.current_model.conversion_diagnostics.trimmed().isEmpty())
+        {
+            lines.push_back(QStringLiteral("同步摘要：%1").arg(m_state.current_model.conversion_diagnostics));
+        }
+        if (!m_state.current_model.original_imported_urdf_path.trimmed().isEmpty())
+        {
+            lines.push_back(QStringLiteral("原始导入 URDF：%1").arg(m_state.current_model.original_imported_urdf_path));
+        }
+        if (!m_state.current_model.unified_robot_snapshot.derived_artifact_state_code.trimmed().isEmpty())
+        {
+            lines.push_back(QStringLiteral("派生产物状态：%1").arg(
+                m_state.current_model.unified_robot_snapshot.derived_artifact_state_code));
+            lines.push_back(QStringLiteral("派生产物路径：%1").arg(
+                m_state.current_model.unified_robot_snapshot.derived_artifact_relative_path.isEmpty()
+                    ? QStringLiteral("未生成")
+                    : m_state.current_model.unified_robot_snapshot.derived_artifact_relative_path));
+            lines.push_back(QStringLiteral("派生产物新鲜度：%1").arg(
+                m_state.current_model.unified_robot_snapshot.derived_artifact_fresh
+                    ? QStringLiteral("新鲜")
+                    : (m_state.current_model.unified_robot_snapshot.derived_artifact_exists
+                           ? QStringLiteral("待刷新")
+                           : QStringLiteral("缺失"))));
+        }
+        if (m_result_model_label != nullptr)
+        {
+            m_result_model_label->setText(lines.join(QLatin1Char('\n')));
         }
     }
-    if (!m_state.current_model.original_imported_urdf_path.trimmed().isEmpty())
+
+    // ── 诊断信息 ──────────────────────────────────────────────
     {
-        lines.push_back(QStringLiteral("原始导入 URDF：%1").arg(m_state.current_model.original_imported_urdf_path));
-    }
-    if (!m_state.current_model.conversion_diagnostics.trimmed().isEmpty())
-    {
-        lines.push_back(QStringLiteral("同步摘要：%1").arg(m_state.current_model.conversion_diagnostics));
-    }
-    if (!m_state.current_model.dh_draft_readonly_reason.trimmed().isEmpty())
-    {
-        lines.push_back(QStringLiteral("只读说明：%1").arg(m_state.current_model.dh_draft_readonly_reason));
-    }
-    if (!m_state.current_model.unified_robot_snapshot.derived_artifact_state_code.trimmed().isEmpty())
-    {
-        lines.push_back(QStringLiteral("派生产物状态：%1").arg(
-            m_state.current_model.unified_robot_snapshot.derived_artifact_state_code));
-        lines.push_back(QStringLiteral("派生产物路径：%1").arg(
-            m_state.current_model.unified_robot_snapshot.derived_artifact_relative_path.isEmpty()
-                ? QStringLiteral("未生成")
-                : m_state.current_model.unified_robot_snapshot.derived_artifact_relative_path));
-        lines.push_back(QStringLiteral("派生产物新鲜度：%1").arg(
-            m_state.current_model.unified_robot_snapshot.derived_artifact_fresh
-                ? QStringLiteral("新鲜")
-                : (m_state.current_model.unified_robot_snapshot.derived_artifact_exists
-                       ? QStringLiteral("待刷新")
-                       : QStringLiteral("缺失"))));
+        QStringList lines;
+        lines.push_back(QStringLiteral("backend_id = %1").arg(m_backend_diagnostic.backend_id));
+        lines.push_back(QStringLiteral("语义归一 = %1").arg(FormatReadyState(m_backend_diagnostic.status.normalized_semantics_ready)));
+        lines.push_back(QStringLiteral("Frame 语义 = %1").arg(FormatReadyState(m_backend_diagnostic.status.frame_semantics_ready)));
+        lines.push_back(QStringLiteral("Joint 顺序 = %1").arg(FormatReadyState(m_backend_diagnostic.status.joint_order_ready)));
+        lines.push_back(QStringLiteral("Build-Context = %1").arg(FormatReadyState(m_backend_diagnostic.status.build_context_ready)));
+        lines.push_back(QStringLiteral("共享内核 = %1").arg(FormatReadyState(m_backend_diagnostic.status.shared_robot_kernel_ready)));
+        if (!m_backend_diagnostic.status.status_message.isEmpty())
+        {
+            lines.push_back(QStringLiteral("诊断摘要：%1").arg(m_backend_diagnostic.status.status_message));
+        }
+        if (m_result_diag_label != nullptr)
+        {
+            m_result_diag_label->setText(lines.join(QLatin1Char('\n')));
+        }
     }
 
-    lines.push_back(QString());
-    lines.push_back(QStringLiteral("[模型诊断]"));
-    lines.push_back(QStringLiteral("backend_id = %1").arg(m_backend_diagnostic.backend_id));
-    lines.push_back(QStringLiteral("语义归一 = %1").arg(FormatReadyState(m_backend_diagnostic.status.normalized_semantics_ready)));
-    lines.push_back(QStringLiteral("Frame 语义 = %1").arg(FormatReadyState(m_backend_diagnostic.status.frame_semantics_ready)));
-    lines.push_back(QStringLiteral("Joint 顺序 = %1").arg(FormatReadyState(m_backend_diagnostic.status.joint_order_ready)));
-    lines.push_back(QStringLiteral("Build-Context = %1").arg(FormatReadyState(m_backend_diagnostic.status.build_context_ready)));
-    lines.push_back(QStringLiteral("共享内核 = %1").arg(FormatReadyState(m_backend_diagnostic.status.shared_robot_kernel_ready)));
-    if (!m_backend_diagnostic.status.status_message.isEmpty())
+    // ── FK 结果 ────────────────────────────────────────────────
     {
-        lines.push_back(QStringLiteral("诊断摘要 = %1").arg(m_backend_diagnostic.status.status_message));
+        QStringList lines;
+        if (m_state.last_fk_result.success)
+        {
+            const auto& pose = m_state.last_fk_result.tcp_pose;
+            lines.push_back(QStringLiteral("状态：成功"));
+            lines.push_back(QStringLiteral("TCP 位置[m] = %1").arg(FormatArray3(pose.position_m, 4)));
+            lines.push_back(QStringLiteral("TCP 姿态[deg] = %1").arg(FormatArray3(pose.rpy_deg, 3)));
+            lines.push_back(QStringLiteral("关节输入 = %1").arg(FormatJointVector(m_state.last_fk_result.joint_positions_deg)));
+        }
+        else
+        {
+            lines.push_back(QStringLiteral("状态：%1").arg(m_state.last_fk_result.message.isEmpty()
+                ? QStringLiteral("尚未执行")
+                : m_state.last_fk_result.message));
+        }
+        if (m_result_fk_label != nullptr)
+        {
+            m_result_fk_label->setText(lines.join(QLatin1Char('\n')));
+        }
     }
 
-    if (m_state.last_fk_result.success)
+    // ── IK 结果 ────────────────────────────────────────────────
     {
-        const auto& pose = m_state.last_fk_result.tcp_pose;
-        lines.push_back(QString());
-        lines.push_back(QStringLiteral("[FK] 成功"));
-        lines.push_back(QStringLiteral("TCP 位置[m] = %1").arg(FormatArray3(pose.position_m, 4)));
-        lines.push_back(QStringLiteral("TCP 姿态[deg] = %1").arg(FormatArray3(pose.rpy_deg, 3)));
-        lines.push_back(QStringLiteral("关节输入 = %1").arg(FormatJointVector(m_state.last_fk_result.joint_positions_deg)));
-    }
-    else
-    {
-        lines.push_back(QString());
-        lines.push_back(QStringLiteral("[FK] %1").arg(m_state.last_fk_result.message.isEmpty()
-            ? QStringLiteral("尚未执行")
-            : m_state.last_fk_result.message));
-    }
-
-    if (m_state.last_ik_result.success)
-    {
-        lines.push_back(QString());
-        lines.push_back(QStringLiteral("[IK] 成功"));
-        lines.push_back(QStringLiteral("解 = %1").arg(FormatJointVector(m_state.last_ik_result.joint_positions_deg)));
-        lines.push_back(
-            QStringLiteral("位置误差 = %1 mm，姿态误差 = %2 deg，迭代次数 = %3")
-                .arg(m_state.last_ik_result.position_error_mm, 0, 'f', 3)
-                .arg(m_state.last_ik_result.orientation_error_deg, 0, 'f', 3)
-                .arg(m_state.last_ik_result.iteration_count));
-    }
-    else
-    {
-        lines.push_back(QString());
-        lines.push_back(QStringLiteral("[IK] %1").arg(m_state.last_ik_result.message.isEmpty()
-            ? QStringLiteral("尚未执行")
-            : m_state.last_ik_result.message));
+        QStringList lines;
+        if (m_state.last_ik_result.success)
+        {
+            lines.push_back(QStringLiteral("状态：成功"));
+            lines.push_back(QStringLiteral("解 = %1").arg(FormatJointVector(m_state.last_ik_result.joint_positions_deg)));
+            lines.push_back(
+                QStringLiteral("位置误差 = %1 mm，姿态误差 = %2 deg，迭代次数 = %3")
+                    .arg(m_state.last_ik_result.position_error_mm, 0, 'f', 3)
+                    .arg(m_state.last_ik_result.orientation_error_deg, 0, 'f', 3)
+                    .arg(m_state.last_ik_result.iteration_count));
+        }
+        else
+        {
+            lines.push_back(QStringLiteral("状态：%1").arg(m_state.last_ik_result.message.isEmpty()
+                ? QStringLiteral("尚未执行")
+                : m_state.last_ik_result.message));
+        }
+        if (m_result_ik_label != nullptr)
+        {
+            m_result_ik_label->setText(lines.join(QLatin1Char('\n')));
+        }
     }
 
-    if (m_state.last_workspace_result.success)
+    // ── 工作空间结果 ──────────────────────────────────────────
     {
-        lines.push_back(QString());
-        lines.push_back(QStringLiteral("[Workspace] 成功"));
-        lines.push_back(
-            QStringLiteral("请求采样 = %1，可达点 = %2，最大半径 = %3 m")
-                .arg(m_state.last_workspace_result.requested_sample_count)
-                .arg(m_state.last_workspace_result.reachable_sample_count)
-                .arg(m_state.last_workspace_result.max_radius_m, 0, 'f', 4));
-        lines.push_back(QStringLiteral("包围盒最小点[m] = %1").arg(FormatArray3(m_state.last_workspace_result.min_position_m, 4)));
-        lines.push_back(QStringLiteral("包围盒最大点[m] = %1").arg(FormatArray3(m_state.last_workspace_result.max_position_m, 4)));
-    }
-    else
-    {
-        lines.push_back(QString());
-        lines.push_back(QStringLiteral("[Workspace] %1").arg(m_state.last_workspace_result.message.isEmpty()
-            ? QStringLiteral("尚未执行")
-            : m_state.last_workspace_result.message));
+        QStringList lines;
+        if (m_state.last_workspace_result.success)
+        {
+            lines.push_back(QStringLiteral("状态：成功"));
+            lines.push_back(
+                QStringLiteral("请求采样 = %1，可达点 = %2，最大半径 = %3 m")
+                    .arg(m_state.last_workspace_result.requested_sample_count)
+                    .arg(m_state.last_workspace_result.reachable_sample_count)
+                    .arg(m_state.last_workspace_result.max_radius_m, 0, 'f', 4));
+            lines.push_back(QStringLiteral("包围盒最小点[m] = %1").arg(FormatArray3(m_state.last_workspace_result.min_position_m, 4)));
+            lines.push_back(QStringLiteral("包围盒最大点[m] = %1").arg(FormatArray3(m_state.last_workspace_result.max_position_m, 4)));
+        }
+        else
+        {
+            lines.push_back(QStringLiteral("状态：%1").arg(m_state.last_workspace_result.message.isEmpty()
+                ? QStringLiteral("尚未执行")
+                : m_state.last_workspace_result.message));
+        }
+        if (m_result_ws_label != nullptr)
+        {
+            m_result_ws_label->setText(lines.join(QLatin1Char('\n')));
+        }
     }
 
-    m_result_summary_edit->setPlainText(lines.join(QLatin1Char('\n')));
     RefreshModelStatusLabels();
 }
 
@@ -1160,6 +1212,9 @@ void KinematicsWidget::SyncStructureAndPreview()
 void KinematicsWidget::SyncPoseOnly()
 {
     if (m_is_populating_form) return;
+
+    // 每次姿态刷新时同步检测关节越界状态并更新视觉提示
+    UpdateJointLimitWarningStyle();
 
     auto angles = CollectJointInputs(m_fk_joint_spins);
 
@@ -1385,6 +1440,53 @@ void KinematicsWidget::FillIkTargetFromFkResult()
          ++index)
     {
         m_ik_seed_joint_spins[index]->setValue(m_state.last_fk_result.joint_positions_deg[index]);
+    }
+}
+
+void KinematicsWidget::UpdateFkJointLimitLabels()
+{
+    // 从关节限位表读取 soft_min/soft_max，更新 FK 滑块标签显示限位范围
+    for (int i = 0; i < static_cast<int>(m_fk_joint_labels.size()); ++i)
+    {
+        if (i < m_joint_limit_table->rowCount())
+        {
+            const QString jointId = ReadTableString(m_joint_limit_table, i, 0);
+            const double softMin = ReadTableDouble(m_joint_limit_table, i, 1);
+            const double softMax = ReadTableDouble(m_joint_limit_table, i, 2);
+            const QString label = jointId.isEmpty()
+                ? QStringLiteral("J%1").arg(i + 1)
+                : jointId;
+            m_fk_joint_labels[i]->setText(QStringLiteral("%1 [%2, %3]")
+                .arg(label)
+                .arg(softMin, 0, 'f', 1)
+                .arg(softMax, 0, 'f', 1));
+        }
+        else
+        {
+            // 限位表尚未填充时显示默认标签
+            m_fk_joint_labels[i]->setText(QStringLiteral("J%1").arg(i + 1));
+        }
+    }
+}
+
+void KinematicsWidget::UpdateJointLimitWarningStyle()
+{
+    // 表单填充期间跳过，避免限位表未就绪时误报
+    if (m_is_populating_form) return;
+
+    // 检查 FK 关节角度是否超出 soft_limit，越界时设置红色背景
+    for (int i = 0; i < static_cast<int>(m_fk_joint_spins.size()); ++i)
+    {
+        if (i < m_joint_limit_table->rowCount())
+        {
+            const double softMin = ReadTableDouble(m_joint_limit_table, i, 1);
+            const double softMax = ReadTableDouble(m_joint_limit_table, i, 2);
+            const double value = m_fk_joint_spins[i]->value();
+            const bool outOfLimit = (value < softMin || value > softMax);
+            m_fk_joint_spins[i]->setStyleSheet(outOfLimit
+                ? QStringLiteral("background-color: #fecaca; color: #991b1b;")
+                : QString());
+        }
     }
 }
 
@@ -1813,6 +1915,17 @@ void KinematicsWidget::OnRunIkClicked()
 
     m_state.last_ik_result = m_service.SolveIk(m_state.current_model, request);
     MarkDirty();
+
+    // IK 求解成功后自动将结果填入 FK 滑块，方便用户微调后重新执行 FK 验证
+    if (m_state.last_ik_result.success)
+    {
+        const auto& ikJoints = m_state.last_ik_result.joint_positions_deg;
+        for (std::size_t i = 0; i < m_fk_joint_spins.size() && i < ikJoints.size(); ++i)
+        {
+            m_fk_joint_spins[i]->setValue(ikJoints[i]);
+        }
+    }
+
     RenderResults();
 
     const bool warning = !m_state.last_ik_result.success;
@@ -1836,6 +1949,19 @@ void KinematicsWidget::OnSampleWorkspaceClicked()
     request.sample_count = m_workspace_sample_count_spin->value();
     m_state.last_workspace_result = m_service.SampleWorkspace(m_state.current_model, request);
     MarkDirty();
+
+    // 工作空间采样成功后，发射点云信号供 VTK 渲染 3D 散点图
+    if (m_state.last_workspace_result.success)
+    {
+        std::vector<std::array<double, 3>> tcpPositions;
+        tcpPositions.reserve(m_state.last_workspace_result.sampled_points.size());
+        for (const auto& pt : m_state.last_workspace_result.sampled_points)
+        {
+            tcpPositions.push_back(pt.tcp_pose.position_m);
+        }
+        emit WorkspacePointCloudGenerated(tcpPositions);
+    }
+
     RenderResults();
 
     const bool warning = !m_state.last_workspace_result.success;
@@ -1901,6 +2027,7 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
         connect(spinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
             this, [this](double) {
                 MarkDirty();
+                UpdateJointLimitWarningStyle(); // 实时检测越界并高亮
                 SyncPoseOnly(); // 触发三维画面实时更新
             });
 
@@ -1961,6 +2088,9 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
     {
         ApplyStepToAllSpinBoxes(m_scroll_step_spin->value());
     }
+
+    // 5. 更新 FK 滑块标签显示限位范围（如果限位表已填充）
+    UpdateFkJointLimitLabels();
 }
 
 /// @brief 将所有 FK 关节输入框的 singleStep 设置为指定值。

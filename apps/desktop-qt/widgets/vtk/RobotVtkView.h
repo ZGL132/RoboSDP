@@ -106,6 +106,10 @@ public:
     /// @brief TCP Gizmo 拖动时调用，提取 vtkTransform 位姿 → 发射 signalTcpPoseDragged。
     void EmitTcpDrag(vtkTransform* transform);
 
+    /// @brief 在 3D 视图中显示工作空间采样点云。
+    /// @param tcpPositions 所有可达采样点的 TCP 位置坐标列表，每个元素为 [x, y, z]。
+    void ShowWorkspacePointCloud(const std::vector<std::array<double, 3>>& tcpPositions);
+
     /// @brief 设置关节轴诊断层显示状态，供顶部视图页签统一控制。
     void SetJointAxesVisible(bool visible);
 
@@ -194,6 +198,12 @@ private:
 
     /// @brief TCP 3D Gizmo 控件（vtkBoxWidget2）：在末端生成可拖拽的 3D 变换框，拖动触发 IK。
     vtkSmartPointer<vtkBoxWidget2> m_tcp_gizmo_widget;
+
+    /// @brief TCP 坐标系指示器（vtkAxesActor）：在末端显示红绿蓝三轴，随 FK 结果更新位姿。
+    vtkSmartPointer<vtkAxesActor> m_tcp_axes_actor;
+
+    /// @brief 工作空间采样点云 Actor：MC 采样得到的可达 TCP 位置散点图。
+    vtkSmartPointer<vtkActor> m_workspace_point_cloud_actor;
 #endif
 
     // ── 以下成员不使用 VTK 类型，放在宏外以便非 VTK 编译路径也能访问 ──

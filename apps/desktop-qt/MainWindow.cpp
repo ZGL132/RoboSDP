@@ -14,6 +14,9 @@
 #include "modules/selection/ui/SelectionWidget.h"
 #include "modules/topology/ui/TopologyWidget.h"
 
+#include <array>
+#include <vector>
+
 #include <QDateTime>
 #include <QDockWidget>
 #include <QDir>
@@ -393,6 +396,18 @@ void MainWindow::CreatePropertyDock()
                 m_robotVtkView->UpdatePreviewPoses(linkWorldPoses);
             }
         });
+
+    connect(
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::WorkspacePointCloudGenerated,
+        this,
+        [this](const std::vector<std::array<double, 3>>& tcpPositions) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->ShowWorkspacePointCloud(tcpPositions);
+            }
+        });
+
     connect(
         m_kinematicsWidget,
         &RoboSDP::Kinematics::Ui::KinematicsWidget::PreviewSceneGenerated,

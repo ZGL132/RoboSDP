@@ -16,6 +16,12 @@
 #include <vtkBoxRepresentation.h>
 #include <vtkCamera.h>
 #include <vtkCaptionActor2D.h>
+#include <vtkGlyph3D.h>
+#include <vtkPoints.h>
+#include <vtkPolyData.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkSphereSource.h>
+#include <vtkVertexGlyphFilter.h>
 #include <vtkCallbackCommand.h>
 #include <vtkCommand.h>
 #include <vtkGenericOpenGLRenderWindow.h>
@@ -193,14 +199,87 @@ void RobotVtkView::UpdatePreviewPoses(
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderer != nullptr)
     {
-        // 中文说明：动态路径重建轻量骨架/标签层，但复用 Mesh Actor 缓存，并且不重置相机。
-        // 解释：调用核心刷新函数。注意传入了 `false` 参数，意思是：**“不要重置相机位置！”**
-        // 如果这里传 `true`，用户一边拖滑块，三维视图不仅在转，相机会不断瞬间跳回初始视角，极其影响体验。
+        // 动态路径重建轻量骨架/标签层，但复用 Mesh Actor 缓存，并且不重置相机。
         RefreshScene(false);
+
+        // 更新 TCP 坐标系指示器位姿（如果 tcp_frame 在 poseMap 中）
+        const auto tcpPoseIt = linkWorldPoses.find(QStringLiteral("tcp_frame"));
+        if (tcpPoseIt != linkWorldPoses.end() && m_tcp_axes_actor != nullptr)
+        {
+            const auto& tcpPose = tcpPoseIt->second;
+            vtkNew<vtkTransform> tcpTransform;
+            tcpTransform->Translate(tcpPose.position_m[0],
+                                    tcpPose.position_m[1],
+                                    tcpPose.position_m[2]);
+            // RPY → VTK 旋转：先绕 Z 轴转 RZ，再绕 Y 轴转 RY，再绕 X 轴转 RX
+            tcpTransform->RotateZ(tcpPose.rpy_deg[2]);
+            tcpTransform->RotateY(tcpPose.rpy_deg[1]);
+            tcpTransform->RotateX(tcpPose.rpy_deg[0]);
+            m_tcp_axes_actor->SetUserTransform(tcpTransform);
+            m_tcp_axes_actor->SetVisibility(true);
+        }
     }
 #else
-    // 如果编译时没有开启 VTK 模块，就啥也不干，忽略这批姿态数据。
     Q_UNUSED(linkWorldPoses);
+#endif
+}
+
+void RobotVtkView::ShowWorkspacePointCloud(
+    const std::vector<std::array<double, 3>>& tcpPositions)
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr) return;
+
+    // 移除旧的点云 Actor（如果存在）
+    if (m_workspace_point_cloud_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_workspace_point_cloud_actor);
+    }
+
+    if (tcpPositions.empty())
+    {
+        m_workspace_point_cloud_actor = nullptr;
+        if (m_renderWindow != nullptr) m_renderWindow->Render();
+        return;
+    }
+
+    // 构建点云数据：将 TCP 位置坐标填入 vtkPoints
+    vtkNew<vtkPoints> points;
+    points->SetNumberOfPoints(static_cast<vtkIdType>(tcpPositions.size()));
+    for (vtkIdType i = 0; i < static_cast<vtkIdType>(tcpPositions.size()); ++i)
+    {
+        points->SetPoint(i, tcpPositions[i][0], tcpPositions[i][1], tcpPositions[i][2]);
+    }
+
+    // 构建 PolyData
+    vtkNew<vtkPolyData> polyData;
+    polyData->SetPoints(points);
+
+    // 使用 VertexGlyphFilter 将每个点渲染为一个顶点
+    vtkNew<vtkVertexGlyphFilter> glyphFilter;
+    glyphFilter->SetInputData(polyData);
+    glyphFilter->Update();
+
+    // 映射器
+    vtkNew<vtkPolyDataMapper> mapper;
+    mapper->SetInputConnection(glyphFilter->GetOutputPort());
+
+    // Actor：绿色小圆点
+    m_workspace_point_cloud_actor = vtkSmartPointer<vtkActor>::New();
+    m_workspace_point_cloud_actor->SetMapper(mapper);
+    m_workspace_point_cloud_actor->GetProperty()->SetColor(0.2, 0.8, 0.2); // 绿色
+    m_workspace_point_cloud_actor->GetProperty()->SetPointSize(3);
+    m_workspace_point_cloud_actor->GetProperty()->SetOpacity(0.7); // 半透明
+
+    m_renderer->AddActor(m_workspace_point_cloud_actor);
+
+    // 点云显示后，将点云 Actor 添加到点云可见性列表中，方便后续开关
+    if (m_renderWindow != nullptr)
+    {
+        m_renderWindow->Render();
+    }
+#else
+    Q_UNUSED(tcpPositions);
 #endif
 }
 
@@ -404,6 +483,14 @@ void RobotVtkView::BuildVtkView()
     m_renderer = renderer;
 
     BuildCornerAxesWidget();
+
+    // TCP 坐标系指示器：红绿蓝三轴，默认隐藏，FK 成功后显示在末端
+    m_tcp_axes_actor = vtkSmartPointer<vtkAxesActor>::New();
+    m_tcp_axes_actor->SetTotalLength(0.15, 0.15, 0.15);
+    m_tcp_axes_actor->SetNormalizedShaftLength(0.8, 0.8, 0.8);
+    m_tcp_axes_actor->SetNormalizedTipLength(0.2, 0.2, 0.2);
+    m_tcp_axes_actor->SetVisibility(false);
+    m_renderer->AddActor(m_tcp_axes_actor);
 
     // 🔽🔽🔽 【新增水印初始化代码】 🔽🔽🔽
     m_watermark_actor = vtkSmartPointer<vtkTextActor>::New();
@@ -679,6 +766,13 @@ void RobotVtkView::RefreshScene(bool resetCamera)
         // 所以每次刷新后，必须重新把水印层注册进渲染器。
         m_renderer->AddActor2D(m_watermark_actor);
         // 🔼🔼🔼 【修复结束】 🔼🔼🔼
+
+        // 🔽🔽🔽 重新添加 TCP 坐标系指示器（同样被 RemoveAllViewProps 清掉）🔽🔽🔽
+        if (m_tcp_axes_actor != nullptr)
+        {
+            m_renderer->AddActor(m_tcp_axes_actor);
+        }
+        // 🔼🔼🔼 🔼🔼🔼
 
         // ── 【逆向驱动】TCP 3D Gizmo 初始化（vtkBoxWidget2）────────────
         if (m_currentScene.IsEmpty())
