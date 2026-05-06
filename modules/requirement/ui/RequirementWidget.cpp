@@ -2,7 +2,6 @@
 
 #include "core/infrastructure/ProjectManager.h"
 
-#include <algorithm>
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
@@ -20,6 +19,8 @@
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace RoboSDP::Requirement::Ui
 {

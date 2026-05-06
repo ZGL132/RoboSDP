@@ -1,7 +1,8 @@
 #include "modules/dynamics/ui/DynamicsWidget.h"
 
-#include "apps/desktop-qt/third_party/qcustomplot/qcustomplot.h"
 #include "core/infrastructure/ProjectManager.h"
+
+#include "apps/desktop-qt/third_party/qcustomplot/qcustomplot.h"
 
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -12,8 +13,8 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QSignalBlocker>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QStringList>
 #include <QTabWidget>
 #include <QTableWidget>

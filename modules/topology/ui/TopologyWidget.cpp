@@ -1,6 +1,7 @@
 ﻿#include "modules/topology/ui/TopologyWidget.h"
 
 #include "core/infrastructure/ProjectManager.h"
+#include "modules/kinematics/service/KinematicsService.h"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -19,9 +20,6 @@
 #include <QStringList>
 #include <QTabWidget>
 #include <QVBoxLayout>
-
-// 引入 KinematicsService 以使用其数学引擎将 Topology 转为可视化的预览场景
-#include "modules/kinematics/service/KinematicsService.h"
 
 namespace RoboSDP::Topology::Ui
 {

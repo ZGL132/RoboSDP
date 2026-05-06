@@ -27,8 +27,8 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
-#include <QMenu>   
-#include <QCloseEvent> 
+#include <QCloseEvent>
+#include <QMenu>
 
 namespace RoboSDP::Desktop
 {
