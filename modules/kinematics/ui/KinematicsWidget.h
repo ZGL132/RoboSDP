@@ -143,6 +143,9 @@ private:
     QGroupBox* CreateDhTableGroup();
     QGroupBox* CreateJointLimitGroup();
     QGroupBox* CreateSolverGroup();
+    QWidget* CreateSolverConfigPage();
+    QWidget* CreateInteractivePage();
+    QWidget* CreateAdvancedAnalysisPage();
     QGroupBox* CreateResultGroup();
     QWidget* CreateScrollableTab(QWidget* contentWidget);
     QDoubleSpinBox* CreateDoubleSpinBox(double minimum, double maximum, int decimals, double step);

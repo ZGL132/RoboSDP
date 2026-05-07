@@ -24,6 +24,7 @@
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QToolBox>
 #include <QVBoxLayout>
 #include <QDateTime>
 
@@ -607,12 +608,29 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     auto* groupBox = new QGroupBox(QStringLiteral("求解配置与输入"), this);
     auto* layout = new QVBoxLayout(groupBox);
 
+    auto* toolbox = new QToolBox(groupBox);
+    toolbox->addItem(CreateSolverConfigPage(), QStringLiteral("基础配置"));
+    toolbox->addItem(CreateInteractivePage(), QStringLiteral("交互示教"));
+    toolbox->addItem(CreateAdvancedAnalysisPage(), QStringLiteral("高级分析"));
+    toolbox->setCurrentIndex(1); // 默认展开交互示教
+    toolbox->setStyleSheet(QStringLiteral(
+        "QToolBox::tab { padding: 6px 12px; font-weight: bold; }"));
+
+    layout->addWidget(toolbox);
+    return groupBox;
+}
+
+QWidget* KinematicsWidget::CreateSolverConfigPage()
+{
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+
     auto* solverLayout = new QFormLayout();
-    m_solver_type_combo = new QComboBox(groupBox);
+    m_solver_type_combo = new QComboBox(page);
     m_solver_type_combo->addItem(QStringLiteral("数值雅可比转置"), QStringLiteral("numeric_jacobian_transpose"));
-    m_branch_policy_combo = new QComboBox(groupBox);
+    m_branch_policy_combo = new QComboBox(page);
     m_branch_policy_combo->addItem(QStringLiteral("最近种子解"), QStringLiteral("nearest_seed"));
-    m_max_iterations_spin = new QSpinBox(groupBox);
+    m_max_iterations_spin = new QSpinBox(page);
     m_max_iterations_spin->setRange(1, 5000);
     m_position_tolerance_spin = CreateDoubleSpinBox(0.001, 1000.0, 3, 0.1);
     m_orientation_tolerance_spin = CreateDoubleSpinBox(0.001, 180.0, 3, 0.1);
@@ -624,6 +642,14 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     solverLayout->addRow(QStringLiteral("姿态容差 [deg]"), m_orientation_tolerance_spin);
     solverLayout->addRow(QStringLiteral("步长增益"), m_step_gain_spin);
     layout->addLayout(solverLayout);
+    layout->addStretch();
+    return page;
+}
+
+QWidget* KinematicsWidget::CreateInteractivePage()
+{
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
 
     // ── 滚轮灵敏度设置 ──────────────────────────────────────
     auto* sensitivityLayout = new QFormLayout();
@@ -642,20 +668,21 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
             emit signalScrollStepChanged(newStep);
         });
 
-// ✅ 替换为以下代码：
+    // FK 关节输入网格
     m_fk_grid = new QGridLayout();
-    // 跨度设大一点(1, 10)防止截断
-    m_fk_grid->addWidget(new QLabel(QStringLiteral("FK 关节输入 [deg]"), groupBox), 0, 0, 1, 10);
+    m_fk_grid->addWidget(new QLabel(QStringLiteral("FK 关节输入 [deg]"), page), 0, 0, 1, 10);
     layout->addLayout(m_fk_grid);
 
+    // IK 种子关节输入网格
     m_ik_seed_grid = new QGridLayout();
-    m_ik_seed_grid->addWidget(new QLabel(QStringLiteral("IK 种子关节 [deg]"), groupBox), 0, 0, 1, 10);
+    m_ik_seed_grid->addWidget(new QLabel(QStringLiteral("IK 种子关节 [deg]"), page), 0, 0, 1, 10);
     layout->addLayout(m_ik_seed_grid);
 
     AdjustJointInputCount(6);
 
+    // IK 目标位姿输入
     auto* ikTargetGrid = new QGridLayout();
-    ikTargetGrid->addWidget(new QLabel(QStringLiteral("IK 目标位姿"), groupBox), 0, 0, 1, 6);
+    ikTargetGrid->addWidget(new QLabel(QStringLiteral("IK 目标位姿"), page), 0, 0, 1, 6);
     const QStringList poseLabels {
         QStringLiteral("X [m]"),
         QStringLiteral("Y [m]"),
@@ -667,16 +694,26 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     {
         auto* spinBox = CreateDoubleSpinBox(-1000.0, 1000.0, index < 3 ? 4 : 3, 0.01);
         m_ik_target_pose_spins[static_cast<std::size_t>(index)] = spinBox;
-        ikTargetGrid->addWidget(new QLabel(poseLabels.at(index), groupBox), 1, index);
+        ikTargetGrid->addWidget(new QLabel(poseLabels.at(index), page), 1, index);
         ikTargetGrid->addWidget(spinBox, 2, index);
     }
     layout->addLayout(ikTargetGrid);
 
+    layout->addStretch();
+    return page;
+}
+
+QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
+{
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+
+    // ── 工作空间采样与奇异阈值 ──────────────────────────────
     auto* workspaceLayout = new QFormLayout();
-    m_workspace_sample_count_spin = new QSpinBox(groupBox);
+    m_workspace_sample_count_spin = new QSpinBox(page);
     m_workspace_sample_count_spin->setRange(1, 100000);
     workspaceLayout->addRow(QStringLiteral("采样点数"), m_workspace_sample_count_spin);
-    m_singularity_threshold_spin = new QDoubleSpinBox(groupBox);
+    m_singularity_threshold_spin = new QDoubleSpinBox(page);
     m_singularity_threshold_spin->setRange(1.0, 100000.0);
     m_singularity_threshold_spin->setDecimals(0);
     m_singularity_threshold_spin->setValue(1000.0);
@@ -685,17 +722,17 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     layout->addLayout(workspaceLayout);
 
     // 奇异区分析按钮
-    auto* singularityBtn = new QPushButton(QStringLiteral("奇异区分析"), groupBox);
+    auto* singularityBtn = new QPushButton(QStringLiteral("奇异区分析"), page);
     singularityBtn->setToolTip(QStringLiteral("对工作空间进行带 Jacobian 条件数分析的采样，识别奇异区域。"));
     connect(singularityBtn, &QPushButton::clicked, this, &KinematicsWidget::OnSingularityAnalysisClicked);
     layout->addWidget(singularityBtn);
-    m_singularity_result_label = new QLabel(QStringLiteral("尚未分析"), groupBox);
+    m_singularity_result_label = new QLabel(QStringLiteral("尚未分析"), page);
     m_singularity_result_label->setWordWrap(true);
     m_singularity_result_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(m_singularity_result_label);
 
     // ── 关键工位可达性检测 ─────────────────────────────────────
-    auto* reachGroup = new QGroupBox(QStringLiteral("关键工位可达性检测"), groupBox);
+    auto* reachGroup = new QGroupBox(QStringLiteral("关键工位可达性检测"), page);
     auto* reachLayout = new QVBoxLayout(reachGroup);
     auto* reachTargetGrid = new QGridLayout();
     reachTargetGrid->addWidget(new QLabel(QStringLiteral("目标位姿"), reachGroup), 0, 0, 1, 6);
@@ -732,7 +769,7 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     layout->addWidget(reachGroup);
 
     // ── 姿态可达性分析 ──────────────────────────────────────
-    auto* orientGroup = new QGroupBox(QStringLiteral("姿态可达性分析"), groupBox);
+    auto* orientGroup = new QGroupBox(QStringLiteral("姿态可达性分析"), page);
     auto* orientLayout = new QVBoxLayout(orientGroup);
     auto* orientPosGrid = new QGridLayout();
     orientPosGrid->addWidget(new QLabel(QStringLiteral("TCP 位置"), orientGroup), 0, 0, 1, 3);
@@ -770,7 +807,8 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
 
     layout->addWidget(orientGroup);
 
-    return groupBox;
+    layout->addStretch();
+    return page;
 }
 
 QGroupBox* KinematicsWidget::CreateResultGroup()

@@ -220,6 +220,12 @@ void RobotVtkView::UpdatePreviewPoses(
             m_tcp_axes_actor->SetUserTransform(tcpTransform);
             m_tcp_axes_actor->SetVisibility(true);
         }
+        // TCP 坐标轴更新在 RefreshScene(false) 的 Render() 之后，
+        // 必须额外触发一次渲染，否则新位置不会立即显示。
+        if (m_renderWindow != nullptr)
+        {
+            m_renderWindow->Render();
+        }
     }
 #else
     Q_UNUSED(linkWorldPoses);
@@ -555,6 +561,23 @@ void RobotVtkView::BuildVtkView()
     m_tcp_axes_actor->SetNormalizedShaftLength(0.8, 0.8, 0.8);
     m_tcp_axes_actor->SetNormalizedTipLength(0.2, 0.2, 0.2);
     m_tcp_axes_actor->SetVisibility(false);
+    // XYZ 标签样式：与角落极坐标一致，禁用自动缩放，小字号 + 亮色
+    {
+        auto tuneCaption = [](vtkCaptionActor2D* captionActor) {
+            if (captionActor == nullptr || captionActor->GetCaptionTextProperty() == nullptr)
+                return;
+            if (captionActor->GetTextActor())
+                captionActor->GetTextActor()->SetTextScaleModeToNone();
+            captionActor->BorderOff();
+            captionActor->LeaderOff();
+            captionActor->GetCaptionTextProperty()->SetFontSize(12);
+            captionActor->GetCaptionTextProperty()->SetBold(false);
+            captionActor->GetCaptionTextProperty()->SetColor(0.90, 0.92, 0.95);
+        };
+        tuneCaption(m_tcp_axes_actor->GetXAxisCaptionActor2D());
+        tuneCaption(m_tcp_axes_actor->GetYAxisCaptionActor2D());
+        tuneCaption(m_tcp_axes_actor->GetZAxisCaptionActor2D());
+    }
     m_renderer->AddActor(m_tcp_axes_actor);
 
     // 🔽🔽🔽 【新增水印初始化代码】 🔽🔽🔽
