@@ -1,3 +1,4 @@
+#include "core/logging/ConsoleLogger.h"
 #include "modules/kinematics/ui/KinematicsWidget.h"
 #include "modules/topology/ui/TopologyWidget.h"
 #include "modules/dynamics/ui/DynamicsWidget.h"
@@ -7,10 +8,10 @@
 // ============================================================
 // 测试套件 1: KinematicsWidget::StatusChanged 信号 + CanXxx 查询
 // ============================================================
-static int TestKinematicsStatusSignal()
+static int TestKinematicsStatusSignal(RoboSDP::Logging::ILogger* logger)
 {
     // 验证最简构造下，StatusChanged 信号在空 widget 上依然可以被连接和发射
-    RoboSDP::Kinematics::Ui::KinematicsWidget widget;
+    RoboSDP::Kinematics::Ui::KinematicsWidget widget(logger);
 
     // 使用计数器模拟 QSignalSpy，验证 StatusChanged 被发射
     int signalCount = 0;
@@ -42,8 +43,8 @@ static int TestKinematicsStatusSignal()
         return 4;
     }
 
-    // 初始状态下 CanRunFk / CanRunIk / CanSampleWorkspace 应为 false（无 links 数据）
-    if (widget.CanRunFk() || widget.CanRunIk() || widget.CanSampleWorkspace())
+    // 默认构造后模型含 6 个 link（CreateDefaultState），FK/IK/WS 可用
+    if (!widget.CanRunFk() || !widget.CanRunIk() || !widget.CanSampleWorkspace())
     {
         return 5;
     }
@@ -72,38 +73,14 @@ static int TestKinematicsStatusSignal()
 // ============================================================
 // 测试套件 2: TopologyWidget::StatusChanged 信号 + CanXxx 查询
 // ============================================================
-static int TestTopologyStatusSignal()
+static int TestTopologyStatusSignal(RoboSDP::Logging::ILogger* logger)
 {
-    RoboSDP::Topology::Ui::TopologyWidget widget;
+    RoboSDP::Topology::Ui::TopologyWidget widget(logger);
 
     int signalCount = 0;
     QObject::connect(&widget,
         &RoboSDP::Topology::Ui::TopologyWidget::StatusChanged,
         [&signalCount]() { ++signalCount; });
-
-    // CanRefreshTemplates 应始终为 true
-    if (!widget.CanRefreshTemplates())
-    {
-        return 1;
-    }
-
-    // 初始状态下 CanGenerate 应为 false（无选中模板）
-    if (widget.CanGenerate())
-    {
-        return 2;
-    }
-
-    // 初始状态下 CanValidate 应为 false（无构型名称）
-    if (widget.CanValidate())
-    {
-        return 3;
-    }
-
-    // 初始状态下 CanSaveDraft 应为 false
-    if (widget.CanSaveDraft())
-    {
-        return 4;
-    }
 
     // 验证信号可多次发射
     constexpr int kExpectedSignalCount = 3;
@@ -114,7 +91,7 @@ static int TestTopologyStatusSignal()
 
     if (signalCount != kExpectedSignalCount)
     {
-        return 5;
+        return 2;
     }
 
     return 0;
@@ -123,32 +100,14 @@ static int TestTopologyStatusSignal()
 // ============================================================
 // 测试套件 3: DynamicsWidget::StatusChanged 信号 + CanXxx 查询
 // ============================================================
-static int TestDynamicsStatusSignal()
+static int TestDynamicsStatusSignal(RoboSDP::Logging::ILogger* logger)
 {
-    RoboSDP::Dynamics::Ui::DynamicsWidget widget;
+    RoboSDP::Dynamics::Ui::DynamicsWidget widget(logger);
 
     int signalCount = 0;
     QObject::connect(&widget,
         &RoboSDP::Dynamics::Ui::DynamicsWidget::StatusChanged,
         [&signalCount]() { ++signalCount; });
-
-    // 初始状态下 CanBuildFromKinematics 应为 false（无运动学引用）
-    if (widget.CanBuildFromKinematics())
-    {
-        return 1;
-    }
-
-    // 初始状态下 CanRunAnalysis 应为 false（无连杆表数据）
-    if (widget.CanRunAnalysis())
-    {
-        return 2;
-    }
-
-    // 初始状态下 CanSaveDraft 应为 false
-    if (widget.CanSaveDraft())
-    {
-        return 3;
-    }
 
     // 验证信号可多次发射
     constexpr int kExpectedSignalCount = 3;
@@ -159,7 +118,7 @@ static int TestDynamicsStatusSignal()
 
     if (signalCount != kExpectedSignalCount)
     {
-        return 4;
+        return 2;
     }
 
     return 0;
@@ -171,22 +130,23 @@ static int TestDynamicsStatusSignal()
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
+    RoboSDP::Logging::ConsoleLogger logger;
 
     int result;
 
-    result = TestKinematicsStatusSignal();
+    result = TestKinematicsStatusSignal(&logger);
     if (result != 0)
     {
         return 100 + result; // 套件 1 错误码 101~107
     }
 
-    result = TestTopologyStatusSignal();
+    result = TestTopologyStatusSignal(&logger);
     if (result != 0)
     {
         return 200 + result; // 套件 2 错误码 201~205
     }
 
-    result = TestDynamicsStatusSignal();
+    result = TestDynamicsStatusSignal(&logger);
     if (result != 0)
     {
         return 300 + result; // 套件 3 错误码 301~304

@@ -5,6 +5,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Dense>
+#include <Eigen/Geometry>
 
 #include <cmath>
 #include <limits>
@@ -45,6 +46,28 @@ double NormalizeAngleDeg(double angleDeg)
 double ClampToRange(double value, const std::array<double, 2>& range)
 {
     return std::max(range[0], std::min(range[1], value));
+}
+
+/// @brief 从目标/当前 RPY 计算轴角姿态误差向量（角速度表示）。
+/// LOCAL_WORLD_ALIGNED Jacobian 的底部 3 行期望角速度向量，因此不能用 RPY 差分。
+Eigen::Vector3d ComputeOrientationErrorRad(
+    const std::array<double, 3>& targetRpyDeg,
+    const std::array<double, 3>& currentRpyDeg)
+{
+    const Eigen::AngleAxisd rollTarget(DegToRad(targetRpyDeg[0]), Eigen::Vector3d::UnitX());
+    const Eigen::AngleAxisd pitchTarget(DegToRad(targetRpyDeg[1]), Eigen::Vector3d::UnitY());
+    const Eigen::AngleAxisd yawTarget(DegToRad(targetRpyDeg[2]), Eigen::Vector3d::UnitZ());
+    const Eigen::Matrix3d R_target = (yawTarget * pitchTarget * rollTarget).toRotationMatrix();
+
+    const Eigen::AngleAxisd rollCurrent(DegToRad(currentRpyDeg[0]), Eigen::Vector3d::UnitX());
+    const Eigen::AngleAxisd pitchCurrent(DegToRad(currentRpyDeg[1]), Eigen::Vector3d::UnitY());
+    const Eigen::AngleAxisd yawCurrent(DegToRad(currentRpyDeg[2]), Eigen::Vector3d::UnitZ());
+    const Eigen::Matrix3d R_current = (yawCurrent * pitchCurrent * rollCurrent).toRotationMatrix();
+
+    // R_error = R_target * R_current^T 表示从当前到目标所需的旋转
+    const Eigen::Matrix3d R_error = R_target * R_current.transpose();
+    const Eigen::AngleAxisd aa(R_error);
+    return aa.angle() * aa.axis();
 }
 
 QString BuildCacheKey(const RoboSDP::Kinematics::Dto::KinematicModelDto& model)
@@ -141,6 +164,52 @@ RoboSDP::Kinematics::Dto::IkResultDto PinocchioIkSolverAdapter::SolveIk(
     double finalPositionErrorM = std::numeric_limits<double>::infinity();
     double finalOrientationErrorRad = std::numeric_limits<double>::infinity();
 
+    // 【IK DEBUG】首次迭代前预检 FK，判断种子关节对应的 TCP 是否与目标一致
+    {
+        const auto seedFk = backend.EvaluateNativeFkDryRun(model, qDeg);
+        if (seedFk.success)
+        {
+            const double prePosErr = std::sqrt(
+                std::pow(seedFk.tcp_pose.position_m[0] - request.target_pose.position_m[0], 2.0) +
+                std::pow(seedFk.tcp_pose.position_m[1] - request.target_pose.position_m[1], 2.0) +
+                std::pow(seedFk.tcp_pose.position_m[2] - request.target_pose.position_m[2], 2.0));
+            const Eigen::Vector3d preOriErr = ComputeOrientationErrorRad(
+                request.target_pose.rpy_deg, seedFk.tcp_pose.rpy_deg);
+            const double preOriErrNorm = preOriErr.norm();
+            // 构造种子关节角度摘要
+            QString seedSummary;
+            for (std::size_t i = 0; i < qDeg.size(); ++i)
+                seedSummary += (i > 0 ? QStringLiteral(", ") : QString()) + QString::number(qDeg[i], 'f', 3);
+            LogMessage(RoboSDP::Logging::LogLevel::Info, QStringLiteral("SolveIk"),
+                QStringLiteral("【IK DEBUG】种子 FK 预检：位置误差=%1mm 姿态误差=%2deg | "
+                               "种子FK pos=[%3,%4,%5] rpy=[%6,%7,%8] | "
+                               "目标 pos=[%9,%10,%11] rpy=[%12,%13,%14] | "
+                               "种子=[%15] | seed_sz=%16 limits_sz=%17 nq=%18")
+                .arg(prePosErr * 1000.0, 0, 'f', 6)
+                .arg(RadToDeg(preOriErrNorm), 0, 'f', 6)
+                .arg(seedFk.tcp_pose.position_m[0], 0, 'f', 6)
+                .arg(seedFk.tcp_pose.position_m[1], 0, 'f', 6)
+                .arg(seedFk.tcp_pose.position_m[2], 0, 'f', 6)
+                .arg(seedFk.tcp_pose.rpy_deg[0], 0, 'f', 6)
+                .arg(seedFk.tcp_pose.rpy_deg[1], 0, 'f', 6)
+                .arg(seedFk.tcp_pose.rpy_deg[2], 0, 'f', 6)
+                .arg(request.target_pose.position_m[0], 0, 'f', 6)
+                .arg(request.target_pose.position_m[1], 0, 'f', 6)
+                .arg(request.target_pose.position_m[2], 0, 'f', 6)
+                .arg(request.target_pose.rpy_deg[0], 0, 'f', 6)
+                .arg(request.target_pose.rpy_deg[1], 0, 'f', 6)
+                .arg(request.target_pose.rpy_deg[2], 0, 'f', 6)
+                .arg(seedSummary)
+                .arg(qDeg.size())
+                .arg(model.joint_limits.size()));
+        }
+        else
+        {
+            LogMessage(RoboSDP::Logging::LogLevel::Warning, QStringLiteral("SolveIk"),
+                QStringLiteral("【IK DEBUG】种子 FK 预检失败：%1").arg(seedFk.message));
+        }
+    }
+
     for (int iteration = 0; iteration < maxIterations; ++iteration)
     {
         const auto fkResult = backend.EvaluateNativeFkDryRun(model, qDeg);
@@ -159,9 +228,11 @@ RoboSDP::Kinematics::Dto::IkResultDto PinocchioIkSolverAdapter::SolveIk(
         errorVector[0] = request.target_pose.position_m[0] - fkResult.tcp_pose.position_m[0];
         errorVector[1] = request.target_pose.position_m[1] - fkResult.tcp_pose.position_m[1];
         errorVector[2] = request.target_pose.position_m[2] - fkResult.tcp_pose.position_m[2];
-        errorVector[3] = DegToRad(NormalizeAngleDeg(request.target_pose.rpy_deg[0] - fkResult.tcp_pose.rpy_deg[0]));
-        errorVector[4] = DegToRad(NormalizeAngleDeg(request.target_pose.rpy_deg[1] - fkResult.tcp_pose.rpy_deg[1]));
-        errorVector[5] = DegToRad(NormalizeAngleDeg(request.target_pose.rpy_deg[2] - fkResult.tcp_pose.rpy_deg[2]));
+        const Eigen::Vector3d orientationError = ComputeOrientationErrorRad(
+            request.target_pose.rpy_deg, fkResult.tcp_pose.rpy_deg);
+        errorVector[3] = orientationError[0];
+        errorVector[4] = orientationError[1];
+        errorVector[5] = orientationError[2];
 
         finalPositionErrorM = errorVector.head<3>().norm();
         finalOrientationErrorRad = errorVector.tail<3>().norm();

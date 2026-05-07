@@ -676,7 +676,99 @@ QGroupBox* KinematicsWidget::CreateSolverGroup()
     m_workspace_sample_count_spin = new QSpinBox(groupBox);
     m_workspace_sample_count_spin->setRange(1, 100000);
     workspaceLayout->addRow(QStringLiteral("采样点数"), m_workspace_sample_count_spin);
+    m_singularity_threshold_spin = new QDoubleSpinBox(groupBox);
+    m_singularity_threshold_spin->setRange(1.0, 100000.0);
+    m_singularity_threshold_spin->setDecimals(0);
+    m_singularity_threshold_spin->setValue(1000.0);
+    m_singularity_threshold_spin->setToolTip(QStringLiteral("条件数 κ 阈值：κ > 此值标记为奇异（越小越敏感）"));
+    workspaceLayout->addRow(QStringLiteral("奇异阈值 κ"), m_singularity_threshold_spin);
     layout->addLayout(workspaceLayout);
+
+    // 奇异区分析按钮
+    auto* singularityBtn = new QPushButton(QStringLiteral("奇异区分析"), groupBox);
+    singularityBtn->setToolTip(QStringLiteral("对工作空间进行带 Jacobian 条件数分析的采样，识别奇异区域。"));
+    connect(singularityBtn, &QPushButton::clicked, this, &KinematicsWidget::OnSingularityAnalysisClicked);
+    layout->addWidget(singularityBtn);
+    m_singularity_result_label = new QLabel(QStringLiteral("尚未分析"), groupBox);
+    m_singularity_result_label->setWordWrap(true);
+    m_singularity_result_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    layout->addWidget(m_singularity_result_label);
+
+    // ── 关键工位可达性检测 ─────────────────────────────────────
+    auto* reachGroup = new QGroupBox(QStringLiteral("关键工位可达性检测"), groupBox);
+    auto* reachLayout = new QVBoxLayout(reachGroup);
+    auto* reachTargetGrid = new QGridLayout();
+    reachTargetGrid->addWidget(new QLabel(QStringLiteral("目标位姿"), reachGroup), 0, 0, 1, 6);
+    const QStringList reachLabels {
+        QStringLiteral("X [m]"), QStringLiteral("Y [m]"), QStringLiteral("Z [m]"),
+        QStringLiteral("RX [deg]"), QStringLiteral("RY [deg]"), QStringLiteral("RZ [deg]")};
+    for (int idx = 0; idx < 6; ++idx)
+    {
+        auto* spin = CreateDoubleSpinBox(-1000.0, 1000.0, idx < 3 ? 4 : 3, 0.01);
+        m_reach_target_spins[idx] = spin;
+        reachTargetGrid->addWidget(new QLabel(reachLabels.at(idx), reachGroup), 1, idx);
+        reachTargetGrid->addWidget(spin, 2, idx);
+    }
+    reachLayout->addLayout(reachTargetGrid);
+
+    auto* reachBtnRow = new QHBoxLayout();
+    auto* reachCheckBtn = new QPushButton(QStringLiteral("检测可达性"), reachGroup);
+    connect(reachCheckBtn, &QPushButton::clicked, this, &KinematicsWidget::OnCheckReachabilityClicked);
+    reachBtnRow->addWidget(reachCheckBtn);
+    m_reach_result_label = new QLabel(QStringLiteral("尚未检测"), reachGroup);
+    m_reach_result_label->setWordWrap(true);
+    m_reach_result_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    reachBtnRow->addWidget(m_reach_result_label, 1);
+    reachLayout->addLayout(reachBtnRow);
+
+    // 种子数量设置
+    auto* reachSeedLayout = new QFormLayout();
+    m_reach_seed_count_spin = new QSpinBox(reachGroup);
+    m_reach_seed_count_spin->setRange(1, 100);
+    m_reach_seed_count_spin->setValue(20);
+    reachSeedLayout->addRow(QStringLiteral("种子数"), m_reach_seed_count_spin);
+    reachLayout->addLayout(reachSeedLayout);
+
+    layout->addWidget(reachGroup);
+
+    // ── 姿态可达性分析 ──────────────────────────────────────
+    auto* orientGroup = new QGroupBox(QStringLiteral("姿态可达性分析"), groupBox);
+    auto* orientLayout = new QVBoxLayout(orientGroup);
+    auto* orientPosGrid = new QGridLayout();
+    orientPosGrid->addWidget(new QLabel(QStringLiteral("TCP 位置"), orientGroup), 0, 0, 1, 3);
+    const QStringList posLabels {QStringLiteral("X [m]"), QStringLiteral("Y [m]"), QStringLiteral("Z [m]")};
+    for (int idx = 0; idx < 3; ++idx)
+    {
+        auto* spin = CreateDoubleSpinBox(-1000.0, 1000.0, 4, 0.01);
+        m_orient_pos_spins[idx] = spin;
+        orientPosGrid->addWidget(new QLabel(posLabels.at(idx), orientGroup), 1, idx);
+        orientPosGrid->addWidget(spin, 2, idx);
+    }
+    orientLayout->addLayout(orientPosGrid);
+
+    auto* orientParamLayout = new QFormLayout();
+    m_orient_steps_spin = new QSpinBox(orientGroup);
+    m_orient_steps_spin->setRange(3, 15);
+    m_orient_steps_spin->setValue(7);
+    orientParamLayout->addRow(QStringLiteral("每轴步数"), m_orient_steps_spin);
+    m_orient_range_spin = new QDoubleSpinBox(orientGroup);
+    m_orient_range_spin->setRange(10.0, 360.0);
+    m_orient_range_spin->setValue(180.0);
+    m_orient_range_spin->setSingleStep(10.0);
+    orientParamLayout->addRow(QStringLiteral("搜索范围 [deg]"), m_orient_range_spin);
+    orientLayout->addLayout(orientParamLayout);
+
+    auto* orientBtnRow = new QHBoxLayout();
+    auto* orientCheckBtn = new QPushButton(QStringLiteral("分析姿态可达性"), orientGroup);
+    connect(orientCheckBtn, &QPushButton::clicked, this, &KinematicsWidget::OnOrientationReachabilityClicked);
+    orientBtnRow->addWidget(orientCheckBtn);
+    m_orient_result_label = new QLabel(QStringLiteral("尚未分析"), orientGroup);
+    m_orient_result_label->setWordWrap(true);
+    m_orient_result_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    orientBtnRow->addWidget(m_orient_result_label, 1);
+    orientLayout->addLayout(orientBtnRow);
+
+    layout->addWidget(orientGroup);
 
     return groupBox;
 }
@@ -714,7 +806,20 @@ QGroupBox* KinematicsWidget::CreateResultGroup()
 
     scrollLayout->addWidget(createSection(QStringLiteral("模型概要"), m_result_model_label));
     scrollLayout->addWidget(createSection(QStringLiteral("诊断信息"), m_result_diag_label));
-    scrollLayout->addWidget(createSection(QStringLiteral("正运动学 FK"), m_result_fk_label));
+    // FK 结果区（含可操作度子标签）
+    {
+        auto* fkSection = new QGroupBox(QStringLiteral("正运动学 FK"), scrollContent);
+        auto* fkSectionLayout = new QVBoxLayout(fkSection);
+        m_result_fk_label = new QLabel(QStringLiteral("尚未执行"), fkSection);
+        m_result_fk_label->setWordWrap(true);
+        m_result_fk_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        fkSectionLayout->addWidget(m_result_fk_label);
+        m_result_fk_manipulability_label = new QLabel(QStringLiteral(""), fkSection);
+        m_result_fk_manipulability_label->setStyleSheet(QStringLiteral("font-size: 11px; color: #555;"));
+        m_result_fk_manipulability_label->setVisible(false);
+        fkSectionLayout->addWidget(m_result_fk_manipulability_label);
+        scrollLayout->addWidget(fkSection);
+    }
     scrollLayout->addWidget(createSection(QStringLiteral("逆运动学 IK"), m_result_ik_label));
     scrollLayout->addWidget(createSection(QStringLiteral("工作空间"), m_result_ws_label));
     scrollLayout->addStretch();
@@ -1070,6 +1175,31 @@ void KinematicsWidget::RenderResults()
         {
             m_result_fk_label->setText(lines.join(QLatin1Char('\n')));
         }
+
+        // 可操作度与条件数显示
+        if (m_result_fk_manipulability_label != nullptr)
+        {
+            if (m_last_jacobian_analysis.success)
+            {
+                const QString singularFlag = m_last_jacobian_analysis.is_singular
+                    ? QStringLiteral(" ⚠ 奇异")
+                    : QString();
+                m_result_fk_manipulability_label->setText(QStringLiteral(
+                    "可操作度 w = %1 | 条件数 κ = %2%3")
+                    .arg(m_last_jacobian_analysis.manipulability, 0, 'f', 6)
+                    .arg(m_last_jacobian_analysis.condition_number, 0, 'f', 2)
+                    .arg(singularFlag));
+                m_result_fk_manipulability_label->setStyleSheet(
+                    m_last_jacobian_analysis.is_singular
+                        ? QStringLiteral("font-size: 11px; color: #dc2626; font-weight: bold;")
+                        : QStringLiteral("font-size: 11px; color: #555;"));
+                m_result_fk_manipulability_label->setVisible(true);
+            }
+            else
+            {
+                m_result_fk_manipulability_label->setVisible(false);
+            }
+        }
     }
 
     // ── IK 结果 ────────────────────────────────────────────────
@@ -1215,6 +1345,7 @@ void KinematicsWidget::SyncPoseOnly()
 
     // 每次姿态刷新时同步检测关节越界状态并更新视觉提示
     UpdateJointLimitWarningStyle();
+    UpdateJointLimitMargins();
 
     auto angles = CollectJointInputs(m_fk_joint_spins);
 
@@ -1487,6 +1618,54 @@ void KinematicsWidget::UpdateJointLimitWarningStyle()
                 ? QStringLiteral("background-color: #fecaca; color: #991b1b;")
                 : QString());
         }
+    }
+}
+
+/// @brief 计算每个 FK 关节距离软限位的归一化裕量，更新裕量标签颜色。
+/// margin_i = min(q - soft_min, soft_max - q) / (soft_max - soft_min) * 100%
+/// 颜色规则：>=30% 绿色, 10~30% 黄色, <10% 红色
+void KinematicsWidget::UpdateJointLimitMargins()
+{
+    if (m_is_populating_form) return;
+
+    for (int i = 0; i < static_cast<int>(m_fk_margin_labels.size()); ++i)
+    {
+        if (i >= m_joint_limit_table->rowCount() || i >= static_cast<int>(m_fk_joint_spins.size()))
+        {
+            m_fk_margin_labels[i]->setText(QStringLiteral("—"));
+            m_fk_margin_labels[i]->setStyleSheet(QStringLiteral("font-size: 10px; color: #888;"));
+            continue;
+        }
+
+        const double softMin = ReadTableDouble(m_joint_limit_table, i, 1);
+        const double softMax = ReadTableDouble(m_joint_limit_table, i, 2);
+        const double range = softMax - softMin;
+        if (range <= 0.0)
+        {
+            m_fk_margin_labels[i]->setText(QStringLiteral("—"));
+            m_fk_margin_labels[i]->setStyleSheet(QStringLiteral("font-size: 10px; color: #888;"));
+            continue;
+        }
+
+        const double value = m_fk_joint_spins[i]->value();
+        const double distToMin = value - softMin;
+        const double distToMax = softMax - value;
+        const double margin = std::min(distToMin, distToMax);
+        const double marginPercent = (margin / range) * 100.0;
+        const double clamped = std::max(0.0, marginPercent);
+        const int displayPercent = static_cast<int>(clamped + 0.5);
+
+        QString color;
+        if (marginPercent >= 30.0)
+            color = QStringLiteral("#16a34a"); // 绿色
+        else if (marginPercent >= 10.0)
+            color = QStringLiteral("#ca8a04"); // 黄色
+        else
+            color = QStringLiteral("#dc2626"); // 红色
+
+        m_fk_margin_labels[i]->setText(QStringLiteral("%1%").arg(displayPercent));
+        m_fk_margin_labels[i]->setStyleSheet(
+            QStringLiteral("font-size: 10px; font-weight: bold; color: %1;").arg(color));
     }
 }
 
@@ -1878,11 +2057,47 @@ void KinematicsWidget::OnRunFkClicked()
     m_state.current_model = CollectModelFromForm();
     RefreshBackendDiagnostics();
 
+    // 【IK DEBUG】记录 FK 请求的模型缓存字段
+    {
+        QString angleSummary;
+        const auto angles = CollectJointInputs(m_fk_joint_spins);
+        for (std::size_t i = 0; i < angles.size(); ++i)
+            angleSummary += (i > 0 ? QStringLiteral(", ") : QString()) + QString::number(angles[i], 'f', 3);
+        emit LogMessageGenerated(QStringLiteral(
+            "[Kinematics][Debug] FK Request: model_ref=%1 joint_sig=%2 joint_count=%3 "
+            "angles=[%4]")
+            .arg(m_state.current_model.unified_robot_model_ref)
+            .arg(m_state.current_model.joint_order_signature)
+            .arg(m_state.current_model.joint_count)
+            .arg(angleSummary));
+    }
+
     RoboSDP::Kinematics::Dto::FkRequestDto request;
     request.joint_positions_deg = CollectJointInputs(m_fk_joint_spins);
     m_state.last_fk_result = m_service.SolveFk(m_state.current_model, request);
     MarkDirty();
     FillIkTargetFromFkResult();
+
+    // 【IK DEBUG】记录 FK 结果的 TCP 位姿，便于与 IK 目标对比
+    if (m_state.last_fk_result.success)
+    {
+        emit LogMessageGenerated(QStringLiteral(
+            "[Kinematics][Debug] FK Result TCP: pos=[%1,%2,%3] rpy=[%4,%5,%6]")
+            .arg(m_state.last_fk_result.tcp_pose.position_m[0], 0, 'f', 6)
+            .arg(m_state.last_fk_result.tcp_pose.position_m[1], 0, 'f', 6)
+            .arg(m_state.last_fk_result.tcp_pose.position_m[2], 0, 'f', 6)
+            .arg(m_state.last_fk_result.tcp_pose.rpy_deg[0], 0, 'f', 6)
+            .arg(m_state.last_fk_result.tcp_pose.rpy_deg[1], 0, 'f', 6)
+            .arg(m_state.last_fk_result.tcp_pose.rpy_deg[2], 0, 'f', 6));
+    }
+
+    // FK 成功后同步计算 Jacobian 分析（可操作度/条件数）
+    if (m_state.last_fk_result.success)
+    {
+        m_last_jacobian_analysis = m_service.ComputeJacobianAnalysis(
+            m_state.current_model, request.joint_positions_deg);
+    }
+
     RenderResults();
 
     const bool warning = !m_state.last_fk_result.success;
@@ -1901,6 +2116,28 @@ void KinematicsWidget::OnRunIkClicked()
 {
     m_state.current_model = CollectModelFromForm();
     RefreshBackendDiagnostics();
+
+    // 【IK DEBUG】记录当前模型的关键缓存字段和种子关节值
+    {
+        QString seedSummary;
+        const auto seedVals = CollectJointInputs(m_ik_seed_joint_spins);
+        for (std::size_t i = 0; i < seedVals.size(); ++i)
+            seedSummary += (i > 0 ? QStringLiteral(", ") : QString()) + QString::number(seedVals[i], 'f', 3);
+        emit LogMessageGenerated(QStringLiteral(
+            "[Kinematics][Debug] IK Request: model_ref=%1 joint_sig=%2 joint_count=%3 limits=%4 "
+            "seed=[%5] target_pos=[%6,%7,%8] rpy=[%9,%10,%11]")
+            .arg(m_state.current_model.unified_robot_model_ref)
+            .arg(m_state.current_model.joint_order_signature)
+            .arg(m_state.current_model.joint_count)
+            .arg(m_state.current_model.joint_limits.size())
+            .arg(seedSummary)
+            .arg(m_ik_target_pose_spins[0]->value(), 0, 'f', 6)
+            .arg(m_ik_target_pose_spins[1]->value(), 0, 'f', 6)
+            .arg(m_ik_target_pose_spins[2]->value(), 0, 'f', 6)
+            .arg(m_ik_target_pose_spins[3]->value(), 0, 'f', 6)
+            .arg(m_ik_target_pose_spins[4]->value(), 0, 'f', 6)
+            .arg(m_ik_target_pose_spins[5]->value(), 0, 'f', 6));
+    }
 
     RoboSDP::Kinematics::Dto::IkRequestDto request;
     request.seed_joint_positions_deg = CollectJointInputs(m_ik_seed_joint_spins);
@@ -1976,6 +2213,154 @@ void KinematicsWidget::OnSampleWorkspaceClicked()
     emit StatusChanged();
 }
 
+/// @brief 关键工位可达性检测：读取目标位姿，调用服务层多种子 IK 求解。
+void KinematicsWidget::OnCheckReachabilityClicked()
+{
+    m_state.current_model = CollectModelFromForm();
+
+    RoboSDP::Kinematics::Dto::CartesianPoseDto targetPose;
+    targetPose.position_m = {
+        m_reach_target_spins[0]->value(),
+        m_reach_target_spins[1]->value(),
+        m_reach_target_spins[2]->value()};
+    targetPose.rpy_deg = {
+        m_reach_target_spins[3]->value(),
+        m_reach_target_spins[4]->value(),
+        m_reach_target_spins[5]->value()};
+
+    const int seedCount = m_reach_seed_count_spin != nullptr
+        ? m_reach_seed_count_spin->value() : 20;
+
+    const auto result = m_service.CheckReachability(m_state.current_model, targetPose, seedCount);
+
+    if (result.reachable)
+    {
+        m_reach_result_label->setStyleSheet(QStringLiteral("color: #16a34a; font-weight: bold;"));
+        m_reach_result_label->setText(QStringLiteral(
+            "[可达] 收敛 %1/%2 种子 | 位置误差 %3 mm | 姿态误差 %4°")
+            .arg(result.converged_count)
+            .arg(result.total_seeds)
+            .arg(result.best_position_error_mm, 0, 'f', 3)
+            .arg(result.best_orientation_error_deg, 0, 'f', 3));
+    }
+    else
+    {
+        m_reach_result_label->setStyleSheet(QStringLiteral("color: #dc2626; font-weight: bold;"));
+        m_reach_result_label->setText(QStringLiteral(
+            "[不可达] %1 种子均未收敛 | 最小位置误差 %2 mm | 最小姿态误差 %3°")
+            .arg(result.total_seeds)
+            .arg(result.best_position_error_mm, 0, 'f', 3)
+            .arg(result.best_orientation_error_deg, 0, 'f', 3));
+    }
+
+    SetOperationMessage(result.message, result.reachable, !result.reachable);
+    emit LogMessageGenerated(QStringLiteral("[Kinematics] 可达性检测: %1").arg(result.message));
+}
+
+/// @brief 奇异区分析：带 Jacobian 条件数计算的 MC 工作空间采样。
+void KinematicsWidget::OnSingularityAnalysisClicked()
+{
+    m_state.current_model = CollectModelFromForm();
+    RefreshBackendDiagnostics();
+
+    RoboSDP::Kinematics::Dto::SingularityAnalysisRequestDto request;
+    request.sample_count = m_workspace_sample_count_spin != nullptr
+        ? m_workspace_sample_count_spin->value() : 2000;
+    request.condition_threshold = m_singularity_threshold_spin != nullptr
+        ? m_singularity_threshold_spin->value() : 1000.0;
+
+    const auto result = m_service.SampleWorkspaceWithSingularity(m_state.current_model, request);
+
+    if (result.success)
+    {
+        // 统计奇异点数量
+        int singularCount = 0;
+        double maxCondition = 0.0, sumManipulability = 0.0;
+        for (const auto& pt : result.sampled_points)
+        {
+            if (pt.condition_number > request.condition_threshold) ++singularCount;
+            maxCondition = std::max(maxCondition, pt.condition_number);
+            sumManipulability += pt.manipulability;
+        }
+        const double avgManip = result.sampled_points.empty() ? 0.0
+            : sumManipulability / result.sampled_points.size();
+
+        m_singularity_result_label->setStyleSheet(QStringLiteral("color: #333;"));
+        m_singularity_result_label->setText(QStringLiteral(
+            "采样 %1 点 | 奇异 %2 点 (%3%) | 最大条件数 %4 | 平均可操作度 %5")
+            .arg(result.reachable_sample_count)
+            .arg(singularCount)
+            .arg(100.0 * singularCount / std::max(1, result.reachable_sample_count), 0, 'f', 1)
+            .arg(maxCondition, 0, 'f', 1)
+            .arg(avgManip, 0, 'f', 6));
+
+        // 发射奇异点云（位置 + 奇异标记）
+        std::vector<std::array<double, 3>> tcpPositions;
+        std::vector<bool> isSingular;
+        tcpPositions.reserve(result.sampled_points.size());
+        isSingular.reserve(result.sampled_points.size());
+        for (const auto& pt : result.sampled_points)
+        {
+            tcpPositions.push_back(pt.tcp_pose.position_m);
+            isSingular.push_back(pt.condition_number > request.condition_threshold);
+        }
+        emit SingularityPointCloudGenerated(tcpPositions, isSingular);
+    }
+    else
+    {
+        m_singularity_result_label->setStyleSheet(QStringLiteral("color: #dc2626;"));
+        m_singularity_result_label->setText(QStringLiteral("分析失败：%1").arg(result.message));
+    }
+
+    SetOperationMessage(result.message, result.success, !result.success);
+    emit LogMessageGenerated(QStringLiteral("[Kinematics] 奇异区分析: %1").arg(result.message));
+    emit StatusChanged();
+}
+
+/// @brief 姿态可达性分析：固定 TCP 位置，网格采样 RPY 姿态，IK 求解判定可达性。
+void KinematicsWidget::OnOrientationReachabilityClicked()
+{
+    m_state.current_model = CollectModelFromForm();
+
+    std::array<double, 3> pos = {
+        m_orient_pos_spins[0]->value(),
+        m_orient_pos_spins[1]->value(),
+        m_orient_pos_spins[2]->value()};
+    const int steps = m_orient_steps_spin != nullptr ? m_orient_steps_spin->value() : 7;
+    const double range = m_orient_range_spin != nullptr ? m_orient_range_spin->value() : 180.0;
+
+    const auto result = m_service.CheckOrientationReachability(
+        m_state.current_model, pos, steps, range);
+
+    if (result.success)
+    {
+        const double pct = result.reachability_ratio * 100.0;
+        QString color;
+        if (pct >= 70.0) color = QStringLiteral("#16a34a");
+        else if (pct >= 30.0) color = QStringLiteral("#ca8a04");
+        else color = QStringLiteral("#dc2626");
+
+        m_orient_result_label->setStyleSheet(
+            QStringLiteral("color: %1; font-weight: bold;").arg(color));
+        m_orient_result_label->setText(QStringLiteral(
+            "可达率 %1% (%2/%3) | 范围 ±%4° × %5 步")
+            .arg(pct, 0, 'f', 1)
+            .arg(result.reachable_count)
+            .arg(result.total_samples)
+            .arg(range, 0, 'f', 0)
+            .arg(steps));
+    }
+    else
+    {
+        m_orient_result_label->setStyleSheet(QStringLiteral("color: #dc2626;"));
+        m_orient_result_label->setText(QStringLiteral("分析失败：%1").arg(result.message));
+    }
+
+    SetOperationMessage(result.message, result.success, !result.success);
+    emit LogMessageGenerated(QStringLiteral("[Kinematics] 姿态可达性: %1").arg(result.message));
+    emit StatusChanged();
+}
+
 void KinematicsWidget::OnSaveDraftClicked()
 {
     const auto saveResult = SaveCurrentDraft();
@@ -2028,18 +2413,25 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
             this, [this](double) {
                 MarkDirty();
                 UpdateJointLimitWarningStyle(); // 实时检测越界并高亮
+                UpdateJointLimitMargins();      // 实时更新裕量标签
                 SyncPoseOnly(); // 触发三维画面实时更新
             });
 
         auto* label = new QLabel(QStringLiteral("J%1").arg(index + 1), m_fk_grid->parentWidget());
-        
-        int rowOffset = (index / maxGridColumns) * 2;
+
+        int rowOffset = (index / maxGridColumns) * 3;
         int colOffset = index % maxGridColumns;
         m_fk_grid->addWidget(label, 1 + rowOffset, colOffset);
         m_fk_grid->addWidget(spinBox, 2 + rowOffset, colOffset);
 
+        auto* marginLabel = new QLabel(QStringLiteral("—"), m_fk_grid->parentWidget());
+        marginLabel->setAlignment(Qt::AlignCenter);
+        marginLabel->setStyleSheet(QStringLiteral("font-size: 10px; color: #888;"));
+        m_fk_grid->addWidget(marginLabel, 3 + rowOffset, colOffset);
+
         m_fk_joint_spins.push_back(spinBox);
         m_fk_joint_labels.push_back(label);
+        m_fk_margin_labels.push_back(marginLabel);
     }
 
     // 2. 动态补充 IK 种子滑块
@@ -2067,6 +2459,8 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
         const bool visible = (i < static_cast<std::size_t>(jointCount));
         m_fk_joint_spins[i]->setVisible(visible);
         m_fk_joint_labels[i]->setVisible(visible);
+        if (i < m_fk_margin_labels.size())
+            m_fk_margin_labels[i]->setVisible(visible);
         m_ik_seed_joint_spins[i]->setVisible(visible);
         m_ik_seed_joint_labels[i]->setVisible(visible);
 

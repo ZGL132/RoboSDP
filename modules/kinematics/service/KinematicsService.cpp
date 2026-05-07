@@ -35,6 +35,18 @@ namespace RoboSDP::Kinematics::Service
 namespace
 {
     constexpr double kPi = 3.14159265358979323846;
+
+    /// @brief 确定性伪随机比率（SplitMix 散列），用于多种子 IK 和采样中的可复现随机数生成。
+    double DeterministicRatio(int sampleIndex, int jointIndex)
+    {
+        unsigned int h = static_cast<unsigned int>(sampleIndex) * 1664525U
+                       + static_cast<unsigned int>(jointIndex) * 1013904223U
+                       + 2654435761U;
+        h = ((h >> 16) ^ h) * 0x45d9f3bU;
+        h = (h >> 16) ^ h;
+        return static_cast<double>(h) / 4294967296.0;
+    }
+
 // --- 新增：轻量级 4x4 齐次变换矩阵结构与 D-H 算法 ---
     // 保留在匿名空间，确保不污染外部，且能在无 Eigen 依赖下快速运行
     struct Matrix4x4 {
@@ -1737,6 +1749,208 @@ RoboSDP::Kinematics::Dto::WorkspaceResultDto KinematicsService::SampleWorkspace(
     }
 
     return m_backend_adapter->SampleWorkspace(model, request);
+}
+
+/**
+ * @brief 检查指定 TCP 位姿是否可达（多种子 IK 求解）
+ * @details 从多个随机种子启动 IK 求解，任意一个收敛即判定可达。
+ * 种子使用确定性伪随机生成，保证可复现。
+ */
+RoboSDP::Kinematics::Dto::ReachabilityCheckResultDto KinematicsService::CheckReachability(
+    const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+    const RoboSDP::Kinematics::Dto::CartesianPoseDto& targetPose,
+    int seedCount) const
+{
+    RoboSDP::Kinematics::Dto::ReachabilityCheckResultDto result;
+    result.target_pose = targetPose;
+    result.total_seeds = std::max(1, seedCount);
+
+    const auto validation = ValidateModel(model);
+    if (!validation.success)
+    {
+        result.message = validation.message;
+        return result;
+    }
+
+    // 使用所有关节的中间位置作为默认种子
+    std::vector<double> defaultSeed(model.joint_count, 0.0);
+    for (int i = 0; i < model.joint_count && i < static_cast<int>(model.joint_limits.size()); ++i)
+    {
+        defaultSeed[i] = (model.joint_limits[i].soft_limit[0] + model.joint_limits[i].soft_limit[1]) / 2.0;
+    }
+
+    result.position_errors_mm.reserve(seedCount);
+    result.orientation_errors_deg.reserve(seedCount);
+
+    for (int seedIndex = 0; seedIndex < result.total_seeds; ++seedIndex)
+    {
+        RoboSDP::Kinematics::Dto::IkRequestDto ikRequest;
+        ikRequest.target_pose = targetPose;
+        ikRequest.seed_joint_positions_deg = defaultSeed;
+
+        // 第一个种子用默认中间值，后续种子添加确定性伪随机偏移
+        if (seedIndex > 0)
+        {
+            for (int j = 0; j < model.joint_count && j < static_cast<int>(model.joint_limits.size()); ++j)
+            {
+                const double range = model.joint_limits[j].soft_limit[1] - model.joint_limits[j].soft_limit[0];
+                const double ratio = DeterministicRatio(seedIndex, j);
+                ikRequest.seed_joint_positions_deg[j] =
+                    model.joint_limits[j].soft_limit[0] + range * ratio;
+            }
+        }
+
+        const auto ikResult = m_ik_solver_adapter->SolveIk(model, ikRequest);
+        result.position_errors_mm.push_back(ikResult.position_error_mm);
+        result.orientation_errors_deg.push_back(ikResult.orientation_error_deg);
+
+        if (ikResult.success)
+        {
+            ++result.converged_count;
+            if (ikResult.position_error_mm < result.best_position_error_mm ||
+                (result.converged_count == 1))
+            {
+                result.best_position_error_mm = ikResult.position_error_mm;
+                result.best_orientation_error_deg = ikResult.orientation_error_deg;
+                result.best_joint_positions_deg = ikResult.joint_positions_deg;
+                result.best_seed_iterations = ikResult.iteration_count;
+            }
+        }
+    }
+
+    result.reachable = (result.converged_count > 0);
+    if (result.reachable)
+    {
+        result.message = QStringLiteral("可达：%1/%2 种子收敛，最小位置误差 %3 mm")
+            .arg(result.converged_count)
+            .arg(result.total_seeds)
+            .arg(result.best_position_error_mm, 0, 'f', 3);
+    }
+    else
+    {
+        result.message = QStringLiteral("不可达：%1 个种子均未收敛，最小位置误差 %2 mm")
+            .arg(result.total_seeds)
+            .arg(result.best_position_error_mm, 0, 'f', 3);
+    }
+
+    return result;
+}
+
+/**
+ * @brief 计算 Jacobian 分析结果（奇异值、条件数、可操作度）
+ * @details 委托给诊断适配器的 ComputeJacobianAnalysis 接口。
+ */
+RoboSDP::Kinematics::Dto::JacobianAnalysisDto KinematicsService::ComputeJacobianAnalysis(
+    const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+    const std::vector<double>& joint_positions_deg) const
+{
+    RoboSDP::Kinematics::Dto::JacobianAnalysisDto result;
+
+    const auto* diag = dynamic_cast<const RoboSDP::Kinematics::Adapter::IKinematicBackendDiagnosticsAdapter*>(
+        m_backend_adapter.get());
+    if (diag == nullptr)
+    {
+        result.message = QStringLiteral("当前后端不支持 Jacobian 分析。");
+        return result;
+    }
+
+    return diag->ComputeJacobianAnalysis(model, joint_positions_deg);
+}
+
+/**
+ * @brief 执行带奇异区识别的工作空间采样
+ */
+RoboSDP::Kinematics::Dto::WorkspaceResultDto KinematicsService::SampleWorkspaceWithSingularity(
+    const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+    const RoboSDP::Kinematics::Dto::SingularityAnalysisRequestDto& request) const
+{
+    const auto validation = ValidateModel(model);
+    if (!validation.success)
+    {
+        RoboSDP::Kinematics::Dto::WorkspaceResultDto result;
+        result.message = validation.message;
+        return result;
+    }
+
+    const auto* diag = dynamic_cast<const RoboSDP::Kinematics::Adapter::IKinematicBackendDiagnosticsAdapter*>(
+        m_backend_adapter.get());
+    if (diag == nullptr)
+    {
+        RoboSDP::Kinematics::Dto::WorkspaceResultDto result;
+        result.message = QStringLiteral("当前后端不支持奇异区分析。");
+        return result;
+    }
+
+    return diag->SampleWorkspaceWithSingularity(model, request);
+}
+
+/**
+ * @brief 执行姿态可达性分析：固定 TCP 位置，沿 RPY 轴网格采样，通过 IK 判断可达性。
+ */
+RoboSDP::Kinematics::Dto::OrientationReachabilityResultDto KinematicsService::CheckOrientationReachability(
+    const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+    const std::array<double, 3>& position_m,
+    int stepsPerAxis,
+    double rangeDeg) const
+{
+    RoboSDP::Kinematics::Dto::OrientationReachabilityResultDto result;
+    result.position_m = position_m;
+    result.steps_per_axis = stepsPerAxis;
+    result.range_deg = rangeDeg;
+
+    const auto validation = ValidateModel(model);
+    if (!validation.success)
+    {
+        result.message = validation.message;
+        return result;
+    }
+
+    const int steps = std::max(3, stepsPerAxis);
+    const int total = steps * steps * steps;
+    result.total_samples = total;
+
+    // 使用默认种子（关节中间值）
+    std::vector<double> defaultSeed(model.joint_count, 0.0);
+    for (int i = 0; i < model.joint_count && i < static_cast<int>(model.joint_limits.size()); ++i)
+        defaultSeed[i] = (model.joint_limits[i].soft_limit[0] + model.joint_limits[i].soft_limit[1]) / 2.0;
+
+    for (int ri = 0; ri < steps; ++ri)
+    {
+        for (int pi = 0; pi < steps; ++pi)
+        {
+            for (int yi = 0; yi < steps; ++yi)
+            {
+                // 均匀采样 RPY
+                const double roll = -rangeDeg + (2.0 * rangeDeg * ri) / (steps - 1);
+                const double pitch = -rangeDeg + (2.0 * rangeDeg * pi) / (steps - 1);
+                const double yaw = -rangeDeg + (2.0 * rangeDeg * yi) / (steps - 1);
+
+                RoboSDP::Kinematics::Dto::IkRequestDto ikReq;
+                ikReq.target_pose.position_m = position_m;
+                ikReq.target_pose.rpy_deg = {roll, pitch, yaw};
+                ikReq.seed_joint_positions_deg = defaultSeed;
+
+                const auto ikResult = m_ik_solver_adapter->SolveIk(model, ikReq);
+                if (ikResult.success && ikResult.position_error_mm < 5.0)
+                {
+                    ++result.reachable_count;
+                    result.reachable_rpy_deg.push_back({roll, pitch, yaw});
+                }
+                else
+                {
+                    result.unreachable_rpy_deg.push_back({roll, pitch, yaw});
+                }
+            }
+        }
+    }
+
+    result.reachability_ratio = static_cast<double>(result.reachable_count) / std::max(1, total);
+    result.success = true;
+    result.message = QStringLiteral("姿态可达性分析完成：位置 [%1, %2, %3]，可达率 %4%（%5/%6）")
+        .arg(position_m[0], 0, 'f', 3).arg(position_m[1], 0, 'f', 3).arg(position_m[2], 0, 'f', 3)
+        .arg(result.reachability_ratio * 100.0, 0, 'f', 1)
+        .arg(result.reachable_count).arg(total);
+    return result;
 }
 
 /**

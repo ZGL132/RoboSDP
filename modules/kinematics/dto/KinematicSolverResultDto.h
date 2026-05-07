@@ -67,6 +67,15 @@ struct WorkspacePointDto
 {
     std::vector<double> joint_positions_deg;
     CartesianPoseDto tcp_pose;
+    double condition_number = 0.0;  // Jacobian 条件数（用于奇异区识别，0 表示未计算）
+    double manipulability = 0.0;    // 可操作度（0 表示未计算）
+};
+
+/// @brief 工作空间奇异区分析请求 DTO。
+struct SingularityAnalysisRequestDto
+{
+    int sample_count = 2000;
+    double condition_threshold = 1000.0;  // 条件数阈值，超过则标记为奇异
 };
 
 /// @brief 工作空间基础采样结果 DTO，用于保存当前可达空间的最小统计摘要。
@@ -118,6 +127,58 @@ struct KinematicsWorkspaceStateDto
         dto.current_model = KinematicModelDto::CreateDefault();
         return dto;
     }
+};
+
+/// @brief Jacobian 分析结果 DTO（2.5.3 奇异区域识别 + 2.5.4 可操作度分析）
+/// 包含奇异值、条件数、Yoshikawa 可操作度等指标。
+struct JacobianAnalysisDto
+{
+    bool success = false;
+    QString message;
+    int rows = 6;
+    int cols = 0;
+    std::vector<double> singular_values;   // 从大到小排列
+    double condition_number = 0.0;          // σ_max / σ_min
+    double manipulability = 0.0;            // Yoshikawa w = sqrt(det(J*J^T))
+    double min_singular_value = 0.0;
+    double max_singular_value = 0.0;
+    bool is_singular = false;
+    std::vector<double> joint_positions_deg;
+};
+
+/// @brief 单点可达性检测结果 DTO（2.5.1 关键工位可达性检测）
+struct ReachabilityCheckResultDto
+{
+    bool reachable = false;
+    QString message;
+    CartesianPoseDto target_pose;
+    int total_seeds = 20;
+    int converged_count = 0;
+    double best_position_error_mm = 0.0;
+    double best_orientation_error_deg = 0.0;
+    std::vector<double> best_joint_positions_deg;
+    int best_seed_iterations = 0;
+    std::vector<double> position_errors_mm;  // 各种子的位置误差列表
+    std::vector<double> orientation_errors_deg; // 各种子的姿态误差列表
+};
+
+/// @brief 姿态可达性分析结果 DTO（2.5.2 姿态可达性分析）
+struct OrientationReachabilityResultDto
+{
+    bool success = false;
+    QString message;
+    std::array<double, 3> position_m {0.0, 0.0, 0.0};
+    int total_samples = 0;
+    int reachable_count = 0;
+    double reachability_ratio = 0.0;  // 0~1
+    /// @brief 各轴步进数（如 7 表示每轴分 7 步 → 343 个姿态）
+    int steps_per_axis = 7;
+    /// @brief 每个样本的 Euler RPY 范围 [deg]
+    double range_deg = 180.0;
+    /// @brief 可达姿态的 RPY 列表
+    std::vector<std::array<double, 3>> reachable_rpy_deg;
+    /// @brief 不可达姿态的 RPY 列表
+    std::vector<std::array<double, 3>> unreachable_rpy_deg;
 };
 
 } // namespace RoboSDP::Kinematics::Dto

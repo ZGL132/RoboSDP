@@ -89,6 +89,8 @@ robosdp_kinematics_autogen/timestamp: \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/IJsonRepository.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/LocalJsonRepository.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/CMakeLists.txt \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/ComputeSvdMetrics.cpp \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/ComputeSvdMetrics.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/IIkSolverAdapter.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/IKinematicBackendAdapter.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/IKinematicBackendDiagnosticsAdapter.h \
@@ -96,6 +98,8 @@ robosdp_kinematics_autogen/timestamp: \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/PinocchioIkSolverAdapter.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/PinocchioKinematicBackendAdapter.cpp \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/PinocchioKinematicBackendAdapter.h \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/PinocchioKinematicBackendAdapterInternal.h \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/PinocchioKinematicBackendAdapter_Analysis.cpp \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/dto/KinematicBackendBuildContextDto.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/dto/KinematicModelDto.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/dto/KinematicSolverResultDto.h \

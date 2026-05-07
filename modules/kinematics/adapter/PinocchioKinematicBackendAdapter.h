@@ -83,6 +83,16 @@ public:
         const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
         const std::vector<double>& joint_positions_deg) const override;
 
+    /// @brief 执行带奇异区识别的工作空间采样
+    RoboSDP::Kinematics::Dto::WorkspaceResultDto SampleWorkspaceWithSingularity(
+        const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+        const RoboSDP::Kinematics::Dto::SingularityAnalysisRequestDto& request) const override;
+
+    /// @brief 分析 Jacobian 矩阵：奇异值、条件数、可操作度
+    RoboSDP::Kinematics::Dto::JacobianAnalysisDto ComputeJacobianAnalysis(
+        const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+        const std::vector<double>& joint_positions_deg) const override;
+
     /// @brief 获取上一次体检（诊断）的最终结论状态
     RoboSDP::Kinematics::Dto::KinematicBackendBuildStatusDto GetLastBuildStatus() const override;
 

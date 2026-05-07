@@ -35,6 +35,8 @@
 #include <vtkTextProperty.h>
 #include <vtkTextActor.h>
 #include <vtkTransform.h>
+#include <vtkUnsignedCharArray.h>
+#include <vtkPointData.h>
 
 /// @brief 自定义 VTK 鼠标交互器，支持左键点击拾取 3D Actor、滚轮关节驱动、虚线框选等。
 class VtkClickInteractorStyle : public vtkInteractorStyleTrackballCamera
@@ -280,6 +282,69 @@ void RobotVtkView::ShowWorkspacePointCloud(
     }
 #else
     Q_UNUSED(tcpPositions);
+#endif
+}
+
+void RobotVtkView::ShowColoredWorkspacePointCloud(
+    const std::vector<std::array<double, 3>>& tcpPositions,
+    const std::vector<bool>& isSingular)
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr) return;
+
+    // 移除旧的点云 Actor
+    if (m_workspace_point_cloud_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_workspace_point_cloud_actor);
+    }
+
+    if (tcpPositions.empty() || tcpPositions.size() != isSingular.size())
+    {
+        m_workspace_point_cloud_actor = nullptr;
+        if (m_renderWindow != nullptr) m_renderWindow->Render();
+        return;
+    }
+
+    // 构建点云数据
+    vtkNew<vtkPoints> points;
+    points->SetNumberOfPoints(static_cast<vtkIdType>(tcpPositions.size()));
+    vtkNew<vtkUnsignedCharArray> colors;
+    colors->SetNumberOfComponents(3);
+    colors->SetName("Colors");
+
+    for (vtkIdType i = 0; i < static_cast<vtkIdType>(tcpPositions.size()); ++i)
+    {
+        points->SetPoint(i, tcpPositions[i][0], tcpPositions[i][1], tcpPositions[i][2]);
+        if (isSingular[static_cast<std::size_t>(i)])
+            colors->InsertNextTuple3(220, 38, 38);   // 红色 = 奇异
+        else
+            colors->InsertNextTuple3(51, 204, 51);    // 绿色 = 正常
+    }
+
+    vtkNew<vtkPolyData> polyData;
+    polyData->SetPoints(points);
+    polyData->GetPointData()->SetScalars(colors);
+
+    vtkNew<vtkVertexGlyphFilter> glyphFilter;
+    glyphFilter->SetInputData(polyData);
+    glyphFilter->Update();
+
+    vtkNew<vtkPolyDataMapper> mapper;
+    mapper->SetInputConnection(glyphFilter->GetOutputPort());
+    mapper->ScalarVisibilityOn();
+    mapper->SetScalarModeToUsePointData();
+
+    m_workspace_point_cloud_actor = vtkSmartPointer<vtkActor>::New();
+    m_workspace_point_cloud_actor->SetMapper(mapper);
+    m_workspace_point_cloud_actor->GetProperty()->SetPointSize(3);
+    m_workspace_point_cloud_actor->GetProperty()->SetOpacity(0.7);
+
+    m_renderer->AddActor(m_workspace_point_cloud_actor);
+    if (m_renderWindow != nullptr)
+        m_renderWindow->Render();
+#else
+    Q_UNUSED(tcpPositions);
+    Q_UNUSED(isSingular);
 #endif
 }
 

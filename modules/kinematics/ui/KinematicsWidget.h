@@ -124,6 +124,13 @@ signals:
     /// @param tcpPositions 所有可达采样点的 TCP 位置坐标列表，每个元素为 [x, y, z]。
     void WorkspacePointCloudGenerated(const std::vector<std::array<double, 3>>& tcpPositions);
 
+    /// @brief 奇异区分析点云（带奇异标记），绿色=正常，红色=奇异。
+    /// @param tcpPositions TCP 位置坐标列表
+    /// @param isSingular 每个点是否奇异
+    void SingularityPointCloudGenerated(
+        const std::vector<std::array<double, 3>>& tcpPositions,
+        const std::vector<bool>& isSingular);
+
     /// @brief Kinematics 页面内部状态变更信号，通知 MainWindow 重新查询按钮启用状态。
     void StatusChanged();
 
@@ -173,6 +180,9 @@ private:
     /// @brief 检查 FK 关节角度是否超出 soft_limit，越界时设置红色背景提示。
     void UpdateJointLimitWarningStyle();
 
+    /// @brief 计算每个 FK 关节距离软限位的归一化裕量，更新裕量标签颜色。
+    void UpdateJointLimitMargins();
+
     // =========================================================================
     // 核心生命周期分流 (单向数据流核心)
     // =========================================================================
@@ -189,6 +199,9 @@ private:
     void OnRunFkClicked();
     void OnRunIkClicked();
     void OnSampleWorkspaceClicked();
+    void OnCheckReachabilityClicked();
+    void OnSingularityAnalysisClicked();
+    void OnOrientationReachabilityClicked();
     void OnSaveDraftClicked();
     void OnLoadClicked();
 
@@ -199,6 +212,7 @@ private:
     RoboSDP::Kinematics::Persistence::KinematicJsonStorage m_kinematic_storage;
     RoboSDP::Kinematics::Service::KinematicsService m_service;
     RoboSDP::Kinematics::Dto::KinematicsWorkspaceStateDto m_state;
+    RoboSDP::Kinematics::Dto::JacobianAnalysisDto m_last_jacobian_analysis;
     PreviewSceneDto m_preview_scene;
     RoboSDP::Kinematics::Dto::KinematicModelDto m_preview_model;
     RoboSDP::Kinematics::Dto::KinematicBackendBuildContextResultDto m_backend_diagnostic;
@@ -240,6 +254,7 @@ private:
 
     std::vector<QDoubleSpinBox*> m_fk_joint_spins;
     std::vector<QLabel*> m_fk_joint_labels;
+    std::vector<QLabel*> m_fk_margin_labels;  // 关节限位裕量百分比标签
     QGridLayout* m_fk_grid = nullptr;
 
     /// @brief 滚轮灵敏度（度/滚轮格），默认 1.0°；联动控制 3D 视图滚轮步长与 FK 输入框 singleStep。
@@ -250,6 +265,20 @@ private:
     QGridLayout* m_ik_seed_grid = nullptr;
     std::array<QDoubleSpinBox*, 6> m_ik_target_pose_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     QSpinBox* m_workspace_sample_count_spin = nullptr;
+    QDoubleSpinBox* m_singularity_threshold_spin = nullptr;
+
+    QLabel* m_singularity_result_label = nullptr;
+
+    /// @brief 姿态可达性分析组件
+    std::array<QDoubleSpinBox*, 3> m_orient_pos_spins {nullptr, nullptr, nullptr};
+    QSpinBox* m_orient_steps_spin = nullptr;
+    QDoubleSpinBox* m_orient_range_spin = nullptr;
+    QLabel* m_orient_result_label = nullptr;
+
+    /// @brief 关键工位可达性检测组件
+    std::array<QDoubleSpinBox*, 6> m_reach_target_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    QSpinBox* m_reach_seed_count_spin = nullptr;
+    QLabel* m_reach_result_label = nullptr;
 
     QPlainTextEdit* m_result_summary_edit = nullptr;
 
@@ -257,6 +286,7 @@ private:
     QLabel* m_result_model_label = nullptr;      // 模型概要
     QLabel* m_result_diag_label = nullptr;       // 诊断信息
     QLabel* m_result_fk_label = nullptr;         // FK 结果
+    QLabel* m_result_fk_manipulability_label = nullptr; // 可操作度指标
     QLabel* m_result_ik_label = nullptr;         // IK 结果
     QLabel* m_result_ws_label = nullptr;         // 工作空间结果
 };

@@ -51,17 +51,17 @@ FkResultDto → map<link,pose> → emit PreviewPosesUpdated() → RobotVtkView.U
 | 2.3 | 结果摘要页签结构化展示 | ✅ 拆分为模型概要/诊断/FK/IK/工作空间 5 个分类 QGroupBox，保留底部文本详情（默认隐藏） | KinematicsWidget.h/.cpp |
 | 2.4 | IK 多解浏览 | ⏳ 依赖后续 Pinocchio 接口扩展，暂缓 | - |
 
-### P2.5：运动学分析能力增强（基于 Jacobian 与 IK 的深度分析）🆕
+### P2.5：运动学分析能力增强（基于 Jacobian 与 IK 的深度分析）✅
 
 基于现有的 Pinocchio Jacobian 干跑接口和 IK 求解器，扩展以下 5 项分析能力：
 
 | # | 项 | 说明 | 涉及文件 | 技术方案 |
 |---|-----|------|---------|---------|
-| 2.5.1 | **关键工位可达性检测** | 给定 TCP 目标位姿（位置+姿态），通过多种子 IK 求解判断是否可达，返回可达/不可达、误差、最佳种子等信息 | `KinematicSolverResultDto.h`(新 DTO) + `IKinematicBackendAdapter.h`(新接口) + `PinocchioKinematicBackendAdapter.cpp` + `KinematicsService.h/.cpp` + `KinematicsWidget.h/.cpp` | 对每个目标位姿，从 N 个随机种子（如 20 个）启动 IK 求解，任意一个收敛即判定可达；在结果摘要区新增"工位可达性" QGroupBox，含位姿输入框（位置 x/y/z + RPY）和"检测"按钮 |
-| 2.5.2 | **姿态可达性分析** | 固定 TCP 位置，采样不同姿态（RPY 组合），统计在该位置下可实现的姿态比例和包络范围 | `KinematicSolverResultDto.h`(新 DTO) + `IKinematicBackendAdapter.h`(新接口) + `PinocchioKinematicBackendAdapter.cpp` + `KinematicsService.h/.cpp` + `KinematicsWidget.h/.cpp` | 在指定位置周围按 Euler 角步长（如每轴 7 步 → 343 个姿态）采样，每个姿态运行 IK 检查可达性；结果以"姿态可达率 %"呈现，3D 视图可显示可达/不可达姿态朝向线 |
-| 2.5.3 | **奇异区域识别** | 在 workspace 采样或 FK 求解时同步计算 Jacobian 条件数，标记条件数过大的构型为奇异区 | `KinematicSolverResultDto.h`(新 DTO: SingularityInfoDto) + `IKinematicBackendAdapter.h`(新接口) + `PinocchioKinematicBackendAdapter.cpp` + `KinematicsService.h/.cpp` + `KinematicsWidget.h/.cpp` + `RobotVtkView.h/.cpp` | 复用 `computeJointJacobians` + SVD 分解求 max/min 奇异值 → 条件数 κ = σ_max/σ_min；在 workspace 采样循环中同步计算，将条件数 > 阈值(如 1000)的点标记为奇异；点云用红(奇异)→绿(正常)渐变色渲染 |
-| 2.5.4 | **可操作度分析** | Yoshikawa 可操作度 w = sqrt(det(J·J^T))，在 FK/采样时实时计算并展示趋势 | `KinematicSolverResultDto.h`(新 DTO: ManipulabilityResultDto) + `IKinematicBackendAdapter.h`(新接口) + `PinocchioKinematicBackendAdapter.cpp` + `KinematicsService.h/.cpp` + `KinematicsWidget.h/.cpp` + `RobotVtkView.h/.cpp` | 在 FK 求解后调用 `computeJointJacobians` 计算 J，执行 Eigen SVD(BDCSVD) 提取奇异值，计算 w = σ₁·σ₂·…·σₙ；结果摘要区显示当前 w 值 + 趋势指示(↑/↓/—)；可叠加到 workspace 点云颜色映射 |
-| 2.5.5 | **关节限位与裕量** | 对当前构型计算每个关节距离软限位的裕量（归一化百分比），并按裕量大小分级预警 | `KinematicSolverResultDto.h`(新 DTO: JointLimitMarginDto) + `KinematicsWidget.h/.cpp` | 纯 UI 层 + 已有数据计算，无需后端修改：margin_i = min(q_i - soft_min_i, soft_max_i - q_i) / (soft_max_i - soft_min_i) × 100%；在 FK 滑块区每个 spinbox 旁显示裕量进度条或百分比标签（≥30% 绿色、10~30% 黄色、<10% 红色） |
+| 2.5.1 | **关键工位可达性检测** | ✅ 给定 TCP 目标位姿，通过多种子 IK 求解判断是否可达，返回可达/不可达、误差、最佳种子等信息 | `KinematicSolverResultDto.h` + `KinematicsService.h/.cpp` + `KinematicsWidget.h/.cpp` | 对每个目标位姿，从 N 个随机种子启动 IK 求解，任意一个收敛即判定可达；在求解页签新增"关键工位可达性检测" QGroupBox，含位姿输入框和"检测可达性"按钮 |
+| 2.5.2 | **姿态可达性分析** | ✅ 固定 TCP 位置，沿 RPY 轴网格采样姿态，通过 IK 求解统计姿态可达率 | `KinematicSolverResultDto.h` + `KinematicsService.h/.cpp` + `KinematicsWidget.h/.cpp` | 在指定位置周围按 Euler 角网格采样（步数可配），每个姿态运行 IK 检查可达性；结果以"可达率 %"+ 颜色分级展示 |
+| 2.5.3 | **奇异区域识别** | ✅ 在 workspace 采样时同步计算 Jacobian 条件数，统计奇异点比例 | `KinematicSolverResultDto.h` + `IKinematicBackendDiagnosticsAdapter.h` + `PinocchioKinematicBackendAdapter.h/.cpp` + `KinematicsService.h/.cpp` + `KinematicsWidget.h/.cpp` | 在 MC 采样循环中计算 `computeJointJacobians` + `JacobiSVD` 求奇异值 → 条件数 κ = σ_max/σ_min；采样点附带 condition_number 和 manipulability 字段；UI 显示奇异点数量/比例/最大条件数/平均可操作度 |
+| 2.5.4 | **可操作度分析** | ✅ Yoshikawa 可操作度 w = sqrt(det(J·J^T))，FK 求解时实时计算并展示 | `KinematicSolverResultDto.h` + `IKinematicBackendDiagnosticsAdapter.h` + `PinocchioKinematicBackendAdapter.h/.cpp` + `KinematicsService.h/.cpp` + `KinematicsWidget.h/.cpp` | FK 求解后调用 `computeJointJacobians` + `JacobiSVD` 提取奇异值，计算 w = σ₁·σ₂·…·σₖ；FK 结果区新增可操作度/条件数子标签，奇异时红色高亮 |
+| 2.5.5 | **关节限位与裕量** | ✅ 每个 FK 关节显示归一化裕量百分比标签，绿/黄/红三级预警 | `KinematicsWidget.h/.cpp` | margin_i = min(q - soft_min, soft_max - q) / (soft_max - soft_min) × 100%；margin >= 30% 绿色、10~30% 黄色、<10% 红色；在 FK spinbox 下方新增裕量标签行，随滑块拖动实时更新 |
 
 #### 实现依赖关系
 

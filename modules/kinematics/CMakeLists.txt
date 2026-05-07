@@ -10,6 +10,10 @@ add_library(robosdp_kinematics STATIC
     adapter/IIkSolverAdapter.h
     adapter/PinocchioKinematicBackendAdapter.h
     adapter/PinocchioKinematicBackendAdapter.cpp
+    adapter/PinocchioKinematicBackendAdapterInternal.h
+    adapter/PinocchioKinematicBackendAdapter_Analysis.cpp
+    adapter/ComputeSvdMetrics.h
+    adapter/ComputeSvdMetrics.cpp
     adapter/PinocchioIkSolverAdapter.h
     adapter/PinocchioIkSolverAdapter.cpp
     persistence/KinematicJsonStorage.h
@@ -53,6 +57,8 @@ if(pinocchio_FOUND AND TARGET pinocchio::pinocchio)
         set_source_files_properties(
             ${PROJECT_SOURCE_DIR}/core/kinematics/SharedRobotKernelRegistry.cpp
             adapter/PinocchioKinematicBackendAdapter.cpp
+            adapter/PinocchioKinematicBackendAdapter_Analysis.cpp
+            adapter/ComputeSvdMetrics.cpp
             adapter/PinocchioIkSolverAdapter.cpp
             service/KinematicsService.cpp
             PROPERTIES
@@ -62,6 +68,8 @@ if(pinocchio_FOUND AND TARGET pinocchio::pinocchio)
         set_source_files_properties(
             ${PROJECT_SOURCE_DIR}/core/kinematics/SharedRobotKernelRegistry.cpp
             adapter/PinocchioKinematicBackendAdapter.cpp
+            adapter/PinocchioKinematicBackendAdapter_Analysis.cpp
+            adapter/ComputeSvdMetrics.cpp
             adapter/PinocchioIkSolverAdapter.cpp
             service/KinematicsService.cpp
             PROPERTIES

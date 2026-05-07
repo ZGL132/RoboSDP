@@ -67,9 +67,29 @@ public:
         const std::vector<double>& joint_positions_deg) const = 0;
 
     /**
-     * @brief 获取底层引擎最后一次尝试构建模型时的“遗言”或状态摘要
+     * @brief 执行带奇异区识别的工作空间采样
+     * @param model 运动学模型
+     * @param request 采样配置（包含采样数量和条件数阈值）
+     * @return 每个采样点附带条件数和可操作度的工作空间结果
+     */
+    virtual RoboSDP::Kinematics::Dto::WorkspaceResultDto SampleWorkspaceWithSingularity(
+        const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+        const RoboSDP::Kinematics::Dto::SingularityAnalysisRequestDto& request) const = 0;
+
+    /**
+     * @brief 执行 Jacobian 分析：计算奇异值、条件数、Yoshikawa 可操作度
+     * @param model 运动学模型
+     * @param joint_positions_deg 关节角度（度）
+     * @return Jacobian 分析结果
+     */
+    virtual RoboSDP::Kinematics::Dto::JacobianAnalysisDto ComputeJacobianAnalysis(
+        const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+        const std::vector<double>& joint_positions_deg) const = 0;
+
+    /**
+     * @brief 获取底层引擎最后一次尝试构建模型时的”遗言”或状态摘要
      * @return 最近一次操作的状态 DTO
-     * @details 如果系统崩溃或者初始化失败，这个接口能调出最近一次的“黑匣子”记录，方便后续排查。
+     * @details 如果系统崩溃或者初始化失败，这个接口能调出最近一次的”黑匣子”记录，方便后续排查。
      */
     virtual RoboSDP::Kinematics::Dto::KinematicBackendBuildStatusDto GetLastBuildStatus() const = 0;
 

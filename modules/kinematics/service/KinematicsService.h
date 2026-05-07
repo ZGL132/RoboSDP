@@ -241,6 +241,53 @@ namespace RoboSDP::Kinematics::Service
             const std::vector<double> &joint_positions_deg) const;
 
         /**
+         * @brief 检查指定 TCP 位姿是否可达（多种子 IK 求解）
+         * @details 从多个随机种子启动 IK 求解，任意一个收敛即判定可达。
+         * @param model 运动学模型
+         * @param targetPose 目标 TCP 位姿
+         * @param seedCount 随机种子数量（默认 20）
+         * @return 可达性检测结果
+         */
+        RoboSDP::Kinematics::Dto::ReachabilityCheckResultDto CheckReachability(
+            const RoboSDP::Kinematics::Dto::KinematicModelDto &model,
+            const RoboSDP::Kinematics::Dto::CartesianPoseDto &targetPose,
+            int seedCount = 20) const;
+
+        /**
+         * @brief 计算 Jacobian 分析结果（奇异值、条件数、可操作度）
+         * @param model 运动学模型
+         * @param joint_positions_deg 关节角度（度）
+         * @return Jacobian 分析 DTO
+         */
+        RoboSDP::Kinematics::Dto::JacobianAnalysisDto ComputeJacobianAnalysis(
+            const RoboSDP::Kinematics::Dto::KinematicModelDto &model,
+            const std::vector<double> &joint_positions_deg) const;
+
+        /**
+         * @brief 执行带奇异区识别的工作空间采样
+         * @param model 运动学模型
+         * @param request 采样配置
+         * @return 每个采样点附带条件数的工作空间结果
+         */
+        RoboSDP::Kinematics::Dto::WorkspaceResultDto SampleWorkspaceWithSingularity(
+            const RoboSDP::Kinematics::Dto::KinematicModelDto &model,
+            const RoboSDP::Kinematics::Dto::SingularityAnalysisRequestDto &request) const;
+
+        /**
+         * @brief 执行姿态可达性分析
+         * @param model 运动学模型
+         * @param position_m 固定 TCP 位置 [x, y, z]
+         * @param stepsPerAxis 每轴采样步数（总样本数 = steps^3）
+         * @param rangeDeg 姿态搜索范围 [-range, +range] 度
+         * @return 姿态可达性分析结果
+         */
+        RoboSDP::Kinematics::Dto::OrientationReachabilityResultDto CheckOrientationReachability(
+            const RoboSDP::Kinematics::Dto::KinematicModelDto &model,
+            const std::array<double, 3> &position_m,
+            int stepsPerAxis = 7,
+            double rangeDeg = 180.0) const;
+
+        /**
          * @brief 保存当前运动学草稿到本地 JSON
          * @param projectRootPath 项目根目录
          * @param state 需要保存的完整工作区状态

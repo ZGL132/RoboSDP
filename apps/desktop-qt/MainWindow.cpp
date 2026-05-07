@@ -410,6 +410,18 @@ void MainWindow::CreatePropertyDock()
 
     connect(
         m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::SingularityPointCloudGenerated,
+        this,
+        [this](const std::vector<std::array<double, 3>>& tcpPositions,
+               const std::vector<bool>& isSingular) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->ShowColoredWorkspacePointCloud(tcpPositions, isSingular);
+            }
+        });
+
+    connect(
+        m_kinematicsWidget,
         &RoboSDP::Kinematics::Ui::KinematicsWidget::PreviewSceneGenerated,
         this,
         [this](const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene) {

@@ -1,4 +1,5 @@
 ﻿#include "modules/kinematics/adapter/PinocchioKinematicBackendAdapter.h"
+#include "modules/kinematics/adapter/PinocchioKinematicBackendAdapterInternal.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -746,7 +747,7 @@ pinocchio::SE3 BuildUrdfJointPlacement(const MinimalUrdfJointInput& joint)
 
 #endif
 
-/// @brief 生成“占位符报错信息”，明确告诉外界当前还没写完实际的算法
+/// @brief 生成”占位符报错信息”，明确告诉外界当前还没写完实际的算法
 QString BuildStubMessage(const QString& actionName, const QString& statusMessage)
 {
     return QStringLiteral("Pinocchio 运动学后端尚未接管 %1 主路径：%2")
@@ -762,9 +763,12 @@ QString BuildStubMessage(const QString& actionName, const QString& statusMessage
  */
 double DeterministicRatio(int sampleIndex, int jointIndex)
 {
-    const int seed = (sampleIndex + 1) * (jointIndex * 17 + 13);
-    const int folded = (seed % 9973 + 9973) % 9973;
-    return static_cast<double>(folded) / 9972.0;
+    unsigned int h = static_cast<unsigned int>(sampleIndex) * 1664525U
+                   + static_cast<unsigned int>(jointIndex) * 1013904223U
+                   + 2654435761U;
+    h = ((h >> 16) ^ h) * 0x45d9f3bU;
+    h = (h >> 16) ^ h;
+    return static_cast<double>(h) / 4294967296.0;
 }
 
 /// @brief 计算三维位置点到世界原点的半径，用于维护 max_radius_m。
@@ -781,53 +785,6 @@ double Radius(const std::array<double, 3>& position)
 // =================================================================================
 // 成员方法实现
 // =================================================================================
-
-struct PinocchioKinematicBackendAdapter::NativeKernelState
-{
-#if defined(ROBOSDP_HAVE_PINOCCHIO)
-    /// @brief Pinocchio 原生机器人模型，只在 adapter 内部持有，禁止向外暴露。
-    std::shared_ptr<const NativePinocchioModel> model;
-
-    /// @brief 与 model 配套的 Pinocchio 运行时数据缓存，只在 adapter 内部持有。
-    std::unique_ptr<NativePinocchioData> data;
-
-    /// @brief base 语义 frame 的原生索引，仅在 adapter 内部使用。
-    pinocchio::FrameIndex base_frame_id = 0;
-
-    /// @brief flange 语义 frame 的原生索引，仅在 adapter 内部使用。
-    pinocchio::FrameIndex flange_frame_id = 0;
-
-    /// @brief tcp 语义 frame 的原生索引，仅在 adapter 内部使用。
-    pinocchio::FrameIndex tcp_frame_id = 0;
-
-    /// @brief 每个 Pinocchio q 分量需要叠加的零位偏移，单位为度。
-    std::vector<double> native_position_offsets_deg;
-
-    /// @brief 每个业务连杆在原生模型中的语义 frame 索引，用于把 FK 结果回填到 FkResultDto::link_poses。
-    std::vector<pinocchio::FrameIndex> link_frame_ids;
-#endif
-
-    /// @brief 最近一次成功构建的缓存键，用于避免相同结构反复实例化。
-    QString cache_key;
-
-    /// @brief 当前 adapter 生命周期内真实构建 Model/Data 的累计次数。
-    int build_count = 0;
-
-    /// @brief 最近一次原生模型关节数量。
-    int native_joint_count = 0;
-
-    /// @brief 最近一次原生模型 frame 数量。
-    int native_frame_count = 0;
-
-    /// @brief 最近一次构建是否已完成真实共享内核。
-    bool ready = false;
-
-    /// @brief 最近一次构建失败或未 ready 的中文原因。
-    QString last_message;
-
-    /// @brief 最近一次成功构建时携带的非阻断性预警，例如 mesh 暂不支持或多分支主干裁剪提示。
-    QString last_warning_message;
-};
 
 PinocchioKinematicBackendAdapter::PinocchioKinematicBackendAdapter(RoboSDP::Logging::ILogger* logger)
     : m_logger(logger)
@@ -1229,6 +1186,19 @@ RoboSDP::Kinematics::Dto::WorkspaceResultDto PinocchioKinematicBackendAdapter::S
 #endif
 }
 
+#if !defined(ROBOSDP_HAVE_PINOCCHIO)
+RoboSDP::Kinematics::Dto::WorkspaceResultDto PinocchioKinematicBackendAdapter::SampleWorkspaceWithSingularity(
+    const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+    const RoboSDP::Kinematics::Dto::SingularityAnalysisRequestDto& request) const
+{
+    RoboSDP::Kinematics::Dto::WorkspaceResultDto result;
+    result.requested_sample_count = std::max(1, request.sample_count);
+    result.success = false;
+    result.message = QStringLiteral("未启用 Pinocchio。");
+    return result;
+}
+#endif
+
 RoboSDP::Kinematics::Dto::KinematicBackendBuildContextResultDto
 PinocchioKinematicBackendAdapter::ValidateBuildContext(
     const RoboSDP::Kinematics::Dto::KinematicModelDto& model) const
@@ -1485,6 +1455,18 @@ PinocchioKinematicBackendAdapter::EvaluateNativeJacobianDryRun(
     }
 #endif
 }
+
+#if !defined(ROBOSDP_HAVE_PINOCCHIO)
+RoboSDP::Kinematics::Dto::JacobianAnalysisDto PinocchioKinematicBackendAdapter::ComputeJacobianAnalysis(
+    const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
+    const std::vector<double>& joint_positions_deg) const
+{
+    RoboSDP::Kinematics::Dto::JacobianAnalysisDto result;
+    result.joint_positions_deg = joint_positions_deg;
+    result.message = QStringLiteral("未启用 Pinocchio 依赖。");
+    return result;
+}
+#endif
 
 RoboSDP::Kinematics::Dto::KinematicBackendBuildStatusDto PinocchioKinematicBackendAdapter::GetLastBuildStatus() const
 {

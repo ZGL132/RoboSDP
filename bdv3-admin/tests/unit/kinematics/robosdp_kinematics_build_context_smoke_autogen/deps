@@ -1,0 +1,4 @@
+robosdp_kinematics_build_context_smoke_autogen/timestamp: \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/tests/unit/kinematics/CMakeLists.txt \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/tests/unit/kinematics/KinematicsBuildContextSmokeTest.cpp \
+	D:/software/CMake/bin/cmake.exe

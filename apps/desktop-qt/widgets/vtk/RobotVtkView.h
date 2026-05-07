@@ -110,6 +110,11 @@ public:
     /// @param tcpPositions 所有可达采样点的 TCP 位置坐标列表，每个元素为 [x, y, z]。
     void ShowWorkspacePointCloud(const std::vector<std::array<double, 3>>& tcpPositions);
 
+    /// @brief 在 3D 视图中显示带奇异分类的点云（绿=正常，红=奇异）。
+    void ShowColoredWorkspacePointCloud(
+        const std::vector<std::array<double, 3>>& tcpPositions,
+        const std::vector<bool>& isSingular);
+
     /// @brief 设置关节轴诊断层显示状态，供顶部视图页签统一控制。
     void SetJointAxesVisible(bool visible);
 
