@@ -18,6 +18,7 @@
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QFormLayout;
 class QGroupBox;
 class QLabel;
 class QLineEdit;
@@ -136,6 +137,7 @@ private:
     // ==================== 核心逻辑 ====================
     /// @brief 收集当前参数，调用底层数学接口生成 3D 骨架并发送信号，实现参数变动时画面实时刷新。
     void UpdateLivePreview();
+    void UpdateTemplateDrivenUiState();
 
 private:
     // 后端依赖与服务注入
@@ -156,6 +158,8 @@ private:
     // ==================== UI 控件指针 ====================
     QComboBox* m_template_combo = nullptr;
     QLabel* m_operation_label = nullptr;
+    QFormLayout* m_topology_form_layout = nullptr;
+    QLabel* m_installation_section_label = nullptr;
 
     QLineEdit* m_topology_name_edit = nullptr;
     QComboBox* m_base_mount_combo = nullptr;
@@ -169,6 +173,7 @@ private:
     // 运动学 DH 尺寸输入控件
     QDoubleSpinBox* m_shoulder_offset_spin = nullptr;
     QDoubleSpinBox* m_upper_arm_length_spin = nullptr;
+    QDoubleSpinBox* m_elbow_offset_spin = nullptr;
     QDoubleSpinBox* m_forearm_length_spin = nullptr;
     QDoubleSpinBox* m_wrist_offset_spin = nullptr;
     

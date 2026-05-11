@@ -226,6 +226,15 @@ TopologyValidationResult TopologyValidator::Validate(
             QStringLiteral("大臂长度必须大于 0。"));
     }
 
+    if (model.robot_definition.elbow_offset_m < 0.0)
+    {
+        AddIssue(
+            result,
+            QStringLiteral("robot_definition.elbow_offset_m"),
+            QStringLiteral("TOPOLOGY_ELBOW_OFFSET_NEGATIVE"),
+            QStringLiteral("肘部偏移不能为负数。"));
+    }
+
     if (model.robot_definition.forearm_length_m <= 0.0)
     {
         AddIssue(

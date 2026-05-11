@@ -42,6 +42,7 @@ struct RobotDefinitionDto
     double base_height_m = 0.35;         // d1: 基座高度
     double shoulder_offset_m = 0.10;     // a1: 肩部偏置
     double upper_arm_length_m = 0.40;    // a2: 大臂长度
+    double elbow_offset_m = 0.0;         // a3: 肘部偏移
     double forearm_length_m = 0.35;      // d4: 小臂延伸长度
     double wrist_offset_m = 0.10;        // d6: 腕部法兰偏置
 };

@@ -272,6 +272,7 @@ QJsonObject TopologyJsonStorage::ToModelObject(
     definitionObject.insert(QStringLiteral("base_height_m"), model.robot_definition.base_height_m);
     definitionObject.insert(QStringLiteral("shoulder_offset_m"), model.robot_definition.shoulder_offset_m);
     definitionObject.insert(QStringLiteral("upper_arm_length_m"), model.robot_definition.upper_arm_length_m);
+    definitionObject.insert(QStringLiteral("elbow_offset_m"), model.robot_definition.elbow_offset_m);
     definitionObject.insert(QStringLiteral("forearm_length_m"), model.robot_definition.forearm_length_m);
     definitionObject.insert(QStringLiteral("wrist_offset_m"), model.robot_definition.wrist_offset_m);
 
@@ -402,6 +403,8 @@ RoboSDP::Topology::Dto::RobotTopologyModelDto TopologyJsonStorage::FromModelObje
         ReadDouble(definitionObject, QStringLiteral("shoulder_offset_m"), model.robot_definition.shoulder_offset_m);
     model.robot_definition.upper_arm_length_m =
         ReadDouble(definitionObject, QStringLiteral("upper_arm_length_m"), model.robot_definition.upper_arm_length_m);
+    model.robot_definition.elbow_offset_m =
+        ReadDouble(definitionObject, QStringLiteral("elbow_offset_m"), model.robot_definition.elbow_offset_m);
     model.robot_definition.forearm_length_m =
         ReadDouble(definitionObject, QStringLiteral("forearm_length_m"), model.robot_definition.forearm_length_m);
     model.robot_definition.wrist_offset_m =

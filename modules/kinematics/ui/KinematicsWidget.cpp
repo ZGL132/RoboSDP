@@ -640,18 +640,19 @@ QGroupBox* KinematicsWidget::CreateJointLimitGroup()
 
 QGroupBox* KinematicsWidget::CreateSolverGroup()
 {
-    auto* groupBox = new QGroupBox(QStringLiteral("求解配置与输入"), this);
+    auto* groupBox = new QGroupBox(QStringLiteral("正逆解与验证"), this);
     auto* layout = new QVBoxLayout(groupBox);
 
-    auto* toolbox = new QToolBox(groupBox);
-    toolbox->addItem(CreateSolverConfigPage(), QStringLiteral("基础配置"));
-    toolbox->addItem(CreateInteractivePage(), QStringLiteral("交互示教"));
-    toolbox->addItem(CreateAdvancedAnalysisPage(), QStringLiteral("高级分析"));
-    toolbox->setCurrentIndex(1); // 默认展开交互示教
-    toolbox->setStyleSheet(QStringLiteral(
-        "QToolBox::tab { padding: 6px 12px; font-weight: bold; }"));
+    auto* interactivePage = CreateInteractivePage();
+    layout->addWidget(interactivePage);
 
-    layout->addWidget(toolbox);
+    auto* advBox = new QGroupBox(QStringLiteral("高级分析 (工作空间、奇异性等)"));
+    advBox->setCheckable(true);
+    advBox->setChecked(false);
+    auto* advLayout = new QVBoxLayout(advBox);
+    advLayout->addWidget(CreateAdvancedAnalysisPage());
+    layout->addWidget(advBox);
+
     return groupBox;
 }
 
@@ -717,6 +718,8 @@ QWidget* KinematicsWidget::CreateInteractivePage()
     AdjustJointInputCount(6);
 
     // IK 目标位姿输入
+    auto* targetAndConfigLayout = new QHBoxLayout();
+    
     auto* ikTargetGrid = new QGridLayout();
     ikTargetGrid->addWidget(new QLabel(QStringLiteral("IK 目标位姿"), page), 0, 0, 1, 6);
     const QStringList poseLabels {
@@ -733,7 +736,17 @@ QWidget* KinematicsWidget::CreateInteractivePage()
         ikTargetGrid->addWidget(new QLabel(poseLabels.at(index), page), 1, index);
         ikTargetGrid->addWidget(spinBox, 2, index);
     }
-    layout->addLayout(ikTargetGrid);
+    
+    targetAndConfigLayout->addLayout(ikTargetGrid, 2);
+
+    auto* solverConfigBox = new QGroupBox(QStringLiteral("⚙️ 求解器设置"));
+    solverConfigBox->setCheckable(true);
+    solverConfigBox->setChecked(false);
+    auto* scLayout = new QVBoxLayout(solverConfigBox);
+    scLayout->addWidget(CreateSolverConfigPage());
+    targetAndConfigLayout->addWidget(solverConfigBox, 1);
+
+    layout->addLayout(targetAndConfigLayout);
 
     // ── IK 多解浏览器 ─────────────────────────────────────────
     auto* solutionGroup = new QGroupBox(QStringLiteral("IK 多解浏览器"), page);

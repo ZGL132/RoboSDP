@@ -28,6 +28,7 @@
       ],
       "shoulder_offset_m": 0.15,
       "upper_arm_length_m": 0.50,
+      "elbow_offset_m": 0.0,
       "forearm_length_m": 0.40,
       "wrist_offset_m": 0.12,
       "j1_rotation_range_deg": [

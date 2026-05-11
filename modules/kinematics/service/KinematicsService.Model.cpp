@@ -56,6 +56,7 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
     const double d1 = topologyModel.robot_definition.base_height_m;
     const double a1 = topologyModel.robot_definition.shoulder_offset_m;
     const double a2 = topologyModel.robot_definition.upper_arm_length_m;
+    const double a3 = topologyModel.robot_definition.elbow_offset_m;
     const double d4 = topologyModel.robot_definition.forearm_length_m;
     const double d6 = topologyModel.robot_definition.wrist_offset_m;
 
@@ -69,7 +70,7 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
         model.links[1].alpha = 0.0; model.links[1].theta_offset = 0.0;
         model.links[1].link_id = QStringLiteral("link_2");
 
-        model.links[2].a = 0.0; model.links[2].d = 0.0;
+        model.links[2].a = a3; model.links[2].d = 0.0;
         model.links[2].alpha = 90.0; model.links[2].theta_offset = 90.0;
         model.links[2].link_id = QStringLiteral("link_3");
 

@@ -2893,6 +2893,7 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
     const double d1 = topologyModel.robot_definition.base_height_m;      // 基座高度
     const double a1 = topologyModel.robot_definition.shoulder_offset_m;  // 肩部偏置
     const double a2 = topologyModel.robot_definition.upper_arm_length_m; // 大臂长度
+    const double a3 = topologyModel.robot_definition.elbow_offset_m;     // 肘部偏移
     const double d4 = topologyModel.robot_definition.forearm_length_m;   // 小臂长度
     const double d6 = topologyModel.robot_definition.wrist_offset_m;     // 腕部偏置
 
@@ -2913,7 +2914,7 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
         model.links[1].theta_offset = 90.0;
 
         // Link 3 (肘关节)
-        model.links[2].a = 0.0;
+        model.links[2].a = a3;
         model.links[2].alpha = 90.0;
         model.links[2].d = 0.0;
         // 补偿 90 度，使模型在零位时小臂垂直（与 Topology 预览 L 型对齐）
@@ -2996,6 +2997,7 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     const double d1 = topologyModel.robot_definition.base_height_m;      // 基座高度
     const double a1 = topologyModel.robot_definition.shoulder_offset_m;  // 肩部偏置
     const double a2 = topologyModel.robot_definition.upper_arm_length_m; // 大臂长度
+    const double a3 = topologyModel.robot_definition.elbow_offset_m;     // 肘部偏移
     const double d4 = topologyModel.robot_definition.forearm_length_m;   // 小臂长度
     double d5 = 0.0;
     double d6 = topologyModel.robot_definition.wrist_offset_m;           // 腕部偏置
@@ -3015,8 +3017,8 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     struct DHTableRow { double a, alpha, d, theta; };
     std::array<DHTableRow, 6> dhTable = {{
         {a1,  90.0,  d1,  0.0},    // Link 1
-        {a2,  0.0,   0.0, 0.0},    // Link 2 (修改：底层模型中此处偏移为0)
-        {0.0, 90.0,  0.0, 90.0},   // Link 3 (修改：与底层统一，补偿 90 度偏移)
+        {a2,  0.0,   0.0, 0.0},    // Link 2
+        {a3,  90.0,  0.0, 90.0},   // Link 3
         {0.0, -90.0, d4,  0.0},    // Link 4
         {0.0, 90.0,  d5,  0.0},    // Link 5 (引入空心手腕 d5)
         {0.0, 0.0,   d6,  0.0}     // Link 6

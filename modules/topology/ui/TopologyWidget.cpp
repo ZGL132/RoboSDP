@@ -21,11 +21,16 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 namespace RoboSDP::Topology::Ui
 {
 
 namespace
 {
+
+constexpr auto kAllTemplatesToken = "__all__";
+constexpr auto kFloorGeneralTemplateId = "tpl_6r_floor_general";
 
 /**
  * @brief 将用户输入的逗号分隔的中空关节字符串（例如 "joint_1, joint_2"）整理并拆分为字符串数组。
@@ -122,6 +127,46 @@ QString BuildAxisRelationsText(const std::vector<RoboSDP::Topology::Dto::Topolog
     return lines.join(QLatin1Char('\n'));
 }
 
+bool IsFloorGeneralTemplate(const QString& templateId)
+{
+    return templateId.trimmed() == QString::fromLatin1(kFloorGeneralTemplateId);
+}
+
+void SetFormRowVisible(QFormLayout* layout, QWidget* fieldWidget, bool visible)
+{
+    if (layout == nullptr || fieldWidget == nullptr)
+    {
+        return;
+    }
+
+    if (QWidget* labelWidget = layout->labelForField(fieldWidget))
+    {
+        labelWidget->setVisible(visible);
+    }
+    fieldWidget->setVisible(visible);
+}
+
+void ApplyFloorGeneralTemplateDefaults(RoboSDP::Topology::Dto::RobotTopologyModelDto& model)
+{
+    const auto templateDefaults = RoboSDP::Topology::Dto::RobotTopologyModelDto::CreateDefault();
+
+    model.meta.template_id = QString::fromLatin1(kFloorGeneralTemplateId);
+    model.robot_definition.base_mount_type = QStringLiteral("floor");
+    model.robot_definition.base_orientation = {0.0, 0.0, 0.0};
+    model.robot_definition.j1_rotation_range_deg = templateDefaults.robot_definition.j1_rotation_range_deg;
+
+    const std::size_t jointCount = std::min(model.joints.size(), templateDefaults.joints.size());
+    for (std::size_t index = 0; index < jointCount; ++index)
+    {
+        const auto motionRange = model.joints[index].motion_range_deg;
+        model.joints[index] = templateDefaults.joints[index];
+        model.joints[index].motion_range_deg = motionRange;
+    }
+
+    model.axis_relations = templateDefaults.axis_relations;
+    model.topology_graph = templateDefaults.topology_graph;
+}
+
 } // namespace
 
 // ==================== 生命周期与初始化 ====================
@@ -140,6 +185,11 @@ TopologyWidget::TopologyWidget(RoboSDP::Logging::ILogger* logger, QWidget* paren
     PopulateForm(m_state.current_model);
     // 3. 加载可用模板下拉框
     RefreshTemplateOptions();
+    connect(
+        m_template_combo,
+        static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+        this,
+        [this](int) { UpdateTemplateDrivenUiState(); });
     // 4. 渲染生成的候选和推荐面板
     RenderCandidates();
     RenderRecommendation();
@@ -292,7 +342,7 @@ void TopologyWidget::RefreshTemplateOptions()
     // 刷新模板下拉框的内容
     const QString previousTemplateId = m_template_combo->currentData().toString();
     m_template_combo->clear();
-    m_template_combo->addItem(QStringLiteral("全部模板（推荐）"), QStringLiteral("__all__"));
+    m_template_combo->addItem(QStringLiteral("全部模板（推荐）"), QString::fromLatin1(kAllTemplatesToken));
 
     const auto templates = m_service.ListTemplates();
     for (const auto& templateSummary : templates)
@@ -309,12 +359,23 @@ void TopologyWidget::RefreshTemplateOptions()
     {
         m_template_combo->setCurrentIndex(previousIndex);
     }
+    else if (!m_state.current_model.meta.template_id.trimmed().isEmpty())
+    {
+        const int currentModelIndex = m_template_combo->findData(m_state.current_model.meta.template_id.trimmed());
+        if (currentModelIndex >= 0)
+        {
+            m_template_combo->setCurrentIndex(currentModelIndex);
+        }
+    }
+
+    UpdateTemplateDrivenUiState();
 }
 
 QGroupBox* TopologyWidget::CreateTopologyGroup()
 {
     auto* groupBox = new QGroupBox(QStringLiteral("构型骨架"), this);
     auto* layout = new QFormLayout(groupBox);
+    m_topology_form_layout = layout;
 
     m_topology_name_edit = new QLineEdit(groupBox);
     
@@ -322,6 +383,7 @@ QGroupBox* TopologyWidget::CreateTopologyGroup()
     m_base_height_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
     m_shoulder_offset_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
     m_upper_arm_length_spin = CreateDoubleSpinBox(0.001, 10.0, 4, 0.001);
+    m_elbow_offset_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
     m_forearm_length_spin = CreateDoubleSpinBox(0.001, 10.0, 4, 0.001);
     m_wrist_offset_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
 
@@ -354,12 +416,13 @@ QGroupBox* TopologyWidget::CreateTopologyGroup()
     layout->addRow(QStringLiteral("基座高度 (d1) [m]"), m_base_height_spin);
     layout->addRow(QStringLiteral("肩部偏置 (a1) [m]"), m_shoulder_offset_spin);
     layout->addRow(QStringLiteral("大臂长度 (a2) [m]"), m_upper_arm_length_spin);
+    layout->addRow(QStringLiteral("肘部偏移 (a3) [m]"), m_elbow_offset_spin);
     layout->addRow(QStringLiteral("小臂长度 (d4) [m]"), m_forearm_length_spin);
     layout->addRow(QStringLiteral("腕法兰偏置 (d6) [m]"), m_wrist_offset_spin);
 
-    auto* labelMech = new QLabel(QStringLiteral("--- 附加机械与安装配置 ---"), groupBox);
-    labelMech->setStyleSheet(QStringLiteral("color: #4b5563; font-weight: bold; margin-top: 10px;"));
-    layout->addRow(labelMech);
+    m_installation_section_label = new QLabel(QStringLiteral("--- 附加机械与安装配置 ---"), groupBox);
+    m_installation_section_label->setStyleSheet(QStringLiteral("color: #4b5563; font-weight: bold; margin-top: 10px;"));
+    layout->addRow(m_installation_section_label);
     layout->addRow(QStringLiteral("基座安装方式"), m_base_mount_combo);
     layout->addRow(QStringLiteral("基座 RX [deg]"), m_base_orientation_x_spin);
     layout->addRow(QStringLiteral("基座 RY [deg]"), m_base_orientation_y_spin);
@@ -383,6 +446,7 @@ QGroupBox* TopologyWidget::CreateTopologyGroup()
     RegisterFieldWidget(QStringLiteral("robot_definition.base_height_m"), m_base_height_spin);
     RegisterFieldWidget(QStringLiteral("robot_definition.shoulder_offset_m"), m_shoulder_offset_spin);
     RegisterFieldWidget(QStringLiteral("robot_definition.upper_arm_length_m"), m_upper_arm_length_spin);
+    RegisterFieldWidget(QStringLiteral("robot_definition.elbow_offset_m"), m_elbow_offset_spin);
     RegisterFieldWidget(QStringLiteral("robot_definition.forearm_length_m"), m_forearm_length_spin);
     RegisterFieldWidget(QStringLiteral("robot_definition.wrist_offset_m"), m_wrist_offset_spin);
     RegisterFieldWidget(QStringLiteral("robot_definition.base_mount_type"), m_base_mount_combo);
@@ -462,13 +526,20 @@ RoboSDP::Topology::Dto::RobotTopologyModelDto TopologyWidget::CollectModelFromFo
 {
     // 将界面上控件里的值抽取出来，赋给内存中的模型 DTO
     RoboSDP::Topology::Dto::RobotTopologyModelDto model = m_state.current_model;
+    const QString selectedTemplateId =
+        m_template_combo != nullptr ? m_template_combo->currentData().toString().trimmed() : QString();
 
     model.meta.name = m_topology_name_edit->text().trimmed();
+    if (!selectedTemplateId.isEmpty() && selectedTemplateId != QString::fromLatin1(kAllTemplatesToken))
+    {
+        model.meta.template_id = selectedTemplateId;
+    }
     
     model.robot_definition.base_mount_type = m_base_mount_combo->currentData().toString();
     model.robot_definition.base_height_m = m_base_height_spin->value();
     model.robot_definition.shoulder_offset_m = m_shoulder_offset_spin->value();
     model.robot_definition.upper_arm_length_m = m_upper_arm_length_spin->value();
+    model.robot_definition.elbow_offset_m = m_elbow_offset_spin->value();
     model.robot_definition.forearm_length_m = m_forearm_length_spin->value();
     model.robot_definition.wrist_offset_m = m_wrist_offset_spin->value();
 
@@ -486,6 +557,12 @@ RoboSDP::Topology::Dto::RobotTopologyModelDto TopologyWidget::CollectModelFromFo
     model.layout.seventh_axis_reserved = m_seventh_axis_reserved_check->isChecked();
     model.layout.hollow_joint_ids = ParseJointIdList(m_hollow_joint_ids_edit->text());
 
+    if (IsFloorGeneralTemplate(model.meta.template_id))
+    {
+        // 中文说明：通用落地式 6R 串联模板的角色、轴线关系和安装语义由模板唯一决定，表单不再重复暴露这些只读约束。
+        ApplyFloorGeneralTemplateDefaults(model);
+    }
+
     return model;
 }
 
@@ -500,6 +577,7 @@ void TopologyWidget::PopulateForm(const RoboSDP::Topology::Dto::RobotTopologyMod
     m_base_height_spin->setValue(model.robot_definition.base_height_m);
     m_shoulder_offset_spin->setValue(model.robot_definition.shoulder_offset_m);
     m_upper_arm_length_spin->setValue(model.robot_definition.upper_arm_length_m);
+    m_elbow_offset_spin->setValue(model.robot_definition.elbow_offset_m);
     m_forearm_length_spin->setValue(model.robot_definition.forearm_length_m);
     m_wrist_offset_spin->setValue(model.robot_definition.wrist_offset_m);
 
@@ -514,9 +592,41 @@ void TopologyWidget::PopulateForm(const RoboSDP::Topology::Dto::RobotTopologyMod
     m_reserved_channel_spin->setValue(model.layout.reserved_channel_diameter_mm);
     m_seventh_axis_reserved_check->setChecked(model.layout.seventh_axis_reserved);
     m_hollow_joint_ids_edit->setText(JoinJointIdList(model.layout.hollow_joint_ids));
+    UpdateTemplateDrivenUiState();
     
     // --- 新增：表单从数据层填充完毕后，立刻发送一次初始的三维预览请求 ---
     UpdateLivePreview();
+}
+
+void TopologyWidget::UpdateTemplateDrivenUiState()
+{
+    QString activeTemplateId = m_state.current_model.meta.template_id.trimmed();
+    if (m_template_combo != nullptr)
+    {
+        const QString selectedTemplateId = m_template_combo->currentData().toString().trimmed();
+        if (!selectedTemplateId.isEmpty() && selectedTemplateId != QString::fromLatin1(kAllTemplatesToken))
+        {
+            activeTemplateId = selectedTemplateId;
+        }
+    }
+
+    const bool isFloorGeneralTemplate = IsFloorGeneralTemplate(activeTemplateId);
+    if (m_topology_form_layout == nullptr)
+    {
+        return;
+    }
+
+    if (m_installation_section_label != nullptr)
+    {
+        m_installation_section_label->setVisible(!isFloorGeneralTemplate);
+    }
+
+    SetFormRowVisible(m_topology_form_layout, m_base_mount_combo, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_topology_form_layout, m_base_orientation_x_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_topology_form_layout, m_base_orientation_y_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_topology_form_layout, m_base_orientation_z_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_topology_form_layout, m_j1_range_min_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_topology_form_layout, m_j1_range_max_spin, !isFloorGeneralTemplate);
 }
 
 // ==================== UI 渲染与更新 ====================
