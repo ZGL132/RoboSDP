@@ -89,6 +89,8 @@ robosdp_kinematics_autogen/timestamp: \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/IJsonRepository.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/repository/LocalJsonRepository.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/CMakeLists.txt \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/AnalyticalIkSolverAdapter.cpp \
+	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/AnalyticalIkSolverAdapter.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/ComputeSvdMetrics.cpp \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/ComputeSvdMetrics.h \
 	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/modules/kinematics/adapter/IIkSolverAdapter.h \

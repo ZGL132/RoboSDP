@@ -2,6 +2,7 @@
 
 #include "core/kinematics/SharedRobotKernelRegistry.h"
 #include "modules/kinematics/adapter/PinocchioIkSolverAdapter.h"
+#include "modules/kinematics/adapter/AnalyticalIkSolverAdapter.h"
 #include "modules/kinematics/adapter/PinocchioKinematicBackendAdapter.h"
 #include "modules/topology/dto/TopologyRecommendationDto.h"
 
@@ -1725,8 +1726,30 @@ RoboSDP::Kinematics::Dto::IkResultDto KinematicsService::SolveIk(
         return result;
     }
 
-    // 交给独立的 IK Solver 适配器去解决（因为逆解算法往往不同于前向的普通框架）
-    return m_ik_solver_adapter->SolveIk(model, request);
+    // 根据求解器类型分发：解析 IK 走闭式求解链路，其余走默认 IK 适配器
+    if (model.ik_solver_config.solver_type == QStringLiteral("analytical_closed_form"))
+    {
+        if (!m_analytical_ik_solver_adapter)
+        {
+            m_analytical_ik_solver_adapter =
+                std::make_unique<RoboSDP::Kinematics::Adapter::AnalyticalIkSolverAdapter>(m_logger);
+        }
+
+        auto result = m_analytical_ik_solver_adapter->SolveIk(model, request);
+        result.solver_id = m_analytical_ik_solver_adapter->SolverId();
+
+        // Pieper 不满足时自动回退数值 IK
+        if (!result.success && result.total_solutions_found == 0)
+        {
+            result = m_ik_solver_adapter->SolveIk(model, request);
+        }
+        return result;
+    }
+
+    // 默认：数值 IK（Pinocchio 雅可比转置等）
+    auto result = m_ik_solver_adapter->SolveIk(model, request);
+    result.solver_id = m_ik_solver_adapter->SolverId();
+    return result;
 }
 
 /**

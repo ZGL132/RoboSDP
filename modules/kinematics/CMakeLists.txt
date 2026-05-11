@@ -16,6 +16,8 @@ add_library(robosdp_kinematics STATIC
     adapter/ComputeSvdMetrics.cpp
     adapter/PinocchioIkSolverAdapter.h
     adapter/PinocchioIkSolverAdapter.cpp
+    adapter/AnalyticalIkSolverAdapter.h
+    adapter/AnalyticalIkSolverAdapter.cpp
     persistence/KinematicJsonStorage.h
     persistence/KinematicJsonStorage.cpp
     service/KinematicsService.h
@@ -60,6 +62,7 @@ if(pinocchio_FOUND AND TARGET pinocchio::pinocchio)
             adapter/PinocchioKinematicBackendAdapter_Analysis.cpp
             adapter/ComputeSvdMetrics.cpp
             adapter/PinocchioIkSolverAdapter.cpp
+            adapter/AnalyticalIkSolverAdapter.cpp
             service/KinematicsService.cpp
             PROPERTIES
             COMPILE_DEFINITIONS "ROBOSDP_HAVE_PINOCCHIO=1;WIN32=1;__FUNCSIG__=__PRETTY_FUNCTION__;COAL_DISABLE_HPP_FCL_WARNINGS=1"
@@ -71,6 +74,7 @@ if(pinocchio_FOUND AND TARGET pinocchio::pinocchio)
             adapter/PinocchioKinematicBackendAdapter_Analysis.cpp
             adapter/ComputeSvdMetrics.cpp
             adapter/PinocchioIkSolverAdapter.cpp
+            adapter/AnalyticalIkSolverAdapter.cpp
             service/KinematicsService.cpp
             PROPERTIES
             COMPILE_DEFINITIONS "ROBOSDP_HAVE_PINOCCHIO=1;COAL_DISABLE_HPP_FCL_WARNINGS=1")

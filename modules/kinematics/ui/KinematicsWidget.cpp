@@ -19,6 +19,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSlider>
 #include <QStringList>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -27,6 +28,7 @@
 #include <QToolBox>
 #include <QVBoxLayout>
 #include <QDateTime>
+#include <cmath>
 
 namespace RoboSDP::Kinematics::Ui
 {
@@ -628,6 +630,7 @@ QWidget* KinematicsWidget::CreateSolverConfigPage()
     auto* solverLayout = new QFormLayout();
     m_solver_type_combo = new QComboBox(page);
     m_solver_type_combo->addItem(QStringLiteral("数值雅可比转置"), QStringLiteral("numeric_jacobian_transpose"));
+    m_solver_type_combo->addItem(QStringLiteral("闭式解析求解器"), QStringLiteral("analytical_closed_form"));
     m_branch_policy_combo = new QComboBox(page);
     m_branch_policy_combo->addItem(QStringLiteral("最近种子解"), QStringLiteral("nearest_seed"));
     m_max_iterations_spin = new QSpinBox(page);
@@ -698,6 +701,61 @@ QWidget* KinematicsWidget::CreateInteractivePage()
         ikTargetGrid->addWidget(spinBox, 2, index);
     }
     layout->addLayout(ikTargetGrid);
+
+    // ── IK 多解浏览器 ─────────────────────────────────────────
+    auto* solutionGroup = new QGroupBox(QStringLiteral("IK 多解浏览器"), page);
+    auto* solutionLayout = new QVBoxLayout(solutionGroup);
+    m_ik_solution_combo = new QComboBox(solutionGroup);
+    m_ik_solution_combo->setEnabled(false);
+    m_ik_solution_combo->setToolTip(QStringLiteral("选择闭式解析 IK 的不同空间构型解"));
+    auto* comboRow = new QHBoxLayout();
+    comboRow->addWidget(m_ik_solution_combo, 1);
+    auto* applySolutionBtn = new QPushButton(QStringLiteral("应用至 FK"), solutionGroup);
+    applySolutionBtn->setToolTip(QStringLiteral("将当前选中解的角度填入 FK 滑块"));
+    applySolutionBtn->setEnabled(false);
+    connect(applySolutionBtn, &QPushButton::clicked, this, [this]() {
+        if (m_ik_solution_combo->currentIndex() < 0) return;
+        const auto& allSol = m_state.last_ik_result.all_solutions_deg;
+        const int idx = m_ik_solution_combo->currentIndex();
+        if (idx < static_cast<int>(allSol.size()))
+        {
+            for (std::size_t i = 0; i < m_fk_joint_spins.size() && i < allSol[idx].size(); ++i)
+                m_fk_joint_spins[i]->setValue(allSol[idx][i]);
+        }
+    });
+    // combo 启用时也启用按钮
+    connect(m_ik_solution_combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, [applySolutionBtn](int) { applySolutionBtn->setEnabled(true); });
+    comboRow->addWidget(applySolutionBtn);
+    solutionLayout->addLayout(comboRow);
+
+    auto* solutionGrid = new QGridLayout();
+    // 预创建 6 个只读关节角 spinbox
+    for (int i = 0; i < 6; ++i)
+    {
+        auto* spin = CreateDoubleSpinBox(-9999.0, 9999.0, 3, 1.0);
+        spin->setReadOnly(true);
+        spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+        spin->setStyleSheet(QStringLiteral("background: #f0f0f0; color: #333;"));
+        m_ik_solution_spins.push_back(spin);
+        solutionGrid->addWidget(new QLabel(QStringLiteral("J%1").arg(i + 1), solutionGroup), 0, i);
+        solutionGrid->addWidget(spin, 1, i);
+    }
+    solutionLayout->addLayout(solutionGrid);
+
+    // 切换解索引 → 更新 spinbox 显示
+    connect(m_ik_solution_combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, [this](int index) {
+            if (index < 0) return;
+            const auto& allSol = m_state.last_ik_result.all_solutions_deg;
+            if (index < static_cast<int>(allSol.size()))
+            {
+                for (std::size_t j = 0; j < m_ik_solution_spins.size() && j < allSol[index].size(); ++j)
+                    m_ik_solution_spins[j]->setValue(allSol[index][j]);
+            }
+        });
+
+    layout->addWidget(solutionGroup);
 
     layout->addStretch();
     return page;
@@ -1246,12 +1304,20 @@ void KinematicsWidget::RenderResults()
         if (m_state.last_ik_result.success)
         {
             lines.push_back(QStringLiteral("状态：成功"));
+            lines.push_back(QStringLiteral("求解器：%1").arg(m_state.last_ik_result.solver_id.isEmpty()
+                ? QStringLiteral("默认") : m_state.last_ik_result.solver_id));
             lines.push_back(QStringLiteral("解 = %1").arg(FormatJointVector(m_state.last_ik_result.joint_positions_deg)));
             lines.push_back(
                 QStringLiteral("位置误差 = %1 mm，姿态误差 = %2 deg，迭代次数 = %3")
                     .arg(m_state.last_ik_result.position_error_mm, 0, 'f', 3)
                     .arg(m_state.last_ik_result.orientation_error_deg, 0, 'f', 3)
                     .arg(m_state.last_ik_result.iteration_count));
+            if (m_state.last_ik_result.total_solutions_found > 1)
+            {
+                lines.push_back(QStringLiteral("过滤前总解数 = %1，有效解数 = %2")
+                    .arg(m_state.last_ik_result.total_solutions_found)
+                    .arg(m_state.last_ik_result.valid_solution_count));
+            }
         }
         else
         {
@@ -1262,6 +1328,36 @@ void KinematicsWidget::RenderResults()
         if (m_result_ik_label != nullptr)
         {
             m_result_ik_label->setText(lines.join(QLatin1Char('\n')));
+        }
+
+        // ── 更新多解浏览器 ────────────────────────────────────
+        if (m_ik_solution_combo != nullptr)
+        {
+            const auto& allSol = m_state.last_ik_result.all_solutions_deg;
+            const bool hasMultiple = (allSol.size() > 1);
+            m_ik_solution_combo->setEnabled(hasMultiple);
+            m_ik_solution_combo->blockSignals(true);
+            m_ik_solution_combo->clear();
+
+            if (!allSol.empty())
+            {
+                for (std::size_t i = 0; i < allSol.size(); ++i)
+                {
+                    m_ik_solution_combo->addItem(
+                        QStringLiteral("解 %1/%2").arg(i + 1).arg(allSol.size()),
+                        static_cast<qulonglong>(i));
+                }
+                // 自动选中最佳解（索引 0）
+                m_ik_solution_combo->setCurrentIndex(0);
+                for (std::size_t j = 0; j < m_ik_solution_spins.size() && j < allSol[0].size(); ++j)
+                    m_ik_solution_spins[j]->setValue(allSol[0][j]);
+            }
+            else
+            {
+                for (auto* sp : m_ik_solution_spins)
+                    sp->setValue(0.0);
+            }
+            m_ik_solution_combo->blockSignals(false);
         }
     }
 
@@ -1629,6 +1725,13 @@ void KinematicsWidget::UpdateFkJointLimitLabels()
                 .arg(label)
                 .arg(softMin, 0, 'f', 1)
                 .arg(softMax, 0, 'f', 1));
+
+            // Sync slider limits to joint limits
+            if (i < static_cast<int>(m_fk_joint_sliders.size())) {
+                m_fk_joint_sliders[i]->blockSignals(true);
+                m_fk_joint_sliders[i]->setRange(static_cast<int>(std::floor(softMin)), static_cast<int>(std::ceil(softMax)));
+                m_fk_joint_sliders[i]->blockSignals(false);
+            }
         }
         else
         {
@@ -2206,7 +2309,9 @@ void KinematicsWidget::OnRunIkClicked()
     const bool warning = !m_state.last_ik_result.success;
     SetOperationMessage(m_state.last_ik_result.message, m_state.last_ik_result.success, warning);
     EmitTelemetryStatus(
-        QStringLiteral("Pinocchio 数值 IK"),
+        m_state.last_ik_result.solver_id.isEmpty()
+            ? QStringLiteral("IK 求解器")
+            : m_state.last_ik_result.solver_id,
         m_state.last_ik_result.message,
         warning);
     emit LogMessageGenerated(QStringLiteral("%1 %2").arg(
@@ -2438,36 +2543,56 @@ void KinematicsWidget::OnLoadClicked()
 
 void KinematicsWidget::AdjustJointInputCount(int jointCount)
 {
-    const int maxGridColumns = 8; // 超过 8 个轴自动换行，保持界面美观
+    const int maxGridColumns = 8; //  8 ԶУֽ
 
-    // 1. 动态补充 FK 滑块（如果模型轴数大于当前滑块数，自动创建）
+    // 1. ̬ FK 飨ģڵǰԶ
     while (m_fk_joint_spins.size() < static_cast<std::size_t>(jointCount))
     {
         int index = static_cast<int>(m_fk_joint_spins.size());
         auto* spinBox = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
         
-        // 【核心】：新创建的滑块也必须绑定姿态刷新通道！
+        auto* slider = new QSlider(Qt::Horizontal, m_fk_grid->parentWidget());
+        slider->setRange(-360, 360);
+        slider->setValue(0);
+        slider->setPageStep(10);
+        slider->setToolTip(QStringLiteral("϶鿴ؽ˶̬"));
+
+        //˫
+        connect(slider, &QSlider::valueChanged, spinBox, [spinBox](int value) {
+            if (std::abs(spinBox->value() - static_cast<double>(value)) > 0.01) {
+                spinBox->setValue(static_cast<double>(value));
+            }
+        });
+        
+        // ġ´ĻҲ̬ˢͨ
         connect(spinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
-            this, [this](double) {
+            this, [this, slider](double val) {
+                if (slider->value() != static_cast<int>(std::round(val))) {
+                    slider->blockSignals(true);
+                    slider->setValue(static_cast<int>(std::round(val)));
+                    slider->blockSignals(false);
+                }
                 MarkDirty();
-                UpdateJointLimitWarningStyle(); // 实时检测越界并高亮
-                UpdateJointLimitMargins();      // 实时更新裕量标签
-                SyncPoseOnly(); // 触发三维画面实时更新
+                UpdateJointLimitWarningStyle(); // ʵʱԽ粢
+                UpdateJointLimitMargins();      // ʵʱԣǩ
+                SyncPoseOnly(); // άʵʱ
             });
 
         auto* label = new QLabel(QStringLiteral("J%1").arg(index + 1), m_fk_grid->parentWidget());
 
-        int rowOffset = (index / maxGridColumns) * 3;
+        int rowOffset = (index / maxGridColumns) * 4;
         int colOffset = index % maxGridColumns;
         m_fk_grid->addWidget(label, 1 + rowOffset, colOffset);
         m_fk_grid->addWidget(spinBox, 2 + rowOffset, colOffset);
+        m_fk_grid->addWidget(slider, 3 + rowOffset, colOffset);
 
-        auto* marginLabel = new QLabel(QStringLiteral("—"), m_fk_grid->parentWidget());
+        auto* marginLabel = new QLabel(QStringLiteral(""), m_fk_grid->parentWidget());
         marginLabel->setAlignment(Qt::AlignCenter);
         marginLabel->setStyleSheet(QStringLiteral("font-size: 10px; color: #888;"));
-        m_fk_grid->addWidget(marginLabel, 3 + rowOffset, colOffset);
+        m_fk_grid->addWidget(marginLabel, 4 + rowOffset, colOffset);
 
         m_fk_joint_spins.push_back(spinBox);
+        m_fk_joint_sliders.push_back(slider);
         m_fk_joint_labels.push_back(label);
         m_fk_margin_labels.push_back(marginLabel);
     }

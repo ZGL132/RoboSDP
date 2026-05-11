@@ -22,6 +22,7 @@ class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
+class QSlider;
 class QTextEdit;
 class QSpinBox;
 class QTableWidget;
@@ -255,7 +256,13 @@ private:
     QDoubleSpinBox* m_orientation_tolerance_spin = nullptr;
     QDoubleSpinBox* m_step_gain_spin = nullptr;
 
+    /// @brief IK 多解浏览器：解索引下拉框
+    QComboBox* m_ik_solution_combo = nullptr;
+    /// @brief IK 多解浏览器：当前选中解的关节角只读 spinbox
+    std::vector<QDoubleSpinBox*> m_ik_solution_spins;
+
     std::vector<QDoubleSpinBox*> m_fk_joint_spins;
+    std::vector<QSlider*> m_fk_joint_sliders;
     std::vector<QLabel*> m_fk_joint_labels;
     std::vector<QLabel*> m_fk_margin_labels;  // 关节限位裕量百分比标签
     QGridLayout* m_fk_grid = nullptr;

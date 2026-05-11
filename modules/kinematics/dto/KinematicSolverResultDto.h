@@ -54,6 +54,15 @@ struct IkResultDto
     double position_error_mm = 0.0;
     double orientation_error_deg = 0.0;
     int iteration_count = 0;
+
+    /// @brief 全部有效关节解（闭式求解特有，最多 8 组），每组为 6 个关节角 [deg]。
+    std::vector<std::vector<double>> all_solutions_deg;
+    /// @brief 过滤前闭式解总组数（含被限位过滤掉的）。
+    int total_solutions_found = 0;
+    /// @brief 过滤后有效解组数。
+    int valid_solution_count = 0;
+    /// @brief 产生此结果的求解器标识。
+    QString solver_id;
 };
 
 /// @brief 工作空间采样请求 DTO，仅描述采样规模，不承载具体后端状态。

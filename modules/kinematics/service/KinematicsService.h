@@ -404,6 +404,9 @@ namespace RoboSDP::Kinematics::Service
 
         /// @brief 负责 IK 求解的底层算法引擎适配器
         std::unique_ptr<RoboSDP::Kinematics::Adapter::IIkSolverAdapter> m_ik_solver_adapter;
+
+        /// @brief 闭式解析 IK 求解器（懒创建，仅 analytical_closed_form 时实例化）
+        mutable std::unique_ptr<RoboSDP::Kinematics::Adapter::IIkSolverAdapter> m_analytical_ik_solver_adapter;
     };
 
 } // namespace RoboSDP::Kinematics::Service
