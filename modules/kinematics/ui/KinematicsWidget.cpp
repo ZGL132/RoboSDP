@@ -1,4 +1,5 @@
 ﻿#include "modules/kinematics/ui/KinematicsWidget.h"
+#include "apps/desktop-qt/widgets/common/CollapsibleSectionWidget.h"
 
 #include "core/infrastructure/ProjectManager.h"
 
@@ -459,55 +460,42 @@ QWidget* KinematicsWidget::CreateScrollableTab(QWidget* contentWidget)
     return tabPage;
 }
 
-QGroupBox* KinematicsWidget::CreateModelGroup()
+QWidget* KinematicsWidget::CreateModelGroup()
 {
-    auto* groupBox = new QGroupBox(QStringLiteral("模型摘要与坐标系"), this);
-    auto* layout = new QVBoxLayout(groupBox);
+    auto* pageWidget = new QWidget(this);
+    auto* pageLayout = new QVBoxLayout(pageWidget);
+    pageLayout->setContentsMargins(0, 0, 0, 0);
 
-    auto* formLayout = new QFormLayout();
-    m_model_name_edit = new QLineEdit(groupBox);
-    m_parameter_convention_combo = new QComboBox(groupBox);
+    // 1. Basic properties
+    auto* basicPropsWidget = new QWidget(pageWidget);
+    auto* formLayout = new QFormLayout(basicPropsWidget);
+    m_model_name_edit = new QLineEdit(basicPropsWidget);
+    m_parameter_convention_combo = new QComboBox(basicPropsWidget);
     m_parameter_convention_combo->addItem(QStringLiteral("DH"), QStringLiteral("DH"));
     m_parameter_convention_combo->addItem(QStringLiteral("MDH"), QStringLiteral("MDH"));
-    m_topology_ref_edit = new QLineEdit(groupBox);
-    m_topology_ref_edit->setReadOnly(true);
-    m_requirement_ref_edit = new QLineEdit(groupBox);
-    m_requirement_ref_edit->setReadOnly(true);
-    m_master_model_mode_label = new QLabel(groupBox);
-    m_derived_model_state_label = new QLabel(groupBox);
-    m_preview_source_label = new QLabel(groupBox);
-    m_master_switch_state_label = new QLabel(groupBox);
-    m_urdf_source_type_label = new QLabel(groupBox);
-    m_dh_draft_level_label = new QLabel(groupBox);
-    m_dh_draft_status_label = new QLabel(groupBox);
     formLayout->addRow(QStringLiteral("模型名称"), m_model_name_edit);
     formLayout->addRow(QStringLiteral("参数约定"), m_parameter_convention_combo);
-    formLayout->addRow(QStringLiteral("Topology 引用"), m_topology_ref_edit);
-    formLayout->addRow(QStringLiteral("Requirement 引用"), m_requirement_ref_edit);
-    formLayout->addRow(QStringLiteral("草稿主模型"), m_master_model_mode_label);
-    formLayout->addRow(QStringLiteral("派生状态"), m_derived_model_state_label);
-    formLayout->addRow(QStringLiteral("中央预览来源"), m_preview_source_label);
-    formLayout->addRow(QStringLiteral("主模型切换状态"), m_master_switch_state_label);
-    formLayout->addRow(QStringLiteral("URDF 来源类型"), m_urdf_source_type_label);
-    formLayout->addRow(QStringLiteral("DH 草案级别"), m_dh_draft_level_label);
-    formLayout->addRow(QStringLiteral("参数表状态"), m_dh_draft_status_label);
-    layout->addLayout(formLayout);
 
-    auto* framesLayout = new QHBoxLayout();
+    auto* basicSection = new QGroupBox(QStringLiteral("基础模型属性"), pageWidget);
+    auto* bsLayout = new QVBoxLayout(basicSection); bsLayout->addWidget(basicPropsWidget);
+    
+    pageLayout->addWidget(basicSection);
+
+    // 2. Physical frames
+    auto* framesWidget = new QWidget(pageWidget);
+    auto* framesLayout = new QGridLayout(framesWidget);
+    framesLayout->setSpacing(8);
+
     const QStringList poseLabels {
-        QStringLiteral("X [m]"),
-        QStringLiteral("Y [m]"),
-        QStringLiteral("Z [m]"),
-        QStringLiteral("RX [deg]"),
-        QStringLiteral("RY [deg]"),
-        QStringLiteral("RZ [deg]")};
+        QStringLiteral("X [m]"), QStringLiteral("Y [m]"), QStringLiteral("Z [m]"),
+        QStringLiteral("RX [deg]"), QStringLiteral("RY [deg]"), QStringLiteral("RZ [deg]")};
 
-    auto createFrameEditor = [this, &poseLabels, &framesLayout, groupBox](
+    auto createFrameEditor = [this, &poseLabels](
                                  const QString& title,
                                  std::array<QDoubleSpinBox*, 6>& editors,
                                  const QString& tip,
-                                 QCheckBox** enabledCheckBox = nullptr) {
-        auto* frameGroup = new QGroupBox(title, groupBox);
+                                 QCheckBox** enabledCheckBox = nullptr) -> QGroupBox* {
+        auto* frameGroup = new QGroupBox(title);
         frameGroup->setToolTip(tip);
         auto* frameLayout = new QVBoxLayout(frameGroup);
 
@@ -519,7 +507,6 @@ QGroupBox* KinematicsWidget::CreateModelGroup()
         }
 
         auto* grid = new QGridLayout();
-
         for (int index = 0; index < 6; ++index)
         {
             const bool isTranslation = index < 3;
@@ -534,41 +521,87 @@ QGroupBox* KinematicsWidget::CreateModelGroup()
         }
 
         frameLayout->addLayout(grid);
-        framesLayout->addWidget(frameGroup, 1);
+        return frameGroup;
     };
 
-    createFrameEditor(QStringLiteral("Base Frame"), m_base_frame_spins, QStringLiteral("机器人基坐标系。"));
-    createFrameEditor(QStringLiteral("Flange Frame"), m_flange_frame_spins, QStringLiteral("法兰坐标系。"));
-    createFrameEditor(
-        QStringLiteral("Tool Frame"),
-        m_tool_frame_spins,
-        QStringLiteral("工具参考系，可选。"),
-        &m_tool_frame_enabled_check);
-    createFrameEditor(
-        QStringLiteral("Workpiece Frame"),
-        m_workpiece_frame_spins,
-        QStringLiteral("工件参考系，可选。"),
-        &m_workpiece_frame_enabled_check);
-    createFrameEditor(QStringLiteral("TCP Frame"), m_tcp_frame_spins, QStringLiteral("TCP 坐标系。"));
-    layout->addLayout(framesLayout);
+    auto* baseGroup = createFrameEditor(QStringLiteral("Base Frame (基座)"), m_base_frame_spins, QStringLiteral("机器人的全局基座坐标系"));
+    auto* flangeGroup = createFrameEditor(QStringLiteral("Flange Frame (法兰)"), m_flange_frame_spins, QStringLiteral("机器人末端法兰盘坐标系"));
+    auto* toolGroup = createFrameEditor(QStringLiteral("Tool Frame (工具)"), m_tool_frame_spins, QStringLiteral("安装在法兰上的工具坐标系"), &m_tool_frame_enabled_check);
+    auto* workpieceGroup = createFrameEditor(QStringLiteral("Workpiece Frame (工件)"), m_workpiece_frame_spins, QStringLiteral("环境中的工件参考坐标系"), &m_workpiece_frame_enabled_check);
+    auto* tcpGroup = createFrameEditor(QStringLiteral("TCP Frame (工具中心点)"), m_tcp_frame_spins, QStringLiteral("控制的最终工具中心点坐标系"));
+
+    framesLayout->addWidget(baseGroup, 0, 0);
+    framesLayout->addWidget(flangeGroup, 0, 1);
+    framesLayout->addWidget(workpieceGroup, 1, 0);
+    framesLayout->addWidget(toolGroup, 1, 1);
+    framesLayout->addWidget(tcpGroup, 2, 1);
+
+    auto* calcTcpBtn = new QPushButton(QStringLiteral("从法兰+工具计算TCP"), framesWidget);
+    framesLayout->addWidget(calcTcpBtn, 3, 1);
+    connect(calcTcpBtn, &QPushButton::clicked, this, [this]() {
+        if (m_logger) {
+            m_logger->Log(RoboSDP::Logging::LogLevel::Info, QStringLiteral("该功能尚未实现: 自动计算TCP"), RoboSDP::Errors::ErrorCode::Ok, {ModuleName(), QString(), QString()});
+        }
+        QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("待实现：根据 Flange * Tool 自动计算 TCP 位姿。"));
+    });
+
+    auto* framesSection = new QGroupBox(QStringLiteral("物理坐标系设置"), pageWidget);
+    auto* fsLayout = new QVBoxLayout(framesSection); fsLayout->addWidget(framesWidget);
+    
+    pageLayout->addWidget(framesSection);
+
+    // 3. Debug / Metadata section
+    auto* debugWidget = new QWidget(pageWidget);
+    auto* debugForm = new QFormLayout(debugWidget);
+    
+    m_topology_ref_edit = new QLineEdit(debugWidget);
+    m_topology_ref_edit->setReadOnly(true);
+    m_requirement_ref_edit = new QLineEdit(debugWidget);
+    m_requirement_ref_edit->setReadOnly(true);
+    m_master_model_mode_label = new QLabel(debugWidget);
+    m_derived_model_state_label = new QLabel(debugWidget);
+    m_preview_source_label = new QLabel(debugWidget);
+    m_master_switch_state_label = new QLabel(debugWidget);
+    m_urdf_source_type_label = new QLabel(debugWidget);
+    m_dh_draft_level_label = new QLabel(debugWidget);
+    m_dh_draft_status_label = new QLabel(debugWidget);
+    
+    debugForm->addRow(QStringLiteral("Topology 引用"), m_topology_ref_edit);
+    debugForm->addRow(QStringLiteral("Requirement 引用"), m_requirement_ref_edit);
+    debugForm->addRow(QStringLiteral("主控模型模式"), m_master_model_mode_label);
+    debugForm->addRow(QStringLiteral("派生状态"), m_derived_model_state_label);
+    debugForm->addRow(QStringLiteral("预览数据源"), m_preview_source_label);
+    debugForm->addRow(QStringLiteral("主模型切换状态"), m_master_switch_state_label);
+    debugForm->addRow(QStringLiteral("URDF 来源类型"), m_urdf_source_type_label);
+    debugForm->addRow(QStringLiteral("DH 草稿提取级别"), m_dh_draft_level_label);
+    debugForm->addRow(QStringLiteral("DH 草稿状态"), m_dh_draft_status_label);
+
+    auto* debugSection = new QGroupBox(QStringLiteral("模型诊断与高级属性 (调试)"), pageWidget);
+    auto* dsLayout = new QVBoxLayout(debugSection); dsLayout->addWidget(debugWidget);
+    debugSection->setCheckable(true); debugSection->setChecked(false); // 模拟折叠
+    pageLayout->addWidget(debugSection);
+
+    pageLayout->addStretch();
 
     if (m_tool_frame_enabled_check != nullptr)
     {
-        SetEditorsEnabled(m_tool_frame_spins, false);
         connect(m_tool_frame_enabled_check, &QCheckBox::toggled, this, [this](bool checked) {
-            SetEditorsEnabled(m_tool_frame_spins, checked);
+            for(auto* spin : m_tool_frame_spins) {
+                if(spin) spin->setEnabled(checked);
+            }
         });
     }
 
     if (m_workpiece_frame_enabled_check != nullptr)
     {
-        SetEditorsEnabled(m_workpiece_frame_spins, false);
         connect(m_workpiece_frame_enabled_check, &QCheckBox::toggled, this, [this](bool checked) {
-            SetEditorsEnabled(m_workpiece_frame_spins, checked);
+            for(auto* spin : m_workpiece_frame_spins) {
+                if(spin) spin->setEnabled(checked);
+            }
         });
     }
 
-    return groupBox;
+    return pageWidget;
 }
 
 QGroupBox* KinematicsWidget::CreateDhTableGroup()

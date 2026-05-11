@@ -140,7 +140,7 @@ signals:
 
 private:
     void BuildUi();
-    QGroupBox* CreateModelGroup();
+    QWidget* CreateModelGroup();
     QGroupBox* CreateDhTableGroup();
     QGroupBox* CreateJointLimitGroup();
     QGroupBox* CreateSolverGroup();
