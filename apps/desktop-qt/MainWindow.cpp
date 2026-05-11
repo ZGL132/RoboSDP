@@ -302,6 +302,18 @@ void MainWindow::CreatePropertyDock()
                 m_topologyWidget->CanGenerate(),
                 m_topologyWidget->CanValidate(),
                 m_topologyWidget->CanSaveDraft());
+            if (m_kinematicsWidget != nullptr)
+            {
+                m_ribbonBar->SetKinematicsButtonsEnabled(
+                    m_kinematicsWidget->CanImportUrdf(),
+                    m_kinematicsWidget->CanBuildFromTopology(),
+                    m_kinematicsWidget->CanPromoteToDhMaster(),
+                    m_kinematicsWidget->CanSwitchToUrdfMaster(),
+                    m_kinematicsWidget->CanRunFk(),
+                    m_kinematicsWidget->CanRunIk(),
+                    m_kinematicsWidget->CanSampleWorkspace(),
+                    m_kinematicsWidget->CanSaveDraft());
+            }
         });
 
     // --- 新增：接收 Topology 的实时预览并发送给 VTK 视图 ---
@@ -417,24 +429,6 @@ void MainWindow::CreatePropertyDock()
             if (m_robotVtkView != nullptr)
             {
                 m_robotVtkView->ShowColoredWorkspacePointCloud(tcpPositions, isSingular);
-            }
-        });
-
-    connect(
-        m_kinematicsWidget,
-        &RoboSDP::Kinematics::Ui::KinematicsWidget::PreviewSceneGenerated,
-        this,
-        [this](const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene) {
-            if (m_robotVtkView != nullptr)
-            {
-                // --- 开启硬核调试模式的视觉开关 ---
-                m_robotVtkView->SetVisualMeshVisible(false);    // 隐藏蒙皮，看骨架
-                m_robotVtkView->SetJointAxesVisible(true);     // 显示黄色旋转轴线
-                m_robotVtkView->SetAxesVisible(true);          // 显示 RGB 三色坐标轴
-                m_robotVtkView->SetJointLabelsVisible(true);   // 显示关节名称标签
-                
-                // 依然不重置相机，保持观察连续性
-                m_robotVtkView->ShowPreviewScene(scene, false);
             }
         });
 

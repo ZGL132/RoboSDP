@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -535,15 +536,6 @@ QWidget* KinematicsWidget::CreateModelGroup()
     framesLayout->addWidget(workpieceGroup, 1, 0);
     framesLayout->addWidget(toolGroup, 1, 1);
     framesLayout->addWidget(tcpGroup, 2, 1);
-
-    auto* calcTcpBtn = new QPushButton(QStringLiteral("从法兰+工具计算TCP"), framesWidget);
-    framesLayout->addWidget(calcTcpBtn, 3, 1);
-    connect(calcTcpBtn, &QPushButton::clicked, this, [this]() {
-        if (m_logger) {
-            m_logger->Log(RoboSDP::Logging::LogLevel::Info, QStringLiteral("该功能尚未实现: 自动计算TCP"), RoboSDP::Errors::ErrorCode::Ok, {ModuleName(), QString(), QString()});
-        }
-        QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("待实现：根据 Flange * Tool 自动计算 TCP 位姿。"));
-    });
 
     auto* framesSection = new QGroupBox(QStringLiteral("物理坐标系设置"), pageWidget);
     auto* fsLayout = new QVBoxLayout(framesSection); fsLayout->addWidget(framesWidget);
@@ -1484,10 +1476,11 @@ void KinematicsWidget::SyncStructureAndPreview()
         .arg(QDateTime::currentMSecsSinceEpoch());
 
     // 2. 调用 Service 的通道 A 接口重建引擎环境与场景
-    const QString projectRootPath = RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    // 中文说明：实时预览只负责更新内存中的统一模型与中央骨架，不在此时写出派生 URDF 文件。
+    // 真正的派生产物落盘只保留在 SaveDraft() 流程中，避免“改一格参数就改工程文件”的副作用。
     auto angles = CollectJointInputs(m_fk_joint_spins);
-    
-    const auto buildResult = m_service.BuildDhPreviewScene(draftModel, angles, projectRootPath);
+
+    const auto buildResult = m_service.BuildDhPreviewScene(draftModel, angles);
 
     if (buildResult.IsSuccess())
     {
@@ -2712,8 +2705,15 @@ void KinematicsWidget::ApplyStepToAllSpinBoxes(double stepDeg)
 
 bool KinematicsWidget::CanBuildFromTopology() const
 {
-    // 当 m_topology_ref_edit 非空时说明存在拓扑引用，允许从拓扑构建
-    return m_topology_ref_edit != nullptr && !m_topology_ref_edit->text().trimmed().isEmpty();
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+    if (projectRootPath.trimmed().isEmpty())
+    {
+        return false;
+    }
+
+    const QString topologyFilePath = m_topology_storage.BuildAbsoluteFilePath(projectRootPath);
+    return QFileInfo::exists(topologyFilePath);
 }
 
 bool KinematicsWidget::CanPromoteToDhMaster() const
