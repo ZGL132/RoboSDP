@@ -4,7 +4,9 @@
 #include "core/infrastructure/ProjectManager.h"
 
 #include <QAbstractItemView>
+#include <QBrush>
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QDir>
 #include <QDoubleSpinBox>
@@ -154,6 +156,21 @@ QString FormatPreviewSceneSummary(const RoboSDP::Kinematics::Ui::PreviewSceneDto
         .arg(previewScene.segments.size());
 }
 
+bool IsFiniteArray3(const std::array<double, 3>& values)
+{
+    return std::isfinite(values[0]) && std::isfinite(values[1]) && std::isfinite(values[2]);
+}
+
+bool IsFinitePose(const RoboSDP::Kinematics::Dto::CartesianPoseDto& pose)
+{
+    return IsFiniteArray3(pose.position_m) && IsFiniteArray3(pose.rpy_deg);
+}
+
+bool IsFiniteTcpFrame(const RoboSDP::Kinematics::Dto::TcpFrameDto& frame)
+{
+    return IsFiniteArray3(frame.translation_m) && IsFiniteArray3(frame.rpy_deg);
+}
+
 QTableWidgetItem* EnsureItem(QTableWidget* table, int row, int column)
 {
     QTableWidgetItem* item = table->item(row, column);
@@ -169,6 +186,26 @@ double ReadTableDouble(QTableWidget* table, int row, int column, double defaultV
 {
     QTableWidgetItem* item = table->item(row, column);
     return item != nullptr ? item->text().toDouble() : defaultValue;
+}
+
+bool TryReadTableDouble(const QTableWidget* table, int row, int column, double& value)
+{
+    if (table == nullptr)
+    {
+        value = 0.0;
+        return false;
+    }
+
+    const QTableWidgetItem* item = table->item(row, column);
+    if (item == nullptr)
+    {
+        value = 0.0;
+        return false;
+    }
+
+    bool ok = false;
+    value = item->text().trimmed().toDouble(&ok);
+    return ok;
 }
 
 QString ReadTableString(QTableWidget* table, int row, int column, const QString& defaultValue = {})
@@ -378,6 +415,7 @@ void KinematicsWidget::MarkDirty()
         return;
     }
     m_has_unsaved_changes = true;
+    RefreshValidationState();
 }
 
 void KinematicsWidget::MarkClean()
@@ -400,15 +438,20 @@ void KinematicsWidget::BuildUi()
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存 Topology，再生成 KinematicModel。"), this);
     m_operation_label->setWordWrap(true);
 
+    m_validation_label = new QLabel(QStringLiteral("模型校验：等待载入运动学草稿。"), this);
+    m_validation_label->setWordWrap(true);
+    m_validation_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_validation_label->setStyleSheet(QStringLiteral(
+        "padding:6px 8px;border-radius:4px;background:#f2f4f7;color:#475467;"));
+
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
-    tabs->addTab(CreateScrollableTab(CreateModelGroup()), QStringLiteral("模型与坐标系"));
-    tabs->addTab(CreateScrollableTab(CreateDhTableGroup()), QStringLiteral("DH/MDH 参数"));
-    tabs->addTab(CreateScrollableTab(CreateJointLimitGroup()), QStringLiteral("关节限位"));
-    tabs->addTab(CreateScrollableTab(CreateSolverGroup()), QStringLiteral("FK / IK 求解"));
-    tabs->addTab(CreateScrollableTab(CreateResultGroup()), QStringLiteral("结果摘要"));
+    tabs->addTab(CreateScrollableTab(CreateDesignInputPage()), QStringLiteral("设计输入"));
+    tabs->addTab(CreateScrollableTab(CreateVerificationPage()), QStringLiteral("求解验证"));
+    tabs->addTab(CreateScrollableTab(CreateDiagnosticsPage()), QStringLiteral("结果诊断"));
 
     rootLayout->addWidget(m_operation_label);
+    rootLayout->addWidget(m_validation_label);
     rootLayout->addWidget(tabs, 1);
 
     // A/B 通道：将涉及"结构变动"的输入项绑定至重量级通道 SyncStructureAndPreview
@@ -434,6 +477,41 @@ void KinematicsWidget::BuildUi()
     connectPreviewEditors(m_base_frame_spins);
     connectPreviewEditors(m_flange_frame_spins);
     connectPreviewEditors(m_tcp_frame_spins);
+}
+
+QWidget* KinematicsWidget::CreateDesignInputPage()
+{
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    layout->addWidget(CreateModelGroup());
+    layout->addWidget(CreateDhTableGroup());
+    layout->addWidget(CreateJointLimitGroup());
+    layout->addStretch();
+    return page;
+}
+
+QWidget* KinematicsWidget::CreateVerificationPage()
+{
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    layout->addWidget(CreateSolverGroup());
+    layout->addStretch();
+    return page;
+}
+
+QWidget* KinematicsWidget::CreateDiagnosticsPage()
+{
+    auto* page = new QWidget(this);
+    auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+    layout->addWidget(CreateResultGroup());
+    layout->addStretch();
+    return page;
 }
 
 QWidget* KinematicsWidget::CreateScrollableTab(QWidget* contentWidget)
@@ -723,7 +801,15 @@ QWidget* KinematicsWidget::CreateInteractivePage()
         QStringLiteral("RZ [deg]")};
     for (int index = 0; index < 6; ++index)
     {
-        auto* spinBox = CreateDoubleSpinBox(-1000.0, 1000.0, index < 3 ? 4 : 3, 0.01);
+        const bool isTranslation = index < 3;
+        auto* spinBox = CreateDoubleSpinBox(
+            isTranslation ? -10.0 : -360.0,
+            isTranslation ? 10.0 : 360.0,
+            isTranslation ? 4 : 3,
+            isTranslation ? 0.001 : 1.0);
+        spinBox->setToolTip(isTranslation
+            ? QStringLiteral("位置单位为 m。常规工业机械臂建议保持在 ±10 m 以内。")
+            : QStringLiteral("姿态单位为 deg，使用 RPY 欧拉角。"));
         m_ik_target_pose_spins[static_cast<std::size_t>(index)] = spinBox;
         ikTargetGrid->addWidget(new QLabel(poseLabels.at(index), page), 1, index);
         ikTargetGrid->addWidget(spinBox, 2, index);
@@ -808,6 +894,7 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
     auto* workspaceLayout = new QFormLayout();
     m_workspace_sample_count_spin = new QSpinBox(page);
     m_workspace_sample_count_spin->setRange(1, 100000);
+    m_workspace_sample_count_spin->setValue(128);
     workspaceLayout->addRow(QStringLiteral("采样点数"), m_workspace_sample_count_spin);
     m_singularity_threshold_spin = new QDoubleSpinBox(page);
     m_singularity_threshold_spin->setRange(1.0, 100000.0);
@@ -837,7 +924,15 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
         QStringLiteral("RX [deg]"), QStringLiteral("RY [deg]"), QStringLiteral("RZ [deg]")};
     for (int idx = 0; idx < 6; ++idx)
     {
-        auto* spin = CreateDoubleSpinBox(-1000.0, 1000.0, idx < 3 ? 4 : 3, 0.01);
+        const bool isTranslation = idx < 3;
+        auto* spin = CreateDoubleSpinBox(
+            isTranslation ? -10.0 : -360.0,
+            isTranslation ? 10.0 : 360.0,
+            isTranslation ? 4 : 3,
+            isTranslation ? 0.001 : 1.0);
+        spin->setToolTip(isTranslation
+            ? QStringLiteral("位置单位为 m。常规工业机械臂建议保持在 ±10 m 以内。")
+            : QStringLiteral("姿态单位为 deg，使用 RPY 欧拉角。"));
         m_reach_target_spins[idx] = spin;
         reachTargetGrid->addWidget(new QLabel(reachLabels.at(idx), reachGroup), 1, idx);
         reachTargetGrid->addWidget(spin, 2, idx);
@@ -872,7 +967,8 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
     const QStringList posLabels {QStringLiteral("X [m]"), QStringLiteral("Y [m]"), QStringLiteral("Z [m]")};
     for (int idx = 0; idx < 3; ++idx)
     {
-        auto* spin = CreateDoubleSpinBox(-1000.0, 1000.0, 4, 0.01);
+        auto* spin = CreateDoubleSpinBox(-10.0, 10.0, 4, 0.001);
+        spin->setToolTip(QStringLiteral("位置单位为 m。常规工业机械臂建议保持在 ±10 m 以内。"));
         m_orient_pos_spins[idx] = spin;
         orientPosGrid->addWidget(new QLabel(posLabels.at(idx), orientGroup), 1, idx);
         orientPosGrid->addWidget(spin, 2, idx);
@@ -912,10 +1008,10 @@ QGroupBox* KinematicsWidget::CreateResultGroup()
     auto* groupBox = new QGroupBox(QStringLiteral("结果摘要"), this);
     auto* layout = new QVBoxLayout(groupBox);
 
-    // FK 结果 → IK 种子一键填入按钮
+    // FK 结果 → IK 目标/种子一键填入按钮
     auto* btnLayout = new QHBoxLayout();
-    auto* fkToIkBtn = new QPushButton(QStringLiteral("⇥ 填入 IK 种子"), groupBox);
-    fkToIkBtn->setToolTip(QStringLiteral("将 FK 求解结果关节角复制到 IK 种子输入框，方便直接进行逆解。"));
+    auto* fkToIkBtn = new QPushButton(QStringLiteral("填入 IK 目标/种子"), groupBox);
+    fkToIkBtn->setToolTip(QStringLiteral("将 FK 求解得到的 TCP 位姿填入 IK 目标，并将当前关节角填入 IK 种子。"));
     connect(fkToIkBtn, &QPushButton::clicked, this, &KinematicsWidget::FillIkTargetFromFkResult);
     btnLayout->addWidget(fkToIkBtn);
     btnLayout->addStretch();
@@ -940,6 +1036,7 @@ QGroupBox* KinematicsWidget::CreateResultGroup()
 
     scrollLayout->addWidget(createSection(QStringLiteral("模型概要"), m_result_model_label));
     scrollLayout->addWidget(createSection(QStringLiteral("诊断信息"), m_result_diag_label));
+    scrollLayout->addWidget(createSection(QStringLiteral("模型校验明细"), m_result_validation_label));
     // FK 结果区（含可操作度子标签）
     {
         auto* fkSection = new QGroupBox(QStringLiteral("正运动学 FK"), scrollContent);
@@ -1136,12 +1233,12 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
     m_position_tolerance_spin->setValue(model.ik_solver_config.position_tolerance_mm);
     m_orientation_tolerance_spin->setValue(model.ik_solver_config.orientation_tolerance_deg);
     m_step_gain_spin->setValue(model.ik_solver_config.step_gain);
-    m_workspace_sample_count_spin->setValue(128);
     
     m_is_populating_form = false;
     RefreshEditingState();
     UpdateFkJointLimitLabels();
     RefreshModelStatusLabels();
+    RefreshValidationState();
 }
 
 void KinematicsWidget::RefreshEditingState()
@@ -1208,6 +1305,347 @@ void KinematicsWidget::RefreshEditingState()
             isUrdfDraftReadOnly
                 ? m_state.current_model.dh_draft_readonly_reason
                 : QString());
+    }
+}
+
+QStringList KinematicsWidget::BuildValidationIssues(
+    const RoboSDP::Kinematics::Dto::KinematicModelDto& model) const
+{
+    QStringList issues;
+
+    if (model.meta.name.trimmed().isEmpty())
+    {
+        issues.push_back(QStringLiteral("模型名称为空"));
+    }
+
+    if (model.parameter_convention != QStringLiteral("DH") &&
+        model.parameter_convention != QStringLiteral("MDH"))
+    {
+        issues.push_back(QStringLiteral("参数约定必须是 DH 或 MDH"));
+    }
+
+    if (model.links.empty())
+    {
+        issues.push_back(QStringLiteral("DH/MDH 连杆参数为空"));
+    }
+
+    if (model.joint_count != static_cast<int>(model.links.size()))
+    {
+        issues.push_back(QStringLiteral("关节数量与 DH/MDH 行数不一致"));
+    }
+
+    if (model.joint_limits.size() != model.links.size())
+    {
+        issues.push_back(QStringLiteral("关节限位行数与 DH/MDH 行数不一致"));
+    }
+
+    for (std::size_t index = 0; index < model.links.size(); ++index)
+    {
+        const auto& link = model.links[index];
+        const QString rowLabel = QStringLiteral("DH 第 %1 行").arg(index + 1);
+        if (link.link_id.trimmed().isEmpty())
+        {
+            issues.push_back(QStringLiteral("%1 link_id 为空").arg(rowLabel));
+        }
+        if (!std::isfinite(link.a) ||
+            !std::isfinite(link.alpha) ||
+            !std::isfinite(link.d) ||
+            !std::isfinite(link.theta_offset))
+        {
+            issues.push_back(QStringLiteral("%1 存在非有限数值").arg(rowLabel));
+        }
+        if (std::abs(link.a) > 20.0 || std::abs(link.d) > 20.0)
+        {
+            issues.push_back(QStringLiteral("%1 长度超过 20 m，请确认单位是否误填为 mm").arg(rowLabel));
+        }
+    }
+
+    for (std::size_t index = 0; index < model.joint_limits.size(); ++index)
+    {
+        const auto& limit = model.joint_limits[index];
+        const QString rowLabel = QStringLiteral("关节限位第 %1 行").arg(index + 1);
+        if (limit.joint_id.trimmed().isEmpty())
+        {
+            issues.push_back(QStringLiteral("%1 joint_id 为空").arg(rowLabel));
+        }
+        if (!std::isfinite(limit.soft_limit[0]) ||
+            !std::isfinite(limit.soft_limit[1]) ||
+            !std::isfinite(limit.hard_limit[0]) ||
+            !std::isfinite(limit.hard_limit[1]) ||
+            !std::isfinite(limit.max_velocity) ||
+            !std::isfinite(limit.max_acceleration))
+        {
+            issues.push_back(QStringLiteral("%1 存在非有限数值").arg(rowLabel));
+        }
+        if (limit.soft_limit[0] > limit.soft_limit[1])
+        {
+            issues.push_back(QStringLiteral("%1 soft_min 大于 soft_max").arg(rowLabel));
+        }
+        if (limit.hard_limit[0] > limit.hard_limit[1])
+        {
+            issues.push_back(QStringLiteral("%1 hard_min 大于 hard_max").arg(rowLabel));
+        }
+        if (limit.soft_limit[0] < limit.hard_limit[0] ||
+            limit.soft_limit[1] > limit.hard_limit[1])
+        {
+            issues.push_back(QStringLiteral("%1 软限位超出硬限位范围").arg(rowLabel));
+        }
+        if (limit.max_velocity <= 0.0 || limit.max_acceleration <= 0.0)
+        {
+            issues.push_back(QStringLiteral("%1 速度/加速度上限必须大于 0").arg(rowLabel));
+        }
+    }
+
+    if (!IsFinitePose(model.base_frame))
+    {
+        issues.push_back(QStringLiteral("基坐标系存在非有限数值"));
+    }
+    if (!IsFinitePose(model.flange_frame))
+    {
+        issues.push_back(QStringLiteral("法兰坐标系存在非有限数值"));
+    }
+    if (!IsFiniteTcpFrame(model.tcp_frame))
+    {
+        issues.push_back(QStringLiteral("TCP 坐标系存在非有限数值"));
+    }
+    if (model.tool_frame.has_value() && !IsFinitePose(model.tool_frame.value()))
+    {
+        issues.push_back(QStringLiteral("Tool Frame 存在非有限数值"));
+    }
+    if (model.workpiece_frame.has_value() && !IsFinitePose(model.workpiece_frame.value()))
+    {
+        issues.push_back(QStringLiteral("Workpiece Frame 存在非有限数值"));
+    }
+
+    if (model.master_model_type == QStringLiteral("urdf") && model.dh_editable)
+    {
+        issues.push_back(QStringLiteral("URDF 主模型下 DH 表不应处于可编辑状态"));
+    }
+    if (model.master_model_type == QStringLiteral("dh_mdh") && !model.dh_editable)
+    {
+        issues.push_back(QStringLiteral("DH/MDH 主模型下 DH 表应处于可编辑状态"));
+    }
+
+    if (m_dh_table != nullptr)
+    {
+        for (int row = 0; row < m_dh_table->rowCount(); ++row)
+        {
+            for (int column = 1; column <= 4; ++column)
+            {
+                double value = 0.0;
+                if (!TryReadTableDouble(m_dh_table, row, column, value))
+                {
+                    issues.push_back(QStringLiteral("DH 第 %1 行第 %2 列不是有效数值")
+                        .arg(row + 1)
+                        .arg(column + 1));
+                }
+            }
+        }
+    }
+
+    if (m_joint_limit_table != nullptr)
+    {
+        for (int row = 0; row < m_joint_limit_table->rowCount(); ++row)
+        {
+            for (int column = 1; column <= 6; ++column)
+            {
+                double value = 0.0;
+                if (!TryReadTableDouble(m_joint_limit_table, row, column, value))
+                {
+                    issues.push_back(QStringLiteral("关节限位第 %1 行第 %2 列不是有效数值")
+                        .arg(row + 1)
+                        .arg(column + 1));
+                }
+            }
+        }
+    }
+
+    return issues;
+}
+
+void KinematicsWidget::RefreshValidationHighlights(
+    const RoboSDP::Kinematics::Dto::KinematicModelDto& model)
+{
+    const bool dhSignalsWereBlocked =
+        m_dh_table != nullptr ? m_dh_table->blockSignals(true) : false;
+    const bool limitSignalsWereBlocked =
+        m_joint_limit_table != nullptr ? m_joint_limit_table->blockSignals(true) : false;
+
+    auto clearTable = [](QTableWidget* table) {
+        if (table == nullptr)
+        {
+            return;
+        }
+        for (int row = 0; row < table->rowCount(); ++row)
+        {
+            for (int column = 0; column < table->columnCount(); ++column)
+            {
+                QTableWidgetItem* item = table->item(row, column);
+                if (item == nullptr)
+                {
+                    continue;
+                }
+                item->setBackground(QBrush());
+                item->setForeground(QBrush());
+                item->setToolTip(QString());
+            }
+        }
+    };
+
+    auto markCell = [](QTableWidget* table, int row, int column, const QString& message) {
+        if (table == nullptr || row < 0 || column < 0 ||
+            row >= table->rowCount() || column >= table->columnCount())
+        {
+            return;
+        }
+        QTableWidgetItem* item = table->item(row, column);
+        if (item == nullptr)
+        {
+            return;
+        }
+        item->setBackground(QColor(QStringLiteral("#fff1f3")));
+        item->setForeground(QColor(QStringLiteral("#912018")));
+        item->setToolTip(message);
+    };
+
+    clearTable(m_dh_table);
+    clearTable(m_joint_limit_table);
+
+    if (m_dh_table != nullptr)
+    {
+        for (int row = 0; row < m_dh_table->rowCount(); ++row)
+        {
+            if (ReadTableString(m_dh_table, row, 0).isEmpty())
+            {
+                markCell(m_dh_table, row, 0, QStringLiteral("link_id 不能为空。"));
+            }
+
+            for (int column = 1; column <= 4; ++column)
+            {
+                double value = 0.0;
+                if (!TryReadTableDouble(m_dh_table, row, column, value))
+                {
+                    markCell(m_dh_table, row, column, QStringLiteral("请输入有效数值。"));
+                    continue;
+                }
+
+                if ((column == 1 || column == 3) && std::abs(value) > 20.0)
+                {
+                    markCell(
+                        m_dh_table,
+                        row,
+                        column,
+                        QStringLiteral("长度超过 20 m，请确认当前单位是 m，而不是 mm。"));
+                }
+            }
+        }
+    }
+
+    if (m_joint_limit_table != nullptr)
+    {
+        for (int row = 0; row < m_joint_limit_table->rowCount(); ++row)
+        {
+            if (ReadTableString(m_joint_limit_table, row, 0).isEmpty())
+            {
+                markCell(m_joint_limit_table, row, 0, QStringLiteral("joint_id 不能为空。"));
+            }
+
+            double values[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+            bool valid[6] = {true, true, true, true, true, true};
+            for (int column = 1; column <= 6; ++column)
+            {
+                valid[column - 1] = TryReadTableDouble(m_joint_limit_table, row, column, values[column - 1]);
+                if (!valid[column - 1])
+                {
+                    markCell(m_joint_limit_table, row, column, QStringLiteral("请输入有效数值。"));
+                }
+            }
+
+            if (valid[0] && valid[1] && values[0] > values[1])
+            {
+                markCell(m_joint_limit_table, row, 1, QStringLiteral("soft_min 不能大于 soft_max。"));
+                markCell(m_joint_limit_table, row, 2, QStringLiteral("soft_max 不能小于 soft_min。"));
+            }
+            if (valid[2] && valid[3] && values[2] > values[3])
+            {
+                markCell(m_joint_limit_table, row, 3, QStringLiteral("hard_min 不能大于 hard_max。"));
+                markCell(m_joint_limit_table, row, 4, QStringLiteral("hard_max 不能小于 hard_min。"));
+            }
+            if (valid[0] && valid[2] && values[0] < values[2])
+            {
+                markCell(m_joint_limit_table, row, 1, QStringLiteral("软限位下界不能小于硬限位下界。"));
+            }
+            if (valid[1] && valid[3] && values[1] > values[3])
+            {
+                markCell(m_joint_limit_table, row, 2, QStringLiteral("软限位上界不能大于硬限位上界。"));
+            }
+            if (valid[4] && values[4] <= 0.0)
+            {
+                markCell(m_joint_limit_table, row, 5, QStringLiteral("最大速度必须大于 0。"));
+            }
+            if (valid[5] && values[5] <= 0.0)
+            {
+                markCell(m_joint_limit_table, row, 6, QStringLiteral("最大加速度必须大于 0。"));
+            }
+        }
+    }
+
+    if (m_dh_table != nullptr)
+    {
+        m_dh_table->blockSignals(dhSignalsWereBlocked);
+    }
+    if (m_joint_limit_table != nullptr)
+    {
+        m_joint_limit_table->blockSignals(limitSignalsWereBlocked);
+    }
+
+    Q_UNUSED(model);
+}
+
+void KinematicsWidget::RefreshValidationState()
+{
+    if (m_validation_label == nullptr || m_is_populating_form)
+    {
+        return;
+    }
+
+    const auto model = CollectModelFromForm();
+    const QStringList issues = BuildValidationIssues(model);
+    RefreshValidationHighlights(model);
+    if (issues.isEmpty())
+    {
+        m_validation_label->setText(QStringLiteral("模型校验：通过。DH/MDH、关节限位、坐标系与主模型状态当前一致。"));
+        m_validation_label->setStyleSheet(QStringLiteral(
+            "padding:6px 8px;border-radius:4px;background:#ecfdf3;color:#027a48;font-weight:600;"));
+        if (m_result_validation_label != nullptr)
+        {
+            m_result_validation_label->setText(QStringLiteral("状态：通过\n当前模型可用于 FK / IK / 工作空间分析。"));
+            m_result_validation_label->setStyleSheet(QStringLiteral("color:#027a48;"));
+        }
+        return;
+    }
+
+    const QStringList previewIssues = issues.mid(0, 3);
+    const QString suffix = issues.size() > previewIssues.size()
+        ? QStringLiteral(" 等 %1 项").arg(issues.size())
+        : QString();
+    m_validation_label->setText(
+        QStringLiteral("模型校验：发现 %1 项待确认：%2%3")
+            .arg(issues.size())
+            .arg(previewIssues.join(QStringLiteral("；")))
+            .arg(suffix));
+    m_validation_label->setStyleSheet(QStringLiteral(
+        "padding:6px 8px;border-radius:4px;background:#fff4e5;color:#b54708;font-weight:600;"));
+    if (m_result_validation_label != nullptr)
+    {
+        QStringList lines;
+        lines.push_back(QStringLiteral("状态：发现 %1 项待确认").arg(issues.size()));
+        for (int index = 0; index < issues.size(); ++index)
+        {
+            lines.push_back(QStringLiteral("%1. %2").arg(index + 1).arg(issues.at(index)));
+        }
+        m_result_validation_label->setText(lines.join(QLatin1Char('\n')));
+        m_result_validation_label->setStyleSheet(QStringLiteral("color:#b54708;"));
     }
 }
 
@@ -1426,6 +1864,7 @@ void KinematicsWidget::RenderResults()
     }
 
     RefreshModelStatusLabels();
+    RefreshValidationState();
 }
 
 void KinematicsWidget::SetOperationMessage(const QString& message, bool success, bool warning)
@@ -1501,11 +1940,13 @@ void KinematicsWidget::SyncStructureAndPreview()
         RefreshBackendDiagnostics();
         RenderResults();
         RefreshModelStatusLabels();
+        RefreshValidationState();
     }
     else 
     {
         SetOperationMessage(buildResult.message, false, true);
         EmitTelemetryStatus(QStringLiteral("DH/MDH 主模型"), buildResult.message, true);
+        RefreshValidationState();
     }
 }
 

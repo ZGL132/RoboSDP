@@ -3,6 +3,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QSignalBlocker>
 #include <QTabWidget>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -418,61 +419,100 @@ QWidget* RibbonBarWidget::CreateViewTab()
     layout->setContentsMargins(8, 4, 8, 6);
     layout->setSpacing(8);
 
+    m_viewSkeletonToggleBtn = CreateToggleButton(
+        QStringLiteral("显示骨架"),
+        QStringLiteral("显示 link 节点、joint 高亮和父子连杆线。"),
+        true,
+        &RibbonBarWidget::signalSetSkeletonVisible);
+    m_viewVisualMeshToggleBtn = CreateToggleButton(
+        QStringLiteral("Visual"),
+        QStringLiteral("显示 URDF visual mesh，用于检查外观几何与骨架是否重合。"),
+        true,
+        &RibbonBarWidget::signalSetVisualMeshVisible);
+    m_viewCollisionMeshToggleBtn = CreateToggleButton(
+        QStringLiteral("Collision"),
+        QStringLiteral("以半透明线框显示 URDF collision mesh；碰撞计算仍在后续阶段接入。"),
+        false,
+        &RibbonBarWidget::signalSetCollisionMeshVisible);
+    m_viewJointAxesToggleBtn = CreateToggleButton(
+        QStringLiteral("关节轴"),
+        QStringLiteral("显示 URDF joint axis 箭头，方向随当前 FK 姿态更新。"),
+        true,
+        &RibbonBarWidget::signalSetJointAxesVisible);
+
+    m_viewAxesToggleBtn = CreateToggleButton(
+        QStringLiteral("坐标系"),
+        QStringLiteral("显示中央三维视图中的世界坐标系。"),
+        true,
+        &RibbonBarWidget::signalSetAxesVisible);
+    m_viewGroundGridToggleBtn = CreateToggleButton(
+        QStringLiteral("地面网格"),
+        QStringLiteral("显示或隐藏中央三维视图中的 Z=0 地面网格参考平面。"),
+        true,
+        &RibbonBarWidget::signalSetGroundGridVisible);
+    m_viewCornerAxesToggleBtn = CreateToggleButton(
+        QStringLiteral("角落坐标轴"),
+        QStringLiteral("显示或隐藏屏幕角落的小型方向坐标轴，用于替代大世界坐标轴判断方向。"),
+        true,
+        &RibbonBarWidget::signalSetCornerAxesVisible);
+    m_viewLinkLabelsToggleBtn = CreateToggleButton(
+        QStringLiteral("Link 标签"),
+        QStringLiteral("显示 URDF Link 名称标签。"),
+        true,
+        &RibbonBarWidget::signalSetLinkLabelsVisible);
+    m_viewJointLabelsToggleBtn = CreateToggleButton(
+        QStringLiteral("Joint 标签"),
+        QStringLiteral("显示 URDF Joint 名称标签。"),
+        true,
+        &RibbonBarWidget::signalSetJointLabelsVisible);
+
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("三维显示"),
         {
-            CreateToggleButton(
-                QStringLiteral("显示骨架"),
-                QStringLiteral("显示 link 节点、joint 高亮和父子连杆线。"),
-                true,
-                &RibbonBarWidget::signalSetSkeletonVisible),
-            CreateToggleButton(
-                QStringLiteral("Visual"),
-                QStringLiteral("显示 URDF visual mesh，用于检查外观几何与骨架是否重合。"),
-                true,
-                &RibbonBarWidget::signalSetVisualMeshVisible),
-            CreateToggleButton(
-                QStringLiteral("Collision"),
-                QStringLiteral("以半透明线框显示 URDF collision mesh；碰撞计算仍在后续阶段接入。"),
-                false,
-                &RibbonBarWidget::signalSetCollisionMeshVisible),
-            CreateToggleButton(
-                QStringLiteral("关节轴"),
-                QStringLiteral("显示 URDF joint axis 箭头，方向随当前 FK 姿态更新。"),
-                true,
-                &RibbonBarWidget::signalSetJointAxesVisible),
+            m_viewSkeletonToggleBtn,
+            m_viewVisualMeshToggleBtn,
+            m_viewCollisionMeshToggleBtn,
+            m_viewJointAxesToggleBtn,
         }));
 
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("标注与相机"),
         {
-            CreateToggleButton(
-                QStringLiteral("坐标系"),
-                QStringLiteral("显示中央三维视图中的世界坐标系。"),
-                true,
-                &RibbonBarWidget::signalSetAxesVisible),
-            CreateToggleButton(
-                QStringLiteral("地面网格"),
-                QStringLiteral("显示或隐藏中央三维视图中的 Z=0 地面网格参考平面。"),
-                true,
-                &RibbonBarWidget::signalSetGroundGridVisible),
-            CreateToggleButton(
-                QStringLiteral("角落坐标轴"),
-                QStringLiteral("显示或隐藏屏幕角落的小型方向坐标轴，用于替代大世界坐标轴判断方向。"),
-                true,
-                &RibbonBarWidget::signalSetCornerAxesVisible),
-            CreateToggleButton(
-                QStringLiteral("Link 标签"),
-                QStringLiteral("显示 URDF Link 名称标签。"),
-                true,
-                &RibbonBarWidget::signalSetLinkLabelsVisible),
-            CreateToggleButton(
-                QStringLiteral("Joint 标签"),
-                QStringLiteral("显示 URDF Joint 名称标签。"),
-                true,
-                &RibbonBarWidget::signalSetJointLabelsVisible),
+            m_viewAxesToggleBtn,
+            m_viewGroundGridToggleBtn,
+            m_viewCornerAxesToggleBtn,
+            m_viewLinkLabelsToggleBtn,
+            m_viewJointLabelsToggleBtn,
             CreateResetCameraButton(),
         }));
+
+    auto* designPresetBtn = CreateActionButton(
+        QStringLiteral("设计骨架"),
+        QStringLiteral("突出 DH/MDH 骨架、关节轴和 Joint 标签，隐藏 Mesh，适合参数化建模。"));
+    connect(designPresetBtn, &QToolButton::clicked, this, [this]() {
+        ApplyViewToggleState(true, false, false, true, true, true, true, false, true);
+        emit signalApplyDesignViewPreset();
+    });
+
+    auto* engineeringPresetBtn = CreateActionButton(
+        QStringLiteral("工程检查"),
+        QStringLiteral("显示 Visual Mesh 与基础参考，隐藏诊断标签，适合检查 URDF 外观。"));
+    connect(engineeringPresetBtn, &QToolButton::clicked, this, [this]() {
+        ApplyViewToggleState(true, true, false, false, true, true, true, false, false);
+        emit signalApplyEngineeringViewPreset();
+    });
+
+    auto* diagnosticPresetBtn = CreateActionButton(
+        QStringLiteral("诊断视图"),
+        QStringLiteral("显示骨架、关节轴、Link/Joint 标签，适合排查关节顺序和坐标系。"));
+    connect(diagnosticPresetBtn, &QToolButton::clicked, this, [this]() {
+        ApplyViewToggleState(true, false, false, true, true, true, true, true, true);
+        emit signalApplyDiagnosticViewPreset();
+    });
+
+    layout->addWidget(CreateButtonGroup(
+        QStringLiteral("显示预设"),
+        { designPresetBtn, engineeringPresetBtn, diagnosticPresetBtn }));
 
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("相机视角"),
@@ -546,6 +586,37 @@ QToolButton* RibbonBarWidget::CreateToggleButton(
         (this->*toggleSignal)(visible);
     });
     return button;
+}
+
+void RibbonBarWidget::ApplyViewToggleState(
+    bool skeletonVisible,
+    bool visualMeshVisible,
+    bool collisionMeshVisible,
+    bool jointAxesVisible,
+    bool axesVisible,
+    bool groundGridVisible,
+    bool cornerAxesVisible,
+    bool linkLabelsVisible,
+    bool jointLabelsVisible)
+{
+    auto setCheckedSilently = [](QToolButton* button, bool checked) {
+        if (button == nullptr)
+        {
+            return;
+        }
+        const QSignalBlocker blocker(button);
+        button->setChecked(checked);
+    };
+
+    setCheckedSilently(m_viewSkeletonToggleBtn, skeletonVisible);
+    setCheckedSilently(m_viewVisualMeshToggleBtn, visualMeshVisible);
+    setCheckedSilently(m_viewCollisionMeshToggleBtn, collisionMeshVisible);
+    setCheckedSilently(m_viewJointAxesToggleBtn, jointAxesVisible);
+    setCheckedSilently(m_viewAxesToggleBtn, axesVisible);
+    setCheckedSilently(m_viewGroundGridToggleBtn, groundGridVisible);
+    setCheckedSilently(m_viewCornerAxesToggleBtn, cornerAxesVisible);
+    setCheckedSilently(m_viewLinkLabelsToggleBtn, linkLabelsVisible);
+    setCheckedSilently(m_viewJointLabelsToggleBtn, jointLabelsVisible);
 }
 
 QToolButton* RibbonBarWidget::CreateNewProjectButton()

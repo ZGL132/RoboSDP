@@ -133,6 +133,15 @@ public:
     /// @brief 设置 Joint 标签显示状态，供顶部视图页签统一控制。
     void SetJointLabelsVisible(bool visible);
 
+    /// @brief 应用设计预设：突出 DH/MDH 骨架、关节和基础参考，不显示 mesh。
+    void ApplyDesignViewPreset();
+
+    /// @brief 应用工程预设：显示 visual mesh 与整体姿态，隐藏诊断噪声。
+    void ApplyEngineeringViewPreset();
+
+    /// @brief 应用诊断预设：显示骨架、关节轴和标签，便于排查坐标系/关节顺序问题。
+    void ApplyDiagnosticViewPreset();
+
     /// @brief 将相机切换到正视图，沿 -Y 方向观察，Z 轴向上。
     void SetFrontCameraView();
 

@@ -493,6 +493,51 @@ void RobotVtkView::SetJointLabelsVisible(bool visible)
     RefreshScene(false);
 }
 
+void RobotVtkView::ApplyDesignViewPreset()
+{
+    m_showSkeleton = true;
+    m_showVisualMesh = false;
+    m_showCollisionMesh = false;
+    m_showJointAxes = true;
+    m_showAxes = true;
+    m_showGroundGrid = true;
+    m_showCornerAxes = true;
+    m_showLinkLabels = false;
+    m_showJointLabels = true;
+    RefreshCornerAxesVisibility();
+    RefreshScene(false);
+}
+
+void RobotVtkView::ApplyEngineeringViewPreset()
+{
+    m_showSkeleton = true;
+    m_showVisualMesh = true;
+    m_showCollisionMesh = false;
+    m_showJointAxes = false;
+    m_showAxes = true;
+    m_showGroundGrid = true;
+    m_showCornerAxes = true;
+    m_showLinkLabels = false;
+    m_showJointLabels = false;
+    RefreshCornerAxesVisibility();
+    RefreshScene(false);
+}
+
+void RobotVtkView::ApplyDiagnosticViewPreset()
+{
+    m_showSkeleton = true;
+    m_showVisualMesh = false;
+    m_showCollisionMesh = false;
+    m_showJointAxes = true;
+    m_showAxes = true;
+    m_showGroundGrid = true;
+    m_showCornerAxes = true;
+    m_showLinkLabels = true;
+    m_showJointLabels = true;
+    RefreshCornerAxesVisibility();
+    RefreshScene(false);
+}
+
 void RobotVtkView::SetFrontCameraView()
 {
     ApplyCameraPreset(0.0, -1.0, 0.0, 0.0, 0.0, 1.0);

@@ -195,6 +195,10 @@ void MainWindow::CreateRibbonBar()
     bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetLinkLabelsVisible, &Vtk::RobotVtkView::SetLinkLabelsVisible, QStringLiteral("显示 Link 标签"));
     bindVtkToggle(&Ribbon::RibbonBarWidget::signalSetJointLabelsVisible, &Vtk::RobotVtkView::SetJointLabelsVisible, QStringLiteral("显示 Joint 标签"));
 
+    bindCamera(&Ribbon::RibbonBarWidget::signalApplyDesignViewPreset, &Vtk::RobotVtkView::ApplyDesignViewPreset, QStringLiteral("用户请求应用设计骨架显示预设"));
+    bindCamera(&Ribbon::RibbonBarWidget::signalApplyEngineeringViewPreset, &Vtk::RobotVtkView::ApplyEngineeringViewPreset, QStringLiteral("用户请求应用工程检查显示预设"));
+    bindCamera(&Ribbon::RibbonBarWidget::signalApplyDiagnosticViewPreset, &Vtk::RobotVtkView::ApplyDiagnosticViewPreset, QStringLiteral("用户请求应用诊断显示预设"));
+
     bindCamera(&Ribbon::RibbonBarWidget::signalResetCameraRequested, &Vtk::RobotVtkView::ResetCameraToCurrentScene, QStringLiteral("用户请求重置三维相机"));
     bindCamera(&Ribbon::RibbonBarWidget::signalCameraFrontViewRequested, &Vtk::RobotVtkView::SetFrontCameraView, QStringLiteral("用户请求切换至正视图"));
     bindCamera(&Ribbon::RibbonBarWidget::signalCameraSideViewRequested, &Vtk::RobotVtkView::SetSideCameraView, QStringLiteral("用户请求切换至侧视图"));

@@ -157,6 +157,15 @@ signals:
     /// @brief 请求设置中央三维视图中的屏幕角落方向坐标轴显示状态。
     void signalSetCornerAxesVisible(bool visible);
 
+    /// @brief 应用面向 DH/MDH 参数化设计的三维显示预设。
+    void signalApplyDesignViewPreset();
+
+    /// @brief 应用面向工程模型检查的三维显示预设。
+    void signalApplyEngineeringViewPreset();
+
+    /// @brief 应用面向坐标系与关节顺序诊断的三维显示预设。
+    void signalApplyDiagnosticViewPreset();
+
     /// @brief 请求重置中央三维视图相机。
     void signalResetCameraRequested();
 
@@ -209,6 +218,16 @@ private:
         void (RibbonBarWidget::*cameraSignal)());
     QToolButton* CreateDisabledButton(const QString& text, const QString& reason);
     QWidget* CreateButtonGroup(const QString& title, const QList<QToolButton*>& buttons);
+    void ApplyViewToggleState(
+        bool skeletonVisible,
+        bool visualMeshVisible,
+        bool collisionMeshVisible,
+        bool jointAxesVisible,
+        bool axesVisible,
+        bool groundGridVisible,
+        bool cornerAxesVisible,
+        bool linkLabelsVisible,
+        bool jointLabelsVisible);
 
 private:
     QTabWidget* m_tabs = nullptr;
@@ -235,6 +254,16 @@ private:
     QToolButton* m_dynamicsBuildFromKinematicsBtn = nullptr;
     QToolButton* m_dynamicsRunAnalysisBtn = nullptr;
     QToolButton* m_dynamicsSaveBtn = nullptr;
+
+    QToolButton* m_viewSkeletonToggleBtn = nullptr;
+    QToolButton* m_viewVisualMeshToggleBtn = nullptr;
+    QToolButton* m_viewCollisionMeshToggleBtn = nullptr;
+    QToolButton* m_viewJointAxesToggleBtn = nullptr;
+    QToolButton* m_viewAxesToggleBtn = nullptr;
+    QToolButton* m_viewGroundGridToggleBtn = nullptr;
+    QToolButton* m_viewCornerAxesToggleBtn = nullptr;
+    QToolButton* m_viewLinkLabelsToggleBtn = nullptr;
+    QToolButton* m_viewJointLabelsToggleBtn = nullptr;
 };
 
 } // namespace RoboSDP::Desktop::Ribbon

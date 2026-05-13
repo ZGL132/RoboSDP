@@ -8,6 +8,7 @@
 #include "modules/kinematics/service/KinematicsService.h"
 #include "modules/topology/persistence/TopologyJsonStorage.h"
 
+#include <QStringList>
 #include <QWidget>
 
 #include <array>
@@ -141,6 +142,9 @@ signals:
 private:
     void BuildUi();
     QWidget* CreateModelGroup();
+    QWidget* CreateDesignInputPage();
+    QWidget* CreateVerificationPage();
+    QWidget* CreateDiagnosticsPage();
     QGroupBox* CreateDhTableGroup();
     QGroupBox* CreateJointLimitGroup();
     QGroupBox* CreateSolverGroup();
@@ -161,6 +165,9 @@ private:
     void RefreshBackendDiagnostics();
     void RenderResults();
     void RefreshEditingState();
+    void RefreshValidationState();
+    QStringList BuildValidationIssues(const RoboSDP::Kinematics::Dto::KinematicModelDto& model) const;
+    void RefreshValidationHighlights(const RoboSDP::Kinematics::Dto::KinematicModelDto& model);
     void SetOperationMessage(const QString& message, bool success, bool warning = false);
     void EmitTelemetryStatus(const QString& engineName, const QString& message, bool warning);
     
@@ -226,6 +233,7 @@ private:
     QString m_preview_source_mode = QStringLiteral("none");
 
     QLabel* m_operation_label = nullptr;
+    QLabel* m_validation_label = nullptr;
 
     QLineEdit* m_model_name_edit = nullptr;
     QComboBox* m_parameter_convention_combo = nullptr;
@@ -295,6 +303,7 @@ private:
     /// @brief 结构化结果展示：各分类 QGroupBox 内的信息标签
     QLabel* m_result_model_label = nullptr;      // 模型概要
     QLabel* m_result_diag_label = nullptr;       // 诊断信息
+    QLabel* m_result_validation_label = nullptr; // 模型校验明细
     QLabel* m_result_fk_label = nullptr;         // FK 结果
     QLabel* m_result_fk_manipulability_label = nullptr; // 可操作度指标
     QLabel* m_result_ik_label = nullptr;         // IK 结果
