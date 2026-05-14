@@ -199,6 +199,29 @@ add_test(
         $<TARGET_FILE:robosdp_kinematics_workspace_switch_smoke>
 )
 
+add_executable(robosdp_kinematics_model_state_policy
+    KinematicModelStatePolicyTest.cpp
+)
+
+target_include_directories(robosdp_kinematics_model_state_policy
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}
+)
+
+target_link_libraries(robosdp_kinematics_model_state_policy
+    PRIVATE
+        Qt${QT_VERSION_MAJOR}::Core
+        robosdp_kinematics
+)
+
+add_test(
+    NAME robosdp_kinematics_model_state_policy
+    COMMAND
+        ${CMAKE_COMMAND} -E env
+        "PATH=${ROBOSDP_KINEMATICS_TEST_PATH}"
+        $<TARGET_FILE:robosdp_kinematics_model_state_policy>
+)
+
 # ── 信号路由综合测试 ──────────────────────────────────────
 # 验证 KinematicsWidget / TopologyWidget / DynamicsWidget 的 StatusChanged 信号发射
 # 以及 CanXxx() 方法初始返回值正确性

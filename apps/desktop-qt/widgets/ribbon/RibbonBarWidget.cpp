@@ -139,8 +139,8 @@ QWidget* RibbonBarWidget::CreateKinematicsTab()
     layout->setSpacing(8);
 
     m_kinematicsImportUrdfBtn = CreateActionButton(
-        QStringLiteral("导入 URDF"),
-        QStringLiteral("从文件系统导入 URDF 文件构建运动学模型。"));
+        QStringLiteral("导入工程 URDF"),
+        QStringLiteral("导入外部 URDF 作为工程参考，并生成只读 DH/MDH 诊断草案。"));
     connect(m_kinematicsImportUrdfBtn, &QToolButton::clicked, this, [this]() {
         emit signalKinematicsImportUrdf();
     });
@@ -153,15 +153,15 @@ QWidget* RibbonBarWidget::CreateKinematicsTab()
     });
 
     m_kinematicsPromoteDhBtn = CreateActionButton(
-        QStringLiteral("DH 主模型"),
-        QStringLiteral("提升当前 DH 草稿为主模型。"));
+        QStringLiteral("复制为 DH"),
+        QStringLiteral("仅将外部工程 URDF 的可信诊断草案复制为可编辑 DH/MDH 参数化设计模型。"));
     connect(m_kinematicsPromoteDhBtn, &QToolButton::clicked, this, [this]() {
         emit signalKinematicsPromoteToDhMaster();
     });
 
     m_kinematicsSwitchUrdfBtn = CreateActionButton(
-        QStringLiteral("URDF 主模型"),
-        QStringLiteral("切换回 URDF 主模型。"));
+        QStringLiteral("回到 URDF 参考"),
+        QStringLiteral("回到原始导入的工程 URDF 参考视图；DH 派生最小 URDF 仅用于交换/预览。"));
     connect(m_kinematicsSwitchUrdfBtn, &QToolButton::clicked, this, [this]() {
         emit signalKinematicsSwitchToUrdfMaster();
     });

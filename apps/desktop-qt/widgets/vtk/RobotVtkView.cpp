@@ -493,6 +493,17 @@ void RobotVtkView::SetJointLabelsVisible(bool visible)
     RefreshScene(false);
 }
 
+void RobotVtkView::SetTcpGizmoVisible(bool visible)
+{
+    if (m_showTcpGizmo == visible)
+    {
+        return;
+    }
+
+    m_showTcpGizmo = visible;
+    RefreshScene(false);
+}
+
 void RobotVtkView::ApplyDesignViewPreset()
 {
     m_showSkeleton = true;
@@ -504,6 +515,7 @@ void RobotVtkView::ApplyDesignViewPreset()
     m_showCornerAxes = true;
     m_showLinkLabels = false;
     m_showJointLabels = true;
+    m_showTcpGizmo = false;
     RefreshCornerAxesVisibility();
     RefreshScene(false);
 }
@@ -519,6 +531,7 @@ void RobotVtkView::ApplyEngineeringViewPreset()
     m_showCornerAxes = true;
     m_showLinkLabels = false;
     m_showJointLabels = false;
+    m_showTcpGizmo = false;
     RefreshCornerAxesVisibility();
     RefreshScene(false);
 }
@@ -534,6 +547,7 @@ void RobotVtkView::ApplyDiagnosticViewPreset()
     m_showCornerAxes = true;
     m_showLinkLabels = true;
     m_showJointLabels = true;
+    m_showTcpGizmo = false;
     RefreshCornerAxesVisibility();
     RefreshScene(false);
 }
@@ -908,7 +922,8 @@ void RobotVtkView::RefreshScene(bool resetCamera)
         // 🔼🔼🔼 🔼🔼🔼
 
         // ── 【逆向驱动】TCP 3D Gizmo 初始化（vtkBoxWidget2）────────────
-        if (m_currentScene.IsEmpty())
+        // 默认关闭：该控件表示“IK 目标拖拽”，不是机械臂尺寸编辑器，必须由显式交互模式打开。
+        if (m_currentScene.IsEmpty() || !m_showTcpGizmo)
         {
             // 空场景下禁用 Gizmo
             if (m_tcp_gizmo_widget != nullptr)
@@ -1146,7 +1161,7 @@ void RobotVtkView::RebuildLinkToJointMap()
 void RobotVtkView::EmitTcpDrag(vtkTransform* transform)
 {
 #if defined(ROBOSDP_HAVE_VTK)
-    if (transform == nullptr) return;
+    if (transform == nullptr || !m_showTcpGizmo) return;
 
     // 提取 vtkTransform 的位置和 Z-Y-X 欧拉角（VTK 原生格式）
     const double* pos = transform->GetPosition();

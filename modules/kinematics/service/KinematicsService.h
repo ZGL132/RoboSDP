@@ -316,9 +316,9 @@ namespace RoboSDP::Kinematics::Service
         /**
          * @brief 从 URDF 文件提取一份供只读展示的 DH/MDH 草案。
          * @details
-         * 该接口只服务“URDF 主模型 -> DH 诊断视图”链路：
+         * 该接口只服务“工程 URDF 参考 -> DH 诊断草案”链路：
          * 1. 尽可能从最小主干提取参数化草案；
-         * 2. 不改变当前主模型归属；
+         * 2. 不改变当前模型来源归属；
          * 3. 不承诺所有 URDF 都能无损映射成标准 DH/MDH。
          * @param urdfFilePath 待提取的 URDF 绝对路径
          * @return 提取结果与诊断级别
@@ -370,12 +370,12 @@ namespace RoboSDP::Kinematics::Service
 
     private:
         /**
-         * @brief 为 DH/MDH 主模型写出最小派生 URDF 文件，并回填统一主链快照中的产物状态。
+         * @brief 为 DH/MDH 参数化设计模型写出最小派生 URDF 文件，并回填统一主链快照中的产物状态。
          * @details
          * 第一阶段 / 第二阶段过渡期间，该 URDF 只承载主链关节拓扑和最小固定坐标系语义，
          * 不尝试导出真实 visual/collision/inertial 数据，避免给下游造成“高保真数字样机”错觉。
          * @param projectRootPath 当前项目根目录
-         * @param model 当前 DH/MDH 主模型
+         * @param model 当前 DH/MDH 参数化设计模型
          * @param snapshot 待回填的统一主链快照
          * @param diagnosticMessage 输出给调用方的中文诊断信息
          * @return 文件写出错误码

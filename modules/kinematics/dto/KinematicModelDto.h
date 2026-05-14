@@ -95,12 +95,12 @@ struct KinematicModelDto
     bool urdf_editable = false;
 
     /// @brief 记录主模型与派生模型之间的转换诊断摘要，供 UI 和日志提示用户当前同步语义。
-    QString conversion_diagnostics = QStringLiteral("当前草稿以 DH/MDH 参数为主模型。");
+    QString conversion_diagnostics = QStringLiteral("当前设计真源为 DH/MDH 参数化模型。");
 
     /// @brief 当主模型为 URDF 且页面展示 DH/MDH 草案时，标记提取可信度：full / partial / diagnostic_only。
     QString dh_draft_extraction_level;
 
-    /// @brief 当 DH/MDH 草案只读时，向 UI 提供明确原因，避免用户误以为参数修改会直接反写 URDF 主模型。
+    /// @brief 当 DH/MDH 草案只读时，向 UI 提供明确原因，避免用户误以为参数修改会直接反写工程 URDF 参考。
     QString dh_draft_readonly_reason;
 
     /// @brief 当前模型采用的建模语义模式，用于区分 DH、MDH 还是 URDF 导入模型。
@@ -121,10 +121,10 @@ struct KinematicModelDto
     /// @brief 当建模模式为 URDF 时，记录原始 URDF 文件路径，便于重新导入和问题定位。
     QString urdf_source_path;
 
-    /// @brief 记录用户最初导入的外部 URDF 文件路径，供后续从 DH/MDH 主模型回切时区分“原始导入”与“项目派生”来源。
+    /// @brief 记录用户最初导入的外部 URDF 文件路径，供后续从 DH/MDH 参数化设计回到参考视图时区分“原始导入”与“项目派生”来源。
     QString original_imported_urdf_path;
 
-    /// @brief 标记当前 URDF 主模型来源类型：original_imported / project_derived / none。
+    /// @brief 标记当前 URDF 参考来源类型：original_imported / project_derived / none。
     QString urdf_master_source_type = QStringLiteral("none");
 
     /// @brief 标记共享 Pinocchio 内部模型是否已准备完成，防止上层流程误判后端已切换。

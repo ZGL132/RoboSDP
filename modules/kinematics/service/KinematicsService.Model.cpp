@@ -277,7 +277,7 @@ RoboSDP::Errors::ErrorCode KinematicsService::WriteDerivedUrdfArtifact(
     snapshot.derived_artifact_state_code = QStringLiteral("file_generated");
     snapshot.derived_artifact_exists = writtenFileInfo.exists();
     snapshot.derived_artifact_fresh = writtenFileInfo.exists();
-    diagnosticMessage = QStringLiteral("当前草稿以 DH/MDH 参数为主模型，派生 URDF 已写出：%1")
+    diagnosticMessage = QStringLiteral("当前设计真源为 DH/MDH 参数化模型，派生最小 URDF 已写出：%1")
         .arg(snapshot.derived_artifact_relative_path);
     return RoboSDP::Errors::ErrorCode::Ok;
 #else

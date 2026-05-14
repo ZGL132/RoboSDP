@@ -62,15 +62,15 @@ public:
     /// @brief 返回当前 Kinematics 页面是否存在未保存变更。
     bool HasUnsavedChanges() const override;
 
-    /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有"导入 URDF"流程，不在 MainWindow 中复制业务逻辑。
+    /// @brief 供顶部 Ribbon 调用的受控入口：复用页面现有"导入工程 URDF"流程，不在 MainWindow 中复制业务逻辑。
     void TriggerImportUrdf();
 
     // ── 以下方法由 RibbonBarWidget 工具按钮信号触发，委托到内部槽函数 ──
     /// @brief Ribbon 接口：从拓扑构型构建运动学。
     void TriggerBuildFromTopology() { OnBuildFromTopologyClicked(); }
-    /// @brief Ribbon 接口：提升为 DH 主模型。
+    /// @brief Ribbon 接口：复制 URDF 诊断草案为 DH/MDH 参数化设计模型。
     void TriggerPromoteToDhMaster() { OnPromoteDhDraftToMasterClicked(); }
-    /// @brief Ribbon 接口：切换回 URDF 主模型。
+    /// @brief Ribbon 接口：回到原始导入的工程 URDF 参考视图。
     void TriggerSwitchToUrdfMaster() { OnSwitchToUrdfMasterClicked(); }
     /// @brief Ribbon 接口：执行正运动学求解。
     void TriggerRunFk() { OnRunFkClicked(); }
@@ -82,13 +82,13 @@ public:
     void TriggerSaveDraft() { OnSaveDraftClicked(); }
 
     // ── Ribbon 按钮状态查询 ──────────────────────────────────
-    /// @brief 查询是否可导入 URDF（通常始终可用）。
+    /// @brief 查询是否可导入工程 URDF（通常始终可用）。
     bool CanImportUrdf() const { return true; }
     /// @brief 查询是否可从拓扑构型构建运动学。
     bool CanBuildFromTopology() const;
-    /// @brief 查询是否可提升为 DH 主模型。
+    /// @brief 查询是否可复制 URDF 诊断草案为 DH/MDH 参数化设计模型。
     bool CanPromoteToDhMaster() const;
-    /// @brief 查询是否可切换回 URDF 主模型。
+    /// @brief 查询是否可回到原始导入的工程 URDF 参考视图。
     bool CanSwitchToUrdfMaster() const;
     /// @brief 查询是否可执行正运动学（模型已加载）。
     bool CanRunFk() const;
@@ -205,6 +205,8 @@ private:
 
     void OnImportUrdfClicked();
     void OnBuildFromTopologyClicked();
+    void OnCopyUrdfDraftToDhClicked();
+    void OnReturnToUrdfReferenceClicked();
     void OnPromoteDhDraftToMasterClicked();
     void OnSwitchToUrdfMasterClicked();
     void OnRunFkClicked();

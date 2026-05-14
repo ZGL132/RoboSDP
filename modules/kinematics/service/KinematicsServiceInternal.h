@@ -151,8 +151,8 @@ inline QString BuildPreviewJointOrderSignature(const RoboSDP::Kinematics::Dto::K
 inline QString DefaultConversionDiagnostics(const QString& masterModelType)
 {
     return masterModelType == QStringLiteral("urdf")
-        ? QStringLiteral("当前预览由导入 URDF 驱动，DH/MDH 参数仅作为后续派生入口。")
-        : QStringLiteral("当前草稿以 DH/MDH 参数为主模型，中央三维显示派生骨架预览。");
+        ? QStringLiteral("当前预览由工程 URDF 参考驱动，DH/MDH 参数仅作为只读诊断草案。")
+        : QStringLiteral("当前设计真源为 DH/MDH 参数化模型，中央三维显示派生骨架预览。");
 }
 
 /// 将角度从度转为弧度。与 Pinocchio 无关的纯数学函数。
@@ -311,11 +311,11 @@ inline QString BuildDhUnifiedChainDiagnostics(
     const RoboSDP::Kinematics::Dto::KinematicBackendBuildContextResultDto& backendContext)
 {
     if (backendContext.IsSuccess() && backendContext.status.shared_robot_kernel_ready)
-        return QStringLiteral("当前草稿以 DH/MDH 参数为主模型，统一工程主链已同步到共享 Pinocchio 内核。");
+        return QStringLiteral("当前设计真源为 DH/MDH 参数化模型，统一工程主链已同步到共享 Pinocchio 内核。");
     const QString reason = backendContext.status.status_message.trimmed();
     if (!reason.isEmpty())
-        return QStringLiteral("当前草稿以 DH/MDH 参数为主模型，但统一工程主链尚未就绪：%1").arg(reason);
-    return QStringLiteral("当前草稿以 DH/MDH 参数为主模型，但统一工程主链尚未就绪。");
+        return QStringLiteral("当前设计真源为 DH/MDH 参数化模型，但统一工程主链尚未就绪：%1").arg(reason);
+    return QStringLiteral("当前设计真源为 DH/MDH 参数化模型，但统一工程主链尚未就绪。");
 }
 
 /// @brief 生成最小 link XML 片段。

@@ -1,6 +1,10 @@
 add_library(robosdp_kinematics STATIC
+    ${PROJECT_SOURCE_DIR}/apps/desktop-qt/widgets/common/CollapsibleSectionWidget.h
+    ${PROJECT_SOURCE_DIR}/apps/desktop-qt/widgets/common/CollapsibleSectionWidget.cpp
     ${PROJECT_SOURCE_DIR}/core/kinematics/SharedRobotKernelRegistry.h
     ${PROJECT_SOURCE_DIR}/core/kinematics/SharedRobotKernelRegistry.cpp
+    domain/KinematicModelStatePolicy.h
+    domain/KinematicModelStatePolicy.cpp
     dto/KinematicBackendBuildContextDto.h
     dto/KinematicModelDto.h
     dto/KinematicSolverResultDto.h

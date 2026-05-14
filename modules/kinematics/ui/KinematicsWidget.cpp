@@ -2,6 +2,7 @@
 #include "apps/desktop-qt/widgets/common/CollapsibleSectionWidget.h"
 
 #include "core/infrastructure/ProjectManager.h"
+#include "modules/kinematics/domain/KinematicModelStatePolicy.h"
 
 #include <QAbstractItemView>
 #include <QBrush>
@@ -63,13 +64,6 @@ QString FormatReadyState(bool ready)
     return ready ? QStringLiteral("就绪") : QStringLiteral("未就绪");
 }
 
-QString FormatMasterModelType(const QString& masterModelType)
-{
-    return masterModelType == QStringLiteral("urdf")
-        ? QStringLiteral("URDF")
-        : QStringLiteral("DH/MDH");
-}
-
 QString FormatDerivedModelState(const QString& derivedModelState)
 {
     if (derivedModelState == QStringLiteral("stale"))
@@ -100,15 +94,19 @@ QString FormatMasterSwitchState(
     const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
     const QString& previewSourceMode)
 {
-    if (model.master_model_type == QStringLiteral("urdf") && !model.dh_editable)
+    if (RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::IsImportedUrdfReference(model))
     {
-        return QStringLiteral("URDF 主模型 / DH 草案只读");
+        if (model.urdf_master_source_type == QStringLiteral("project_derived"))
+        {
+            return QStringLiteral("DH 派生最小 URDF 预览 / 只读不可复制");
+        }
+        return QStringLiteral("工程 URDF 参考 / DH 诊断草案只读");
     }
-    if (model.master_model_type == QStringLiteral("dh_mdh") && model.dh_editable)
+    if (RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::IsDhParametric(model))
     {
         return previewSourceMode == QStringLiteral("dh_preview")
-            ? QStringLiteral("DH/MDH 主模型 / 骨架主链驱动")
-            : QStringLiteral("DH/MDH 主模型 / 等待骨架同步");
+            ? QStringLiteral("DH/MDH 参数化设计 / 骨架驱动")
+            : QStringLiteral("DH/MDH 参数化设计 / 等待骨架同步");
     }
     return QStringLiteral("状态待确认");
 }
@@ -447,7 +445,8 @@ void KinematicsWidget::BuildUi()
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
     tabs->addTab(CreateScrollableTab(CreateDesignInputPage()), QStringLiteral("设计输入"));
-    tabs->addTab(CreateScrollableTab(CreateVerificationPage()), QStringLiteral("求解验证"));
+    tabs->addTab(CreateScrollableTab(CreateVerificationPage()), QStringLiteral("位姿验证(FK/IK)"));
+    tabs->addTab(CreateScrollableTab(CreateAdvancedAnalysisPage()), QStringLiteral("空间与性能分析"));
     tabs->addTab(CreateScrollableTab(CreateDiagnosticsPage()), QStringLiteral("结果诊断"));
 
     rootLayout->addWidget(m_operation_label);
@@ -486,8 +485,13 @@ QWidget* KinematicsWidget::CreateDesignInputPage()
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
     layout->addWidget(CreateModelGroup());
-    layout->addWidget(CreateDhTableGroup());
-    layout->addWidget(CreateJointLimitGroup());
+
+    auto* tableTabs = new QTabWidget(page);
+    tableTabs->setDocumentMode(true);
+    tableTabs->addTab(CreateDhTableGroup(), QStringLiteral("DH 参数"));
+    tableTabs->addTab(CreateJointLimitGroup(), QStringLiteral("关节限位"));
+    layout->addWidget(tableTabs);
+
     layout->addStretch();
     return page;
 }
@@ -548,6 +552,7 @@ QWidget* KinematicsWidget::CreateModelGroup()
     // 1. Basic properties
     auto* basicPropsWidget = new QWidget(pageWidget);
     auto* formLayout = new QFormLayout(basicPropsWidget);
+    formLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_model_name_edit = new QLineEdit(basicPropsWidget);
     m_parameter_convention_combo = new QComboBox(basicPropsWidget);
     m_parameter_convention_combo->addItem(QStringLiteral("DH"), QStringLiteral("DH"));
@@ -615,14 +620,16 @@ QWidget* KinematicsWidget::CreateModelGroup()
     framesLayout->addWidget(toolGroup, 1, 1);
     framesLayout->addWidget(tcpGroup, 2, 1);
 
-    auto* framesSection = new QGroupBox(QStringLiteral("物理坐标系设置"), pageWidget);
-    auto* fsLayout = new QVBoxLayout(framesSection); fsLayout->addWidget(framesWidget);
-    
+    auto* framesSection = new CollapsibleSectionWidget(QStringLiteral("物理坐标系设置"), pageWidget);
+    framesSection->SetContent(framesWidget);
+    framesSection->SetCollapsed(false);
+
     pageLayout->addWidget(framesSection);
 
     // 3. Debug / Metadata section
     auto* debugWidget = new QWidget(pageWidget);
     auto* debugForm = new QFormLayout(debugWidget);
+    debugForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
     
     m_topology_ref_edit = new QLineEdit(debugWidget);
     m_topology_ref_edit->setReadOnly(true);
@@ -638,17 +645,17 @@ QWidget* KinematicsWidget::CreateModelGroup()
     
     debugForm->addRow(QStringLiteral("Topology 引用"), m_topology_ref_edit);
     debugForm->addRow(QStringLiteral("Requirement 引用"), m_requirement_ref_edit);
-    debugForm->addRow(QStringLiteral("主控模型模式"), m_master_model_mode_label);
+    debugForm->addRow(QStringLiteral("当前设计真源"), m_master_model_mode_label);
     debugForm->addRow(QStringLiteral("派生状态"), m_derived_model_state_label);
     debugForm->addRow(QStringLiteral("预览数据源"), m_preview_source_label);
-    debugForm->addRow(QStringLiteral("主模型切换状态"), m_master_switch_state_label);
+    debugForm->addRow(QStringLiteral("模型来源说明"), m_master_switch_state_label);
     debugForm->addRow(QStringLiteral("URDF 来源类型"), m_urdf_source_type_label);
-    debugForm->addRow(QStringLiteral("DH 草稿提取级别"), m_dh_draft_level_label);
-    debugForm->addRow(QStringLiteral("DH 草稿状态"), m_dh_draft_status_label);
+    debugForm->addRow(QStringLiteral("DH 诊断草案级别"), m_dh_draft_level_label);
+    debugForm->addRow(QStringLiteral("DH 诊断草案状态"), m_dh_draft_status_label);
 
-    auto* debugSection = new QGroupBox(QStringLiteral("模型诊断与高级属性 (调试)"), pageWidget);
-    auto* dsLayout = new QVBoxLayout(debugSection); dsLayout->addWidget(debugWidget);
-    debugSection->setCheckable(true); debugSection->setChecked(false); // 模拟折叠
+    auto* debugSection = new CollapsibleSectionWidget(QStringLiteral("模型诊断与高级属性 (调试)"), pageWidget);
+    debugSection->SetContent(debugWidget);
+    debugSection->SetCollapsed(true);
     pageLayout->addWidget(debugSection);
 
     pageLayout->addStretch();
@@ -710,18 +717,11 @@ QGroupBox* KinematicsWidget::CreateJointLimitGroup()
 
 QGroupBox* KinematicsWidget::CreateSolverGroup()
 {
-    auto* groupBox = new QGroupBox(QStringLiteral("正逆解与验证"), this);
+    auto* groupBox = new QGroupBox(QStringLiteral("位姿验证与关节示教"), this);
     auto* layout = new QVBoxLayout(groupBox);
 
     auto* interactivePage = CreateInteractivePage();
     layout->addWidget(interactivePage);
-
-    auto* advBox = new QGroupBox(QStringLiteral("高级分析 (工作空间、奇异性等)"));
-    advBox->setCheckable(true);
-    advBox->setChecked(false);
-    auto* advLayout = new QVBoxLayout(advBox);
-    advLayout->addWidget(CreateAdvancedAnalysisPage());
-    layout->addWidget(advBox);
 
     return groupBox;
 }
@@ -732,6 +732,7 @@ QWidget* KinematicsWidget::CreateSolverConfigPage()
     auto* layout = new QVBoxLayout(page);
 
     auto* solverLayout = new QFormLayout();
+    solverLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_solver_type_combo = new QComboBox(page);
     m_solver_type_combo->addItem(QStringLiteral("数值雅可比转置"), QStringLiteral("numeric_jacobian_transpose"));
     m_solver_type_combo->addItem(QStringLiteral("闭式解析求解器"), QStringLiteral("analytical_closed_form"));
@@ -757,16 +758,25 @@ QWidget* KinematicsWidget::CreateInteractivePage()
 {
     auto* page = new QWidget(this);
     auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(10);
 
-    // ── 滚轮灵敏度设置 ──────────────────────────────────────
-    auto* sensitivityLayout = new QFormLayout();
+    auto* fkGroup = new QGroupBox(QStringLiteral("正运动学与关节示教 (FK)"), page);
+    auto* fkLayout = new QVBoxLayout(fkGroup);
+
+    auto* fkHeaderLayout = new QHBoxLayout();
+    auto* fkHintLabel = new QLabel(QStringLiteral("逐关节拖动滑块或输入角度，中央骨架会实时刷新。"), fkGroup);
+    fkHintLabel->setWordWrap(true);
+    fkHeaderLayout->addWidget(fkHintLabel, 1);
     m_scroll_step_spin = CreateDoubleSpinBox(0.1, 10.0, 1, 0.1);
     m_scroll_step_spin->setValue(1.0);
     m_scroll_step_spin->setToolTip(QStringLiteral(
         "设置鼠标滚轮每格对应的关节角度增量（度/格）。\n"
         "同时同步影响 FK 关节输入框的上下箭头步进值。"));
-    sensitivityLayout->addRow(QStringLiteral("滚轮灵敏度 [°/格]"), m_scroll_step_spin);
-    layout->addLayout(sensitivityLayout);
+    auto* sensitivityLabel = new QLabel(QStringLiteral("滚轮灵敏度 [°/格]"), fkGroup);
+    fkHeaderLayout->addWidget(sensitivityLabel);
+    fkHeaderLayout->addWidget(m_scroll_step_spin);
+    fkLayout->addLayout(fkHeaderLayout);
 
     // 灵敏度值变更 → 同步 FK 输入框步进 + 通知 3D 视图
     connect(m_scroll_step_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
@@ -777,21 +787,31 @@ QWidget* KinematicsWidget::CreateInteractivePage()
 
     // FK 关节输入网格
     m_fk_grid = new QGridLayout();
-    m_fk_grid->addWidget(new QLabel(QStringLiteral("FK 关节输入 [deg]"), page), 0, 0, 1, 10);
-    layout->addLayout(m_fk_grid);
+    m_fk_grid->setColumnStretch(2, 1);
+    m_fk_grid->setHorizontalSpacing(8);
+    m_fk_grid->setVerticalSpacing(6);
+    m_fk_grid->addWidget(new QLabel(QStringLiteral("关节"), fkGroup), 0, 0);
+    m_fk_grid->addWidget(new QLabel(QStringLiteral("角度 [deg]"), fkGroup), 0, 1);
+    m_fk_grid->addWidget(new QLabel(QStringLiteral("滑块"), fkGroup), 0, 2);
+    m_fk_grid->addWidget(new QLabel(QStringLiteral("裕量"), fkGroup), 0, 3);
+    fkLayout->addLayout(m_fk_grid);
 
-    // IK 种子关节输入网格
-    m_ik_seed_grid = new QGridLayout();
-    m_ik_seed_grid->addWidget(new QLabel(QStringLiteral("IK 种子关节 [deg]"), page), 0, 0, 1, 10);
-    layout->addLayout(m_ik_seed_grid);
+    auto* fkButtonRow = new QHBoxLayout();
+    fkButtonRow->addStretch();
+    auto* runFkButton = new QPushButton(QStringLiteral("执行 FK 求解"), fkGroup);
+    runFkButton->setToolTip(QStringLiteral("使用当前关节角计算 TCP 位姿，并更新结果诊断。"));
+    connect(runFkButton, &QPushButton::clicked, this, &KinematicsWidget::OnRunFkClicked);
+    fkButtonRow->addWidget(runFkButton);
+    fkLayout->addLayout(fkButtonRow);
+    layout->addWidget(fkGroup);
 
-    AdjustJointInputCount(6);
+    auto* ikGroup = new QGroupBox(QStringLiteral("逆运动学与目标位姿 (IK)"), page);
+    auto* ikLayout = new QVBoxLayout(ikGroup);
+    ikLayout->setSpacing(8);
 
-    // IK 目标位姿输入
-    auto* targetAndConfigLayout = new QHBoxLayout();
-    
     auto* ikTargetGrid = new QGridLayout();
-    ikTargetGrid->addWidget(new QLabel(QStringLiteral("IK 目标位姿"), page), 0, 0, 1, 6);
+    ikTargetGrid->setColumnStretch(1, 1);
+    ikTargetGrid->setColumnStretch(3, 1);
     const QStringList poseLabels {
         QStringLiteral("X [m]"),
         QStringLiteral("Y [m]"),
@@ -811,23 +831,51 @@ QWidget* KinematicsWidget::CreateInteractivePage()
             ? QStringLiteral("位置单位为 m。常规工业机械臂建议保持在 ±10 m 以内。")
             : QStringLiteral("姿态单位为 deg，使用 RPY 欧拉角。"));
         m_ik_target_pose_spins[static_cast<std::size_t>(index)] = spinBox;
-        ikTargetGrid->addWidget(new QLabel(poseLabels.at(index), page), 1, index);
-        ikTargetGrid->addWidget(spinBox, 2, index);
+        const int row = index % 3;
+        const int labelColumn = index < 3 ? 0 : 2;
+        const int editorColumn = index < 3 ? 1 : 3;
+        ikTargetGrid->addWidget(new QLabel(poseLabels.at(index), ikGroup), row, labelColumn);
+        ikTargetGrid->addWidget(spinBox, row, editorColumn);
     }
-    
-    targetAndConfigLayout->addLayout(ikTargetGrid, 2);
+    ikLayout->addLayout(ikTargetGrid);
 
-    auto* solverConfigBox = new QGroupBox(QStringLiteral("⚙️ 求解器设置"));
-    solverConfigBox->setCheckable(true);
-    solverConfigBox->setChecked(false);
-    auto* scLayout = new QVBoxLayout(solverConfigBox);
-    scLayout->addWidget(CreateSolverConfigPage());
-    targetAndConfigLayout->addWidget(solverConfigBox, 1);
+    auto* ikActionRow = new QHBoxLayout();
+    auto* fillFromFkButton = new QPushButton(QStringLiteral("填入当前 FK 结果"), ikGroup);
+    fillFromFkButton->setToolTip(QStringLiteral("将最近一次 FK 结果填入 IK 目标位姿，并把当前关节角作为 IK 种子。"));
+    connect(fillFromFkButton, &QPushButton::clicked, this, &KinematicsWidget::FillIkTargetFromFkResult);
+    auto* runIkButton = new QPushButton(QStringLiteral("执行 IK 求解"), ikGroup);
+    runIkButton->setToolTip(QStringLiteral("求解目标位姿对应的关节角。"));
+    runIkButton->setStyleSheet(QStringLiteral(
+        "QPushButton { background:#2563eb; color:white; border:none; border-radius:4px; padding:6px 10px; font-weight:bold; }"
+        "QPushButton:hover { background:#1d4ed8; }"
+        "QPushButton:pressed { background:#1e40af; }"));
+    connect(runIkButton, &QPushButton::clicked, this, &KinematicsWidget::OnRunIkClicked);
+    ikActionRow->addWidget(fillFromFkButton);
+    ikActionRow->addStretch();
+    ikActionRow->addWidget(runIkButton);
+    ikLayout->addLayout(ikActionRow);
 
-    layout->addLayout(targetAndConfigLayout);
+    auto* advancedContent = new QWidget(ikGroup);
+    auto* advancedLayout = new QVBoxLayout(advancedContent);
+    advancedLayout->setContentsMargins(8, 6, 8, 6);
+    advancedLayout->setSpacing(8);
+
+    m_ik_seed_grid = new QGridLayout();
+    m_ik_seed_grid->setHorizontalSpacing(6);
+    m_ik_seed_grid->setVerticalSpacing(4);
+    m_ik_seed_grid->addWidget(new QLabel(QStringLiteral("IK 种子关节 [deg]"), advancedContent), 0, 0, 1, 6);
+    advancedLayout->addLayout(m_ik_seed_grid);
+    advancedLayout->addWidget(CreateSolverConfigPage());
+
+    auto* advancedIkSection = new CollapsibleSectionWidget(QStringLiteral("高级求解参数 (IK Seed & Solver)"), ikGroup);
+    advancedIkSection->SetContent(advancedContent);
+    advancedIkSection->SetCollapsed(true);
+    ikLayout->addWidget(advancedIkSection);
+
+    AdjustJointInputCount(6);
 
     // ── IK 多解浏览器 ─────────────────────────────────────────
-    auto* solutionGroup = new QGroupBox(QStringLiteral("IK 多解浏览器"), page);
+    auto* solutionGroup = new QGroupBox(QStringLiteral("IK 多解浏览器"), ikGroup);
     auto* solutionLayout = new QVBoxLayout(solutionGroup);
     m_ik_solution_combo = new QComboBox(solutionGroup);
     m_ik_solution_combo->setEnabled(false);
@@ -854,6 +902,8 @@ QWidget* KinematicsWidget::CreateInteractivePage()
     solutionLayout->addLayout(comboRow);
 
     auto* solutionGrid = new QGridLayout();
+    solutionGrid->setColumnStretch(1, 1);
+    solutionGrid->setColumnStretch(3, 1);
     // 预创建 6 个只读关节角 spinbox
     for (int i = 0; i < 6; ++i)
     {
@@ -862,8 +912,11 @@ QWidget* KinematicsWidget::CreateInteractivePage()
         spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
         spin->setStyleSheet(QStringLiteral("background: #f0f0f0; color: #333;"));
         m_ik_solution_spins.push_back(spin);
-        solutionGrid->addWidget(new QLabel(QStringLiteral("J%1").arg(i + 1), solutionGroup), 0, i);
-        solutionGrid->addWidget(spin, 1, i);
+        const int row = i / 2;
+        const int labelColumn = (i % 2) * 2;
+        const int editorColumn = labelColumn + 1;
+        solutionGrid->addWidget(new QLabel(QStringLiteral("J%1").arg(i + 1), solutionGroup), row, labelColumn);
+        solutionGrid->addWidget(spin, row, editorColumn);
     }
     solutionLayout->addLayout(solutionGrid);
 
@@ -879,7 +932,8 @@ QWidget* KinematicsWidget::CreateInteractivePage()
             }
         });
 
-    layout->addWidget(solutionGroup);
+    ikLayout->addWidget(solutionGroup);
+    layout->addWidget(ikGroup);
 
     layout->addStretch();
     return page;
@@ -889,36 +943,52 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
 {
     auto* page = new QWidget(this);
     auto* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(10);
 
-    // ── 工作空间采样与奇异阈值 ──────────────────────────────
+    // ── 工作空间采样与奇异区分析 ──────────────────────────────
+    auto* workspaceGroup = new QGroupBox(QStringLiteral("工作空间采样与奇异区分析"), page);
+    auto* workspaceRootLayout = new QVBoxLayout(workspaceGroup);
+
     auto* workspaceLayout = new QFormLayout();
-    m_workspace_sample_count_spin = new QSpinBox(page);
+    workspaceLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_workspace_sample_count_spin = new QSpinBox(workspaceGroup);
     m_workspace_sample_count_spin->setRange(1, 100000);
     m_workspace_sample_count_spin->setValue(128);
     workspaceLayout->addRow(QStringLiteral("采样点数"), m_workspace_sample_count_spin);
-    m_singularity_threshold_spin = new QDoubleSpinBox(page);
+    m_singularity_threshold_spin = new QDoubleSpinBox(workspaceGroup);
     m_singularity_threshold_spin->setRange(1.0, 100000.0);
     m_singularity_threshold_spin->setDecimals(0);
     m_singularity_threshold_spin->setValue(1000.0);
     m_singularity_threshold_spin->setToolTip(QStringLiteral("条件数 κ 阈值：κ > 此值标记为奇异（越小越敏感）"));
     workspaceLayout->addRow(QStringLiteral("奇异阈值 κ"), m_singularity_threshold_spin);
-    layout->addLayout(workspaceLayout);
+    workspaceRootLayout->addLayout(workspaceLayout);
 
-    // 奇异区分析按钮
-    auto* singularityBtn = new QPushButton(QStringLiteral("奇异区分析"), page);
+    auto* workspaceButtonRow = new QHBoxLayout();
+    auto* workspaceBtn = new QPushButton(QStringLiteral("采样工作空间"), workspaceGroup);
+    workspaceBtn->setToolTip(QStringLiteral("按当前关节限位采样 TCP 可达点云。"));
+    connect(workspaceBtn, &QPushButton::clicked, this, &KinematicsWidget::OnSampleWorkspaceClicked);
+    auto* singularityBtn = new QPushButton(QStringLiteral("奇异区分析"), workspaceGroup);
     singularityBtn->setToolTip(QStringLiteral("对工作空间进行带 Jacobian 条件数分析的采样，识别奇异区域。"));
     connect(singularityBtn, &QPushButton::clicked, this, &KinematicsWidget::OnSingularityAnalysisClicked);
-    layout->addWidget(singularityBtn);
-    m_singularity_result_label = new QLabel(QStringLiteral("尚未分析"), page);
+    workspaceButtonRow->addWidget(workspaceBtn);
+    workspaceButtonRow->addWidget(singularityBtn);
+    workspaceRootLayout->addLayout(workspaceButtonRow);
+
+    m_singularity_result_label = new QLabel(QStringLiteral("尚未分析"), workspaceGroup);
     m_singularity_result_label->setWordWrap(true);
     m_singularity_result_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    layout->addWidget(m_singularity_result_label);
+    m_singularity_result_label->setStyleSheet(QStringLiteral("color:#475467; background:#f8fafc; padding:6px; border-radius:4px;"));
+    workspaceRootLayout->addWidget(m_singularity_result_label);
+
+    layout->addWidget(workspaceGroup);
 
     // ── 关键工位可达性检测 ─────────────────────────────────────
     auto* reachGroup = new QGroupBox(QStringLiteral("关键工位可达性检测"), page);
     auto* reachLayout = new QVBoxLayout(reachGroup);
     auto* reachTargetGrid = new QGridLayout();
-    reachTargetGrid->addWidget(new QLabel(QStringLiteral("目标位姿"), reachGroup), 0, 0, 1, 6);
+    reachTargetGrid->setColumnStretch(1, 1);
+    reachTargetGrid->setColumnStretch(3, 1);
     const QStringList reachLabels {
         QStringLiteral("X [m]"), QStringLiteral("Y [m]"), QStringLiteral("Z [m]"),
         QStringLiteral("RX [deg]"), QStringLiteral("RY [deg]"), QStringLiteral("RZ [deg]")};
@@ -934,8 +1004,11 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
             ? QStringLiteral("位置单位为 m。常规工业机械臂建议保持在 ±10 m 以内。")
             : QStringLiteral("姿态单位为 deg，使用 RPY 欧拉角。"));
         m_reach_target_spins[idx] = spin;
-        reachTargetGrid->addWidget(new QLabel(reachLabels.at(idx), reachGroup), 1, idx);
-        reachTargetGrid->addWidget(spin, 2, idx);
+        const int row = idx % 3;
+        const int labelColumn = idx < 3 ? 0 : 2;
+        const int editorColumn = idx < 3 ? 1 : 3;
+        reachTargetGrid->addWidget(new QLabel(reachLabels.at(idx), reachGroup), row, labelColumn);
+        reachTargetGrid->addWidget(spin, row, editorColumn);
     }
     reachLayout->addLayout(reachTargetGrid);
 
@@ -943,10 +1016,7 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
     auto* reachCheckBtn = new QPushButton(QStringLiteral("检测可达性"), reachGroup);
     connect(reachCheckBtn, &QPushButton::clicked, this, &KinematicsWidget::OnCheckReachabilityClicked);
     reachBtnRow->addWidget(reachCheckBtn);
-    m_reach_result_label = new QLabel(QStringLiteral("尚未检测"), reachGroup);
-    m_reach_result_label->setWordWrap(true);
-    m_reach_result_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    reachBtnRow->addWidget(m_reach_result_label, 1);
+    reachBtnRow->addStretch();
     reachLayout->addLayout(reachBtnRow);
 
     // 种子数量设置
@@ -957,21 +1027,29 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
     reachSeedLayout->addRow(QStringLiteral("种子数"), m_reach_seed_count_spin);
     reachLayout->addLayout(reachSeedLayout);
 
+    m_reach_result_label = new QLabel(QStringLiteral("尚未检测"), reachGroup);
+    m_reach_result_label->setWordWrap(true);
+    m_reach_result_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_reach_result_label->setStyleSheet(QStringLiteral("color:#475467; background:#f8fafc; padding:6px; border-radius:4px;"));
+    reachLayout->addWidget(m_reach_result_label);
+
     layout->addWidget(reachGroup);
 
     // ── 姿态可达性分析 ──────────────────────────────────────
     auto* orientGroup = new QGroupBox(QStringLiteral("姿态可达性分析"), page);
     auto* orientLayout = new QVBoxLayout(orientGroup);
     auto* orientPosGrid = new QGridLayout();
-    orientPosGrid->addWidget(new QLabel(QStringLiteral("TCP 位置"), orientGroup), 0, 0, 1, 3);
+    orientPosGrid->setColumnStretch(1, 1);
+    orientPosGrid->setColumnStretch(3, 1);
+    orientPosGrid->setColumnStretch(5, 1);
     const QStringList posLabels {QStringLiteral("X [m]"), QStringLiteral("Y [m]"), QStringLiteral("Z [m]")};
     for (int idx = 0; idx < 3; ++idx)
     {
         auto* spin = CreateDoubleSpinBox(-10.0, 10.0, 4, 0.001);
         spin->setToolTip(QStringLiteral("位置单位为 m。常规工业机械臂建议保持在 ±10 m 以内。"));
         m_orient_pos_spins[idx] = spin;
-        orientPosGrid->addWidget(new QLabel(posLabels.at(idx), orientGroup), 1, idx);
-        orientPosGrid->addWidget(spin, 2, idx);
+        orientPosGrid->addWidget(new QLabel(posLabels.at(idx), orientGroup), 0, idx * 2);
+        orientPosGrid->addWidget(spin, 0, idx * 2 + 1);
     }
     orientLayout->addLayout(orientPosGrid);
 
@@ -991,11 +1069,14 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
     auto* orientCheckBtn = new QPushButton(QStringLiteral("分析姿态可达性"), orientGroup);
     connect(orientCheckBtn, &QPushButton::clicked, this, &KinematicsWidget::OnOrientationReachabilityClicked);
     orientBtnRow->addWidget(orientCheckBtn);
+    orientBtnRow->addStretch();
+    orientLayout->addLayout(orientBtnRow);
+
     m_orient_result_label = new QLabel(QStringLiteral("尚未分析"), orientGroup);
     m_orient_result_label->setWordWrap(true);
     m_orient_result_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    orientBtnRow->addWidget(m_orient_result_label, 1);
-    orientLayout->addLayout(orientBtnRow);
+    m_orient_result_label->setStyleSheet(QStringLiteral("color:#475467; background:#f8fafc; padding:6px; border-radius:4px;"));
+    orientLayout->addWidget(m_orient_result_label);
 
     layout->addWidget(orientGroup);
 
@@ -1157,26 +1238,20 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsWidget::CollectModelFromFo
     model.ik_solver_config.orientation_tolerance_deg = m_orientation_tolerance_spin->value();
     model.ik_solver_config.step_gain = m_step_gain_spin->value();
     model.joint_count = static_cast<int>(model.links.size());
-    
-    if (model.master_model_type == QStringLiteral("urdf"))
+
+    if (RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::IsImportedUrdfReference(model) ||
+        model.master_model_type == QStringLiteral("urdf"))
     {
-        if (model.dh_draft_extraction_level.trimmed().isEmpty())
-        {
-            model.dh_draft_extraction_level = QStringLiteral("diagnostic_only");
-        }
-        model.dh_draft_readonly_reason =
-            QStringLiteral("当前 DH/MDH 参数表由 URDF 主模型提取，仅用于诊断展示。若需继续参数化设计，请显式切换为 DH/MDH 主模型模式。");
-        if (model.conversion_diagnostics.trimmed().isEmpty())
-        {
-            model.conversion_diagnostics =
-                QStringLiteral("当前草稿由 URDF 主模型提取，仅用于 DH/MDH 诊断展示。");
-        }
+        RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::ApplyImportedUrdfReferenceState(
+            model,
+            model.urdf_source_path,
+            model.urdf_master_source_type);
     }
     else
     {
-        model.dh_draft_extraction_level.clear();
-        model.dh_draft_readonly_reason.clear();
-        model.conversion_diagnostics = QStringLiteral("当前草稿以 DH/MDH 参数为主模型。");
+        RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::ApplyDhParametricState(
+            model,
+            model.model_source_mode);
     }
     return model;
 }
@@ -1246,14 +1321,6 @@ void KinematicsWidget::RefreshEditingState()
     const bool dhEditable = m_state.current_model.dh_editable;
     const bool isUrdfDraftReadOnly =
         !dhEditable && m_state.current_model.master_model_type == QStringLiteral("urdf");
-    const QString urdfMasterCandidatePath = ResolveOriginalImportedUrdfMasterPath().trimmed().isEmpty()
-        ? ResolveDerivedUrdfMasterPath()
-        : ResolveOriginalImportedUrdfMasterPath();
-    const bool canSwitchBackToUrdf =
-        m_state.current_model.master_model_type == QStringLiteral("dh_mdh") &&
-        !urdfMasterCandidatePath.trimmed().isEmpty() &&
-        QFileInfo::exists(urdfMasterCandidatePath);
-
     if (m_parameter_convention_combo != nullptr)
     {
         m_parameter_convention_combo->setEnabled(dhEditable);
@@ -1419,11 +1486,11 @@ QStringList KinematicsWidget::BuildValidationIssues(
 
     if (model.master_model_type == QStringLiteral("urdf") && model.dh_editable)
     {
-        issues.push_back(QStringLiteral("URDF 主模型下 DH 表不应处于可编辑状态"));
+        issues.push_back(QStringLiteral("工程 URDF 参考视图下 DH 表不应处于可编辑状态"));
     }
     if (model.master_model_type == QStringLiteral("dh_mdh") && !model.dh_editable)
     {
-        issues.push_back(QStringLiteral("DH/MDH 主模型下 DH 表应处于可编辑状态"));
+        issues.push_back(QStringLiteral("DH/MDH 参数化设计模型下 DH 表应处于可编辑状态"));
     }
 
     if (m_dh_table != nullptr)
@@ -1665,7 +1732,9 @@ void KinematicsWidget::RenderResults()
     {
         QStringList lines;
         lines.push_back(QStringLiteral("模型：%1").arg(m_state.current_model.meta.name));
-        lines.push_back(QStringLiteral("草稿主模型：%1").arg(FormatMasterModelType(m_state.current_model.master_model_type)));
+        lines.push_back(QStringLiteral("模型语义：%1").arg(
+            RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::BuildUserFacingStateText(
+                m_state.current_model)));
         lines.push_back(QStringLiteral("派生状态：%1").arg(FormatDerivedModelState(m_state.current_model.derived_model_state)));
         lines.push_back(QStringLiteral("中央预览来源：%1").arg(FormatPreviewSourceMode(m_preview_source_mode)));
         lines.push_back(QStringLiteral("参数约定：%1").arg(m_state.current_model.parameter_convention));
@@ -1945,7 +2014,7 @@ void KinematicsWidget::SyncStructureAndPreview()
     else 
     {
         SetOperationMessage(buildResult.message, false, true);
-        EmitTelemetryStatus(QStringLiteral("DH/MDH 主模型"), buildResult.message, true);
+        EmitTelemetryStatus(QStringLiteral("DH/MDH 参数化设计"), buildResult.message, true);
         RefreshValidationState();
     }
 }
@@ -1964,7 +2033,7 @@ void KinematicsWidget::SyncPoseOnly()
     auto angles = CollectJointInputs(m_fk_joint_spins);
 
     // =====================================================================
-    // 路线 1：DH/MDH 主模型
+    // 路线 1：DH/MDH 参数化设计模型
     // =====================================================================
     if (m_state.current_model.master_model_type == QStringLiteral("dh_mdh"))
     {
@@ -2076,7 +2145,9 @@ void KinematicsWidget::RefreshModelStatusLabels()
 {
     if (m_master_model_mode_label != nullptr)
     {
-        m_master_model_mode_label->setText(FormatMasterModelType(m_state.current_model.master_model_type));
+        m_master_model_mode_label->setText(
+            RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::BuildUserFacingStateText(
+                m_state.current_model));
     }
     if (m_derived_model_state_label != nullptr)
     {
@@ -2312,9 +2383,10 @@ void KinematicsWidget::OnImportUrdfClicked()
     if (importResult.IsSuccess())
     {
         m_state.current_model = importResult.preview_model;
-        m_state.current_model.original_imported_urdf_path = urdfFilePath;
-        m_state.current_model.urdf_source_path = urdfFilePath;
-        m_state.current_model.urdf_master_source_type = QStringLiteral("original_imported");
+        RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::ApplyImportedUrdfReferenceState(
+            m_state.current_model,
+            urdfFilePath,
+            QStringLiteral("original_imported"));
         m_preview_scene = importResult.preview_scene;
         m_preview_model = importResult.preview_model;
         m_preview_source_mode = QStringLiteral("urdf_preview");
@@ -2417,7 +2489,7 @@ void KinematicsWidget::OnBuildFromTopologyClicked()
     emit StatusChanged();
 }
 
-void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
+void KinematicsWidget::OnCopyUrdfDraftToDhClicked()
 {
     if (m_state.current_model.master_model_type != QStringLiteral("urdf") ||
         m_state.current_model.dh_editable)
@@ -2433,18 +2505,25 @@ void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
         m_state.current_model.links.size() == m_state.current_model.joint_limits.size();
     const bool diagnosticOnlyDraft =
         m_state.current_model.dh_draft_extraction_level == QStringLiteral("diagnostic_only");
+    const bool derivedUrdfReference =
+        m_state.current_model.urdf_master_source_type == QStringLiteral("project_derived");
 
-    if (!hasPromotableDhChain || diagnosticOnlyDraft)
+    if (!RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::CanCopyUrdfDraftToDh(
+            m_state.current_model))
     {
-        const QString message = diagnosticOnlyDraft
+        const QString message = derivedUrdfReference
             ? QStringLiteral(
-                  "当前 URDF 仅提取到“仅诊断展示”的 DH/MDH 草案，不能直接切换为 DH/MDH 主模型。\n\n"
-                  "请继续保持 URDF 主模型进行预览；若需要参数化设计，请改用 Topology 生成 DH 骨架，"
+                  "当前文件是 DH/MDH 派生的最小 URDF，只用于交换/预览，不能再复制回 DH 模型。\n\n"
+                  "请继续使用 Topology + DH/MDH 参数化设计；如需基于外部工程模型建模，请导入原始工程 URDF。")
+            : diagnosticOnlyDraft
+            ? QStringLiteral(
+                  "当前工程 URDF 仅提取到“仅诊断展示”的 DH/MDH 草案，不能复制为可编辑 DH 模型。\n\n"
+                  "请继续保持工程 URDF 参考预览；若需要参数化设计，请改用 Topology 生成 DH 骨架，"
                   "或导入一份可稳定提取 DH 链的 URDF。\n\n"
                   "当前草案级别：%1")
                   .arg(extractionLevel)
             : QStringLiteral(
-                  "当前 URDF 提取出的 DH/MDH 草案不完整，无法安全切换为 DH/MDH 主模型。\n\n"
+                  "当前工程 URDF 提取出的 DH/MDH 草案不完整，无法安全复制为可编辑 DH 模型。\n\n"
                   "要求：links 与 joint_limits 都非空，且数量一一对应。\n"
                   "当前 links=%1，joint_limits=%2，草案级别=%3")
                   .arg(m_state.current_model.links.size())
@@ -2453,60 +2532,40 @@ void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
 
         QMessageBox::warning(
             this,
-            QStringLiteral("无法切换为 DH/MDH 主模型"),
+            QStringLiteral("无法复制 URDF 草案为 DH 模型"),
             message);
         SetOperationMessage(message, false, true);
-        EmitTelemetryStatus(QStringLiteral("DH/MDH 主模型"), message, true);
+        EmitTelemetryStatus(QStringLiteral("URDF 草案复制"), message, true);
         emit LogMessageGenerated(QStringLiteral("[Kinematics][Warning] %1").arg(message));
         return;
     }
 
     const QString warningMessage = QStringLiteral(
-        "即将把当前 URDF 提取草案切换为 DH/MDH 主模型。\n\n"
-        "切换后将发生以下变化：\n"
+        "即将把当前工程 URDF 的 DH/MDH 诊断草案复制为一个可编辑 DH 模型。\n\n"
+        "复制后将发生以下变化：\n"
         "1. DH/MDH 参数表将变为可编辑；\n"
         "2. 中央三维主视图区将改由 DH/MDH 骨架驱动；\n"
-        "3. 软件会重新派生一份最小 URDF 主链产物；\n"
-        "4. 原始导入 URDF 不再作为当前草稿的主模型。\n\n"
+        "3. 原始工程 URDF 不会被反写；\n"
+        "4. 保存时会从 DH/MDH 模型派生一份最小 URDF 交换产物。\n\n"
         "当前草案级别：%1\n"
         "建议先核对 a / alpha / d / theta_offset、Base / Flange / TCP 后再继续。")
         .arg(extractionLevel);
 
     const int answer = QMessageBox::warning(
         this,
-        QStringLiteral("切换为 DH/MDH 主模型"),
+        QStringLiteral("复制 URDF 草案为 DH 模型"),
         warningMessage,
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (answer != QMessageBox::Yes)
     {
-        emit LogMessageGenerated(QStringLiteral("[Kinematics] 已取消切换为 DH/MDH 主模型。"));
+        emit LogMessageGenerated(QStringLiteral("[Kinematics] 已取消复制 URDF 草案为 DH 模型。"));
         return;
     }
 
-    m_state.current_model = CollectModelFromForm();
-    m_state.current_model.master_model_type = QStringLiteral("dh_mdh");
-    m_state.current_model.derived_model_state = QStringLiteral("stale");
-    m_state.current_model.dh_editable = true;
-    m_state.current_model.urdf_editable = false;
-    m_state.current_model.modeling_mode = m_state.current_model.parameter_convention;
-    // m_state.current_model.model_source_mode = QStringLiteral("urdf_draft_promoted");
-    m_state.current_model.model_source_mode = QStringLiteral("manual_seed");
-    if (m_state.current_model.parameter_convention != QStringLiteral("DH") &&
-        m_state.current_model.parameter_convention != QStringLiteral("MDH"))
-    {
-        m_state.current_model.parameter_convention = QStringLiteral("DH");
-    }
-    m_state.current_model.conversion_diagnostics =
-        QStringLiteral("当前草稿已从 URDF 提取草案切换为 DH/MDH 主模型。");
-    m_state.current_model.dh_draft_extraction_level.clear();
-    m_state.current_model.dh_draft_readonly_reason.clear();
-    m_state.current_model.urdf_master_source_type = QStringLiteral("none");
-    m_state.current_model.urdf_source_path.clear();
-    m_state.current_model.pinocchio_model_ready = false;
-    m_state.current_model.unified_robot_model_ref.clear();
-    m_state.current_model.joint_order_signature.clear();
-    m_state.current_model.unified_robot_snapshot = {};
+    m_state.current_model =
+        RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::CreateDhCopyFromUrdfDraft(
+            CollectModelFromForm());
 
     ClearPreviewContext();
     PopulateForm(m_state.current_model);
@@ -2516,14 +2575,19 @@ void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
 
     MarkDirty();
 
-    const QString message = QStringLiteral("已切换为 DH/MDH 主模型模式，中央骨架与派生产物已按参数化主链刷新。");
+    const QString message = QStringLiteral("已复制 URDF 诊断草案为可编辑 DH/MDH 参数化模型，原始工程 URDF 不会被反写。");
     SetOperationMessage(message, true);
-    EmitTelemetryStatus(QStringLiteral("DH/MDH 主模型"), message, false);
+    EmitTelemetryStatus(QStringLiteral("DH/MDH 参数化设计"), message, false);
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(message));
     emit StatusChanged();
 }
 
-void KinematicsWidget::OnSwitchToUrdfMasterClicked()
+void KinematicsWidget::OnPromoteDhDraftToMasterClicked()
+{
+    OnCopyUrdfDraftToDhClicked();
+}
+
+void KinematicsWidget::OnReturnToUrdfReferenceClicked()
 {
     if (m_state.current_model.master_model_type != QStringLiteral("dh_mdh"))
     {
@@ -2532,79 +2596,39 @@ void KinematicsWidget::OnSwitchToUrdfMasterClicked()
 
     const QString originalImportedPath = ResolveOriginalImportedUrdfMasterPath();
     const QString derivedUrdfPath = ResolveDerivedUrdfMasterPath();
-    QString urdfFilePath;
-    QString selectedSourceType = QStringLiteral("none");
-
-    if (!originalImportedPath.trimmed().isEmpty() &&
-        !derivedUrdfPath.trimmed().isEmpty() &&
-        QFileInfo(originalImportedPath) != QFileInfo(derivedUrdfPath))
-    {
-        QMessageBox sourcePicker(this);
-        sourcePicker.setIcon(QMessageBox::Question);
-        sourcePicker.setWindowTitle(QStringLiteral("选择 URDF 回切来源"));
-        sourcePicker.setText(QStringLiteral("检测到两种可用的 URDF 来源，请明确选择要回切到哪一种主模型来源。"));
-        sourcePicker.setInformativeText(
-            QStringLiteral("原始导入：%1\n\n项目派生：%2")
-                .arg(originalImportedPath, derivedUrdfPath));
-        auto* originalButton = sourcePicker.addButton(QStringLiteral("使用原始导入 URDF"), QMessageBox::AcceptRole);
-        auto* derivedButton = sourcePicker.addButton(QStringLiteral("使用项目派生 URDF"), QMessageBox::ActionRole);
-        sourcePicker.addButton(QMessageBox::Cancel);
-        sourcePicker.exec();
-
-        if (sourcePicker.clickedButton() == originalButton)
-        {
-            urdfFilePath = originalImportedPath;
-            selectedSourceType = QStringLiteral("original_imported");
-        }
-        else if (sourcePicker.clickedButton() == derivedButton)
-        {
-            urdfFilePath = derivedUrdfPath;
-            selectedSourceType = QStringLiteral("project_derived");
-        }
-        else
-        {
-            emit LogMessageGenerated(QStringLiteral("[Kinematics] 已取消切换为 URDF 主模型。"));
-            return;
-        }
-    }
-    else if (!originalImportedPath.trimmed().isEmpty())
-    {
-        urdfFilePath = originalImportedPath;
-        selectedSourceType = QStringLiteral("original_imported");
-    }
-    else if (!derivedUrdfPath.trimmed().isEmpty())
-    {
-        urdfFilePath = derivedUrdfPath;
-        selectedSourceType = QStringLiteral("project_derived");
-    }
+    const QString urdfFilePath = originalImportedPath;
+    const QString selectedSourceType = QStringLiteral("original_imported");
 
     if (urdfFilePath.trimmed().isEmpty() || !QFileInfo::exists(urdfFilePath))
     {
-        const QString message = QStringLiteral("当前没有可用的派生 URDF 文件，无法回切到 URDF 主模型模式。");
+        const QString message = derivedUrdfPath.trimmed().isEmpty()
+            ? QStringLiteral("当前没有可用的原始工程 URDF，无法回到 URDF 参考。请继续使用 Topology + DH/MDH 参数化设计，或重新导入工程 URDF。")
+            : QStringLiteral("当前只有 DH 派生最小 URDF。该文件仅用于交换/预览，不允许作为可回切参考，以避免 DH -> URDF -> DH 的循环建模。请继续使用当前 DH/MDH 参数化设计。");
         SetOperationMessage(message, false, true);
+        QMessageBox::information(this, QStringLiteral("无法回到 URDF 参考"), message);
         emit LogMessageGenerated(QStringLiteral("[Kinematics][Warning] %1").arg(message));
         return;
     }
 
     const QString warningMessage = QStringLiteral(
-        "即将把当前草稿回切为 URDF 主模型。\n\n"
+        "即将回到 URDF 参考视图。\n\n"
         "切换后将发生以下变化：\n"
-        "1. 中央三维主视图区将改由 URDF 工程模型预览驱动；\n"
-        "2. DH/MDH 参数表将重新回到只读草案模式；\n"
-        "3. 之后若继续参数化设计，需要再次显式切回 DH/MDH 主模型。\n\n"
-        "本次回切来源：%1\n"
-        "本次回切将使用以下 URDF：\n%2")
+        "1. 中央三维主视图区将改由原始工程 URDF 参考模型预览驱动；\n"
+        "2. DH/MDH 参数表将重新成为只读诊断草案；\n"
+        "3. 当前 DH/MDH 参数化编辑不会反写原始工程 URDF。\n\n"
+        "本次 URDF 来源：%1\n"
+        "本次将使用以下 URDF：\n%2")
         .arg(FormatUrdfMasterSourceType(selectedSourceType), urdfFilePath);
 
     const int answer = QMessageBox::warning(
         this,
-        QStringLiteral("切换为 URDF 主模型"),
+        QStringLiteral("回到 URDF 参考"),
         warningMessage,
         QMessageBox::Yes | QMessageBox::No,
         QMessageBox::No);
     if (answer != QMessageBox::Yes)
     {
-        emit LogMessageGenerated(QStringLiteral("[Kinematics] 已取消切换为 URDF 主模型。"));
+        emit LogMessageGenerated(QStringLiteral("[Kinematics] 已取消回到 URDF 参考。"));
         return;
     }
 
@@ -2623,26 +2647,14 @@ void KinematicsWidget::OnSwitchToUrdfMasterClicked()
     m_state.current_model = importResult.preview_model;
     m_state.current_model.meta = previousMeta;
     m_state.current_model.meta.source = QStringLiteral("urdf_master");
-    m_state.current_model.model_source_mode = selectedSourceType == QStringLiteral("original_imported")
-        ? QStringLiteral("urdf_imported")
-        : QStringLiteral("derived_urdf_promoted");
-    m_state.current_model.urdf_master_source_type = selectedSourceType;
-    m_state.current_model.urdf_source_path = urdfFilePath;
     m_state.current_model.original_imported_urdf_path =
         selectedSourceType == QStringLiteral("original_imported")
             ? urdfFilePath
             : previousOriginalImportedPath;
-    m_state.current_model.conversion_diagnostics =
-        QStringLiteral("当前草稿已回切为 URDF 主模型；DH/MDH 参数表为提取草案，仅用于诊断展示。");
-    if (m_state.current_model.dh_draft_extraction_level.trimmed().isEmpty())
-    {
-        m_state.current_model.dh_draft_extraction_level = QStringLiteral("diagnostic_only");
-    }
-    if (m_state.current_model.dh_draft_readonly_reason.trimmed().isEmpty())
-    {
-        m_state.current_model.dh_draft_readonly_reason =
-            QStringLiteral("当前 DH/MDH 参数表由 URDF 主模型提取，仅用于诊断展示。若需继续参数化设计，请显式切换为 DH/MDH 主模型模式。");
-    }
+    RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::ApplyImportedUrdfReferenceState(
+        m_state.current_model,
+        urdfFilePath,
+        selectedSourceType);
     m_state.current_model.unified_robot_snapshot = importResult.preview_model.unified_robot_snapshot;
     m_state.current_model.unified_robot_snapshot.source_kinematic_id = m_state.current_model.meta.kinematic_id;
     m_state.current_model.unified_robot_snapshot.model_source_mode = m_state.current_model.model_source_mode;
@@ -2661,16 +2673,19 @@ void KinematicsWidget::OnSwitchToUrdfMasterClicked()
     RefreshBackendDiagnostics();
     RenderResults();
     emit PreviewSceneGenerated(m_preview_scene);
-    
-    SyncPoseOnly(); // 调用通道 B 更新姿态
 
     MarkDirty();
 
-    const QString message = QStringLiteral("已切换为 URDF 主模型模式，中央视图改由工程模型预览驱动。");
+    const QString message = QStringLiteral("已回到原始工程 URDF 参考视图，DH/MDH 参数表为只读诊断草案。");
     SetOperationMessage(message, true);
-    EmitTelemetryStatus(QStringLiteral("URDF 主模型"), message, false);
+    EmitTelemetryStatus(QStringLiteral("URDF 工程参考"), message, false);
     emit LogMessageGenerated(QStringLiteral("[Kinematics] %1").arg(message));
     emit StatusChanged();
+}
+
+void KinematicsWidget::OnSwitchToUrdfMasterClicked()
+{
+    OnReturnToUrdfReferenceClicked();
 }
 
 void KinematicsWidget::OnRunFkClicked()
@@ -3023,28 +3038,27 @@ void KinematicsWidget::OnLoadClicked()
 
 void KinematicsWidget::AdjustJointInputCount(int jointCount)
 {
-    const int maxGridColumns = 8; //  8 ԶУֽ
-
-    // 1. ̬ FK 飨ģڵǰԶ
+    // 1. 动态补充 FK 关节行：侧边栏优先采用纵向列表，避免 J1~J6 横向挤压。
     while (m_fk_joint_spins.size() < static_cast<std::size_t>(jointCount))
     {
         int index = static_cast<int>(m_fk_joint_spins.size());
         auto* spinBox = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
+        spinBox->setMinimumWidth(86);
+        spinBox->setMaximumWidth(118);
         
         auto* slider = new QSlider(Qt::Horizontal, m_fk_grid->parentWidget());
         slider->setRange(-360, 360);
         slider->setValue(0);
         slider->setPageStep(10);
-        slider->setToolTip(QStringLiteral("϶鿴ؽ˶̬"));
+        slider->setToolTip(QStringLiteral("拖动调整当前关节角度，中央视图会实时刷新。"));
+        slider->setMinimumWidth(120);
 
-        //˫
         connect(slider, &QSlider::valueChanged, spinBox, [spinBox](int value) {
             if (std::abs(spinBox->value() - static_cast<double>(value)) > 0.01) {
                 spinBox->setValue(static_cast<double>(value));
             }
         });
         
-        // ġ´ĻҲ̬ˢͨ
         connect(spinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
             this, [this, slider](double val) {
                 if (slider->value() != static_cast<int>(std::round(val))) {
@@ -3059,17 +3073,18 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
             });
 
         auto* label = new QLabel(QStringLiteral("J%1").arg(index + 1), m_fk_grid->parentWidget());
+        label->setMinimumWidth(86);
 
-        int rowOffset = (index / maxGridColumns) * 4;
-        int colOffset = index % maxGridColumns;
-        m_fk_grid->addWidget(label, 1 + rowOffset, colOffset);
-        m_fk_grid->addWidget(spinBox, 2 + rowOffset, colOffset);
-        m_fk_grid->addWidget(slider, 3 + rowOffset, colOffset);
+        const int row = index + 1;
+        m_fk_grid->addWidget(label, row, 0);
+        m_fk_grid->addWidget(spinBox, row, 1);
+        m_fk_grid->addWidget(slider, row, 2);
 
         auto* marginLabel = new QLabel(QStringLiteral(""), m_fk_grid->parentWidget());
         marginLabel->setAlignment(Qt::AlignCenter);
-        marginLabel->setStyleSheet(QStringLiteral("font-size: 10px; color: #888;"));
-        m_fk_grid->addWidget(marginLabel, 4 + rowOffset, colOffset);
+        marginLabel->setMinimumWidth(46);
+        marginLabel->setStyleSheet(QStringLiteral("font-size: 11px; color: #888;"));
+        m_fk_grid->addWidget(marginLabel, row, 3);
 
         m_fk_joint_spins.push_back(spinBox);
         m_fk_joint_sliders.push_back(slider);
@@ -3082,15 +3097,16 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
     {
         int index = static_cast<int>(m_ik_seed_joint_spins.size());
         auto* spinBox = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
+        spinBox->setMinimumWidth(82);
         
         connect(spinBox, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged),
             this, [this](double) { MarkDirty(); });
 
         auto* label = new QLabel(QStringLiteral("J%1").arg(index + 1), m_ik_seed_grid->parentWidget());
-        int rowOffset = (index / maxGridColumns) * 2;
-        int colOffset = index % maxGridColumns;
-        m_ik_seed_grid->addWidget(label, 1 + rowOffset, colOffset);
-        m_ik_seed_grid->addWidget(spinBox, 2 + rowOffset, colOffset);
+        const int row = 1 + (index / 2);
+        const int colOffset = (index % 2) * 2;
+        m_ik_seed_grid->addWidget(label, row, colOffset);
+        m_ik_seed_grid->addWidget(spinBox, row, colOffset + 1);
 
         m_ik_seed_joint_spins.push_back(spinBox);
         m_ik_seed_joint_labels.push_back(label);
@@ -3102,6 +3118,8 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
         const bool visible = (i < static_cast<std::size_t>(jointCount));
         m_fk_joint_spins[i]->setVisible(visible);
         m_fk_joint_labels[i]->setVisible(visible);
+        if (i < m_fk_joint_sliders.size())
+            m_fk_joint_sliders[i]->setVisible(visible);
         if (i < m_fk_margin_labels.size())
             m_fk_margin_labels[i]->setVisible(visible);
         m_ik_seed_joint_spins[i]->setVisible(visible);
@@ -3113,6 +3131,12 @@ void KinematicsWidget::AdjustJointInputCount(int jointCount)
             m_fk_joint_spins[i]->blockSignals(true);
             m_fk_joint_spins[i]->setValue(0.0);
             m_fk_joint_spins[i]->blockSignals(false);
+            if (i < m_fk_joint_sliders.size())
+            {
+                m_fk_joint_sliders[i]->blockSignals(true);
+                m_fk_joint_sliders[i]->setValue(0);
+                m_fk_joint_sliders[i]->blockSignals(false);
+            }
 
             m_ik_seed_joint_spins[i]->blockSignals(true);
             m_ik_seed_joint_spins[i]->setValue(0.0);
@@ -3159,22 +3183,18 @@ bool KinematicsWidget::CanBuildFromTopology() const
 
 bool KinematicsWidget::CanPromoteToDhMaster() const
 {
-    // URDF 只读模式下（master_model_type=="urdf" && !dh_editable）且模型已加载时可提升
-    return !m_state.current_model.dh_editable &&
-           m_state.current_model.master_model_type == QStringLiteral("urdf") &&
-           !m_state.current_model.links.empty();
+    return RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::CanCopyUrdfDraftToDh(
+        m_state.current_model);
 }
 
 bool KinematicsWidget::CanSwitchToUrdfMaster() const
 {
-    // DH/MDH 主模型模式下，且存在可用的 URDF 源文件时可回切
+    // 只允许回到外部导入的工程 URDF；DH 派生最小 URDF 仅用于交换/预览，避免 DH -> URDF -> DH 循环。
     if (m_state.current_model.master_model_type != QStringLiteral("dh_mdh"))
     {
         return false;
     }
-    const QString urdfPath = ResolveOriginalImportedUrdfMasterPath().trimmed().isEmpty()
-        ? ResolveDerivedUrdfMasterPath()
-        : ResolveOriginalImportedUrdfMasterPath();
+    const QString urdfPath = ResolveOriginalImportedUrdfMasterPath();
     return !urdfPath.trimmed().isEmpty() && QFileInfo::exists(urdfPath);
 }
 

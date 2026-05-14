@@ -80,13 +80,13 @@ signals:
     void signalTopologySaveDraft();
 
     // ── 运动学工具 ────────────────────────────────────────────
-    /// @brief 请求导入 URDF 文件。
+    /// @brief 请求导入外部工程 URDF 参考文件。
     void signalKinematicsImportUrdf();
     /// @brief 请求从拓扑构型构建运动学。
     void signalKinematicsBuildFromTopology();
-    /// @brief 请求提升为 DH 主模型。
+    /// @brief 请求复制外部工程 URDF 诊断草案为 DH/MDH 参数化设计模型。
     void signalKinematicsPromoteToDhMaster();
-    /// @brief 请求切换回 URDF 主模型。
+    /// @brief 请求回到原始导入的工程 URDF 参考视图。
     void signalKinematicsSwitchToUrdfMaster();
     /// @brief 请求执行正运动学求解。
     void signalKinematicsRunFk();

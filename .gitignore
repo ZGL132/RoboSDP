@@ -1,6 +1,7 @@
 # CMake / Build
 build/
 build-*/
+bdv3-admin/
 out/
 CMakeFiles/
 CMakeCache.txt

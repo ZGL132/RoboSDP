@@ -4,6 +4,7 @@
 #include "modules/kinematics/adapter/PinocchioIkSolverAdapter.h"
 #include "modules/kinematics/adapter/AnalyticalIkSolverAdapter.h"
 #include "modules/kinematics/adapter/PinocchioKinematicBackendAdapter.h"
+#include "modules/kinematics/domain/KinematicModelStatePolicy.h"
 #include "modules/topology/dto/TopologyRecommendationDto.h"
 
 #include <QDir>
@@ -239,17 +240,17 @@ QString BuildPreviewJointOrderSignature(const RoboSDP::Kinematics::Dto::Kinemati
 }
 
 /**
- * @brief 将主模型类型翻译为预览链路使用的固定中文摘要，避免 UI 与日志到处散落硬编码字面量。
+ * @brief 将模型来源类型翻译为预览链路使用的固定中文摘要，避免 UI 与日志到处散落硬编码字面量。
  */
 QString DefaultConversionDiagnostics(const QString& masterModelType)
 {
     return masterModelType == QStringLiteral("urdf")
-        ? QStringLiteral("当前预览由导入 URDF 驱动，DH/MDH 参数仅作为后续派生入口。")
-        : QStringLiteral("当前草稿以 DH/MDH 参数为主模型，中央三维显示派生骨架预览。");
+        ? QStringLiteral("当前预览由工程 URDF 参考驱动，DH/MDH 参数仅作为只读诊断草案。")
+        : QStringLiteral("当前设计真源为 DH/MDH 参数化模型，中央三维显示派生骨架预览。");
 }
 
 /**
- * @brief 将 build-context 诊断结果翻译成 DH 主模型阶段可读的同步摘要。
+ * @brief 将 build-context 诊断结果翻译成 DH/MDH 参数化设计阶段可读的同步摘要。
  * @details
  * 第二阶段先不真正派生高保真 URDF 文件，但会把“统一工程主链是否已经进入共享 Pinocchio 内核”
  * 这件事清晰写回模型状态，避免后续 Dynamics / Planning 还要重新猜当前主链是否 ready。
@@ -259,16 +260,16 @@ QString BuildDhUnifiedChainDiagnostics(
 {
     if (backendContext.IsSuccess() && backendContext.status.shared_robot_kernel_ready)
     {
-        return QStringLiteral("当前草稿以 DH/MDH 参数为主模型，统一工程主链已同步到共享 Pinocchio 内核。");
+        return QStringLiteral("当前设计真源为 DH/MDH 参数化模型，统一工程主链已同步到共享 Pinocchio 内核。");
     }
 
     const QString reason = backendContext.status.status_message.trimmed();
     if (!reason.isEmpty())
     {
-        return QStringLiteral("当前草稿以 DH/MDH 参数为主模型，但统一工程主链尚未就绪：%1").arg(reason);
+        return QStringLiteral("当前设计真源为 DH/MDH 参数化模型，但统一工程主链尚未就绪：%1").arg(reason);
     }
 
-    return QStringLiteral("当前草稿以 DH/MDH 参数为主模型，但统一工程主链尚未就绪。");
+    return QStringLiteral("当前设计真源为 DH/MDH 参数化模型，但统一工程主链尚未就绪。");
 }
 
 /**
@@ -1293,10 +1294,10 @@ DhDraftExtractionResult ExtractDhDraftFromUrdfModel(
     QStringList summaryParts;
     summaryParts.push_back(
         result.extraction_level == QStringLiteral("full")
-            ? QStringLiteral("当前草稿由 URDF 主模型完整提取，可作为 DH/MDH 诊断基线。")
+            ? QStringLiteral("当前草案由工程 URDF 参考完整提取，可作为 DH/MDH 诊断基线。")
             : (result.extraction_level == QStringLiteral("partial")
-                   ? QStringLiteral("当前草稿由 URDF 主模型部分提取，存在近似映射段，可作为 DH/MDH 参数化起点，但需重点校核。")
-                   : QStringLiteral("当前草稿由 URDF 主模型近似提取，仅用于诊断展示，不建议反写设计参数。")));
+                   ? QStringLiteral("当前草案由工程 URDF 参考部分提取，存在近似映射段，可作为 DH/MDH 参数化起点，但需重点校核。")
+                   : QStringLiteral("当前草案由工程 URDF 参考近似提取，仅用于诊断展示，不建议反写设计参数。")));
     for (const QString& diagnostic : diagnostics)
     {
         if (!diagnostic.trimmed().isEmpty() && !summaryParts.contains(diagnostic.trimmed()))
@@ -1307,7 +1308,7 @@ DhDraftExtractionResult ExtractDhDraftFromUrdfModel(
     draftModel.conversion_diagnostics = summaryParts.join(QStringLiteral("；"));
     draftModel.dh_draft_extraction_level = result.extraction_level;
     draftModel.dh_draft_readonly_reason =
-        QStringLiteral("当前 DH/MDH 参数表由 URDF 主模型提取，仅用于诊断展示。若需继续参数化设计，请显式切换为 DH/MDH 主模型模式。");
+        QStringLiteral("当前 DH/MDH 参数表由工程 URDF 参考提取，仅用于诊断展示。若需继续参数化设计，请复制为 DH 模型或从 Topology 生成。");
     draftModel.unified_robot_snapshot = BuildUnifiedRobotSnapshot(draftModel);
 
     result.message = QStringLiteral("URDF 导入成功，已提取 %1 条 DH/MDH 草案，级别=%2。")
@@ -1342,7 +1343,7 @@ RoboSDP::Kinematics::Dto::KinematicModelDto BuildUrdfPreviewModel(const QString&
     model.conversion_diagnostics = DefaultConversionDiagnostics(model.master_model_type);
     model.dh_draft_extraction_level = QStringLiteral("diagnostic_only");
     model.dh_draft_readonly_reason =
-        QStringLiteral("当前 DH/MDH 参数表由 URDF 主模型提取，仅用于诊断展示。若需继续参数化设计，请显式切换为 DH/MDH 主模型模式。");
+        QStringLiteral("当前 DH/MDH 参数表由工程 URDF 参考提取，仅用于诊断展示。若需继续参数化设计，请复制为 DH 模型或从 Topology 生成。");
     model.modeling_mode = QStringLiteral("URDF");
     model.parameter_convention = QStringLiteral("URDF");
     model.model_source_mode = QStringLiteral("urdf_imported");
@@ -1475,6 +1476,12 @@ UrdfImportResult ImportUrdfPreviewWithSharedKernel(
                 result.preview_model.conversion_diagnostics,
                 QStringLiteral("DH 草案提取时出现未知异常。"));
         }
+
+        RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::ApplyImportedUrdfReferenceState(
+            result.preview_model,
+            urdfFileInfo.absoluteFilePath(),
+            QStringLiteral("original_imported"));
+
         if (result.preview_scene.model_name.trimmed().isEmpty())
         {
             result.preview_scene.model_name = urdfFileInfo.completeBaseName();
@@ -1679,6 +1686,9 @@ KinematicBuildResult KinematicsService::BuildFromTopology(const QString& project
 
     // 3. 执行核心业务映射，构建具体的模型 DTO
     result.state.current_model = BuildModelFromTopology(topologyState.current_model);
+    RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::ApplyDhParametricState(
+        result.state.current_model,
+        QStringLiteral("topology_derived"));
     result.message = QStringLiteral("已基于 Topology 生成最小 KinematicModel。");
     return result;
 }
@@ -2425,26 +2435,10 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
     // 第一步：强制状态机重置与元数据初始化
     // =========================================================================
     KinematicModelDto previewModel = model;
-    
-    // 强制宣告主权：将当前模型切换为纯粹的 DH/MDH 参数驱动模式
-    previewModel.master_model_type = QStringLiteral("dh_mdh");
+    RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::ApplyDhParametricState(
+        previewModel,
+        previewModel.model_source_mode);
     previewModel.derived_model_state = QStringLiteral("fresh"); // 标记派生状态为“新鲜”（未过期）
-    previewModel.dh_editable = true;   // 开放 DH 表格编辑权限
-    previewModel.urdf_editable = false; // 封锁 URDF 编辑权限
-    
-    // 清除由于从 URDF 提取而带来的“只读草案”等历史包袱标记
-    previewModel.conversion_diagnostics = DefaultConversionDiagnostics(previewModel.master_model_type);
-    previewModel.dh_draft_extraction_level.clear();
-    previewModel.dh_draft_readonly_reason.clear();
-    
-    // 统一建模模式，确保底层引擎知道按照 DH 还是 MDH 来解析矩阵
-    previewModel.modeling_mode = previewModel.parameter_convention;
-    previewModel.model_source_mode = previewModel.model_source_mode.trimmed().isEmpty()
-        ? QStringLiteral("manual_seed")
-        : previewModel.model_source_mode.trimmed();
-        
-    previewModel.backend_type = QStringLiteral("pinocchio_kinematic_backend");
-    previewModel.urdf_source_path.clear(); // 既然是 DH 主模型，就抛弃外部引入的 URDF 路径
     previewModel.joint_count = static_cast<int>(previewModel.links.size());
     
     // 生成关节顺序签名 (Joint Order Signature) 和统一模型引用 ID
@@ -2468,7 +2462,7 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
     // =========================================================================
     // 第二步：底层物理引擎注册与“盖章” (核心数据流动作)
     // =========================================================================
-    // 中文说明：先用统一 build-context 诊断把 DH 主模型接入共享 Pinocchio 内核，
+    // 中文说明：先用统一 build-context 诊断把 DH/MDH 参数化设计模型接入共享 Pinocchio 内核，
     // 再继续走 SolveFk 主链。这样本轮就能把“中央骨架可见”提升为“统一工程主链已就绪”。
     
     // 将模型送入底层适配器进行预编译，如果 DH 参数合法，底层会生成一棵真实的运动学树
@@ -2506,7 +2500,7 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
     {
         result.error_code = backendContext.status.error_code;
         result.message = backendContext.status.status_message.trimmed().isEmpty()
-            ? QStringLiteral("DH/MDH 主模型未能进入统一工程主链。")
+            ? QStringLiteral("DH/MDH 参数化设计模型未能进入统一工程主链。")
             : backendContext.status.status_message;
         result.preview_model = previewModel; // 即便失败，也把带有错误标记的模型还给 UI
         return result;
@@ -2715,7 +2709,7 @@ RoboSDP::Errors::ErrorCode KinematicsService::WriteDerivedUrdfArtifact(
     stream.setRealNumberPrecision(8);
     stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     stream << "<robot name=\"" << robotName << "\">\n";
-    stream << "  <!-- 中文说明：该文件由 DH/MDH 主模型自动派生，仅承载最小运动学主链与固定坐标系语义。 -->\n";
+    stream << "  <!-- 中文说明：该文件由 DH/MDH 参数化设计模型自动派生，仅承载最小运动学主链与固定坐标系语义。 -->\n";
     stream << "  <!-- 当前阶段不导出真实 visual / collision / inertial 数据，避免误解为高保真工程数字样机。 -->\n";
     stream << BuildUrdfLinkBlock(baseRootLinkName);
     stream << BuildUrdfLinkBlock(baseLinkName);
@@ -2821,7 +2815,7 @@ RoboSDP::Errors::ErrorCode KinematicsService::WriteDerivedUrdfArtifact(
     snapshot.derived_artifact_state_code = QStringLiteral("file_generated");
     snapshot.derived_artifact_exists = writtenFileInfo.exists();
     snapshot.derived_artifact_fresh = writtenFileInfo.exists();
-    diagnosticMessage = QStringLiteral("当前草稿以 DH/MDH 参数为主模型，派生 URDF 已写出：%1")
+    diagnosticMessage = QStringLiteral("当前设计真源为 DH/MDH 参数化模型，派生最小 URDF 已写出：%1")
         .arg(snapshot.derived_artifact_relative_path);
     return RoboSDP::Errors::ErrorCode::Ok;
 #else

@@ -133,6 +133,9 @@ public:
     /// @brief 设置 Joint 标签显示状态，供顶部视图页签统一控制。
     void SetJointLabelsVisible(bool visible);
 
+    /// @brief 设置 TCP 目标拖拽 Gizmo 显示状态。默认关闭，避免误触发 IK 求解。
+    void SetTcpGizmoVisible(bool visible);
+
     /// @brief 应用设计预设：突出 DH/MDH 骨架、关节和基础参考，不显示 mesh。
     void ApplyDesignViewPreset();
 
@@ -190,6 +193,7 @@ private:
     bool m_showCornerAxes = true;
     bool m_showLinkLabels = true;
     bool m_showJointLabels = true;
+    bool m_showTcpGizmo = false;
     PreviewSceneDto m_currentScene;
 
 #if defined(ROBOSDP_HAVE_VTK)

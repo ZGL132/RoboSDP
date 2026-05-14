@@ -1,4 +1,5 @@
 #include "modules/kinematics/persistence/KinematicJsonStorage.h"
+#include "modules/kinematics/domain/KinematicModelStatePolicy.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -1006,7 +1007,7 @@ RoboSDP::Kinematics::Dto::KinematicsWorkspaceStateDto KinematicJsonStorage::From
         if (state.current_model.dh_draft_readonly_reason.trimmed().isEmpty())
         {
             state.current_model.dh_draft_readonly_reason =
-                QStringLiteral("当前 DH/MDH 参数表由 URDF 主模型提取，仅用于诊断展示。若需继续参数化设计，请显式切换为 DH/MDH 主模型模式。");
+                QStringLiteral("当前 DH/MDH 参数表由工程 URDF 参考提取，仅用于诊断展示。若需继续参数化设计，请复制为 DH 模型或从 Topology 生成。");
         }
     }
     else
@@ -1018,6 +1019,7 @@ RoboSDP::Kinematics::Dto::KinematicsWorkspaceStateDto KinematicJsonStorage::From
         state.current_model.dh_draft_extraction_level.clear();
         state.current_model.dh_draft_readonly_reason.clear();
     }
+    RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::NormalizeAfterLoad(state.current_model);
     state.last_fk_result = FromFkResultObject(jsonObject.value(QStringLiteral("last_fk_result")).toObject());
     state.last_ik_result = FromIkResultObject(jsonObject.value(QStringLiteral("last_ik_result")).toObject());
     state.backend_summary = FromBackendSummaryObject(
