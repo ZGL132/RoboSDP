@@ -2,6 +2,7 @@
 
 #include "apps/desktop-qt/widgets/dialogs/GlobalSaveResultDialog.h"
 #include "apps/desktop-qt/widgets/empty/ProjectEmptyStateWidget.h"
+#include "apps/desktop-qt/widgets/empty/ProjectWelcomeWidget.h"
 #include "apps/desktop-qt/widgets/ribbon/RibbonBarWidget.h"
 #include "apps/desktop-qt/widgets/vtk/RobotVtkView.h"
 #include "core/infrastructure/ProjectManager.h"
@@ -212,9 +213,24 @@ void MainWindow::CreateRibbonBar()
 
 void MainWindow::CreateCentralView()
 {
-    // 本轮只把中央区域接到最小 VTK 视图，不改动项目树、属性栏和日志栏结构。
-    m_robotVtkView = new RoboSDP::Desktop::Vtk::RobotVtkView(this);
-    setCentralWidget(m_robotVtkView);
+    m_centralStack = new QStackedWidget(this);
+    m_projectWelcomeWidget = new RoboSDP::Desktop::Widgets::ProjectWelcomeWidget(m_centralStack);
+    m_robotVtkView = new RoboSDP::Desktop::Vtk::RobotVtkView(m_centralStack);
+
+    m_centralStack->addWidget(m_projectWelcomeWidget);
+    m_centralStack->addWidget(m_robotVtkView);
+    setCentralWidget(m_centralStack);
+
+    connect(
+        m_projectWelcomeWidget,
+        &RoboSDP::Desktop::Widgets::ProjectWelcomeWidget::CreateNewProjectRequested,
+        this,
+        [this]() { HandleCreateNewProjectRequested(); });
+    connect(
+        m_projectWelcomeWidget,
+        &RoboSDP::Desktop::Widgets::ProjectWelcomeWidget::OpenProjectRequested,
+        this,
+        [this]() { HandleOpenProjectRequested(); });
 }
 
 void MainWindow::CreateProjectTreeDock()
@@ -535,6 +551,24 @@ void MainWindow::ResetProjectTreeItemPointers()
 
 void MainWindow::ShowEmptyProjectState()
 {
+    if (m_centralStack != nullptr && m_projectWelcomeWidget != nullptr)
+    {
+        m_centralStack->setCurrentWidget(m_projectWelcomeWidget);
+    }
+
+    if (m_projectTreeDock != nullptr)
+    {
+        m_projectTreeDock->hide();
+    }
+    if (m_propertyDock != nullptr)
+    {
+        m_propertyDock->hide();
+    }
+    if (m_logDock != nullptr)
+    {
+        m_logDock->hide();
+    }
+
     if (m_projectTree != nullptr)
     {
         m_projectTree->blockSignals(true);
@@ -560,6 +594,23 @@ void MainWindow::ShowActiveProjectState(const QString& projectRootPath)
     if (m_projectTree == nullptr)
     {
         return;
+    }
+
+    if (m_centralStack != nullptr && m_robotVtkView != nullptr)
+    {
+        m_centralStack->setCurrentWidget(m_robotVtkView);
+    }
+    if (m_projectTreeDock != nullptr)
+    {
+        m_projectTreeDock->show();
+    }
+    if (m_propertyDock != nullptr)
+    {
+        m_propertyDock->show();
+    }
+    if (m_logDock != nullptr)
+    {
+        m_logDock->show();
     }
 
     const QFileInfo projectRootInfo(projectRootPath);

@@ -8,6 +8,8 @@ set(ROBOSDP_DESKTOP_SOURCES
     widgets/dialogs/GlobalSaveResultDialog.h
     widgets/empty/ProjectEmptyStateWidget.cpp
     widgets/empty/ProjectEmptyStateWidget.h
+    widgets/empty/ProjectWelcomeWidget.cpp
+    widgets/empty/ProjectWelcomeWidget.h
     widgets/ribbon/RibbonBarWidget.cpp
     widgets/ribbon/RibbonBarWidget.h
     widgets/vtk/RobotVtkView.cpp

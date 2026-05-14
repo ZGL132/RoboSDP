@@ -26,6 +26,7 @@ class RibbonBarWidget;
 namespace Widgets
 {
 class ProjectEmptyStateWidget;
+class ProjectWelcomeWidget;
 }
 }
 
@@ -146,6 +147,8 @@ protected:
     
 private:
     RoboSDP::Desktop::Ribbon::RibbonBarWidget* m_ribbonBar = nullptr;
+    QStackedWidget* m_centralStack = nullptr;
+    RoboSDP::Desktop::Widgets::ProjectWelcomeWidget* m_projectWelcomeWidget = nullptr;
     RoboSDP::Desktop::Vtk::RobotVtkView* m_robotVtkView = nullptr;
     QDockWidget* m_projectTreeDock = nullptr;
     QDockWidget* m_propertyDock = nullptr;
