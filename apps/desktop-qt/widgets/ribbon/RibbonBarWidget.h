@@ -201,6 +201,7 @@ private:
     QWidget* CreatePlanningTab();
     QWidget* CreateSchemeTab();
     QWidget* CreateViewTab();
+    QWidget* CreateDiagnosticsTab();
 
     QToolButton* CreateActionButton(const QString& text, const QString& tooltip);
     QToolButton* CreateToggleButton(

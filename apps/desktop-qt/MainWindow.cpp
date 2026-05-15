@@ -460,6 +460,12 @@ void MainWindow::CreatePropertyDock()
         m_kinematicsWidget,
         &RoboSDP::Kinematics::Ui::KinematicsWidget::HandleJointAngleScrolled);
 
+    connect(
+        m_robotVtkView,
+        &RoboSDP::Desktop::Vtk::RobotVtkView::signalLinkPicked,
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::HandlePreviewLinkPicked);
+
     // 中文说明：TCP 3D Gizmo 拖动 → 填充 IK 目标位姿并自动求解
     connect(
         m_robotVtkView,

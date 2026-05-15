@@ -1,9 +1,0 @@
-robosdp_logging_autogen/timestamp: \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/logging/CMakeLists.txt \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/logging/ConsoleLogger.cpp \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/logging/ConsoleLogger.h \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/logging/ILogger.h \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/logging/LogMessage.h \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/logging/Logger.cpp \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/logging/Logger.h \
-	D:/software/CMake/bin/cmake.exe

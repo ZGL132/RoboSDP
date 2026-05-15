@@ -1,6 +1,8 @@
 ﻿#include "apps/desktop-qt/widgets/vtk/RobotVtkView.h"
 #include "apps/desktop-qt/widgets/vtk/VtkSceneBuilder.h"
 
+#include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QVBoxLayout>
 
@@ -575,10 +577,14 @@ void RobotVtkView::SetIsometricCameraView()
 void RobotVtkView::BuildLayout()
 {
     m_layout = new QVBoxLayout(this);
-    m_layout->setContentsMargins(12, 12, 12, 12);
-    m_layout->setSpacing(8);
+    m_layout->setContentsMargins(0, 0, 0, 0);
+    m_layout->setSpacing(0);
 
-    BuildControlBar();
+    setObjectName(QStringLiteral("robotVtkView"));
+    setStyleSheet(QStringLiteral(
+        "QWidget#robotVtkView{background:#dfe3ea;}"
+        "QFrame#renderViewportFrame{background:#000000;border:2px solid #003dff;}"
+        "QLabel#vtkStatusLabel{color:#475569;font-size:11px;padding-left:6px;}"));
 
 #if defined(ROBOSDP_HAVE_VTK)
     BuildVtkView();
@@ -589,17 +595,19 @@ void RobotVtkView::BuildLayout()
 
 void RobotVtkView::BuildControlBar()
 {
-    m_statusLabel = new QLabel(this);
-    m_statusLabel->setWordWrap(true);
-    m_statusLabel->setToolTip(QStringLiteral("视图显示开关已集中到顶部功能区的“视图”页签。"));
-    m_layout->addWidget(m_statusLabel);
 }
 
 void RobotVtkView::BuildVtkView()
 {
 #if defined(ROBOSDP_HAVE_VTK)
     // 中文说明：中央三维区使用原生 QVTK 控件承载骨架预览，而不是直接在 QWidget 里写渲染逻辑。
-    m_vtkWidget = new QVTKOpenGLNativeWidget(this);
+    auto* viewportFrame = new QFrame(this);
+    viewportFrame->setObjectName(QStringLiteral("renderViewportFrame"));
+    auto* viewportLayout = new QVBoxLayout(viewportFrame);
+    viewportLayout->setContentsMargins(0, 0, 0, 0);
+    viewportLayout->setSpacing(0);
+
+    m_vtkWidget = new QVTKOpenGLNativeWidget(viewportFrame);
     m_vtkWidget->setMinimumSize(640, 480);
 
     vtkNew<vtkGenericOpenGLRenderWindow> renderWindow;
@@ -660,7 +668,8 @@ void RobotVtkView::BuildVtkView()
     // 🔼🔼🔼 【新增结束】 🔼🔼🔼
 
 
-    m_layout->addWidget(m_vtkWidget, 1);
+    viewportLayout->addWidget(m_vtkWidget, 1);
+    m_layout->addWidget(viewportFrame, 1);
 
     // 中文说明：绑定自定义拾取交互器，替换默认相机操作风格，支持左键点击高亮。
     vtkNew<VtkClickInteractorStyle> clickStyle;
@@ -688,6 +697,7 @@ void RobotVtkView::HandleActorClicked(vtkActor* clickedActor, const double pickP
         // 【修复】点击空白区域，同时清除选中状态和当前选中连杆名称
         m_last_picked_actor = nullptr;
         m_current_picked_link.clear();    // <--- 【新增】清理选中连杆
+        emit signalLinkPicked(QString());
         if (m_statusLabel != nullptr)
         {
             m_statusLabel->setText(BuildStatusText());
@@ -750,6 +760,7 @@ void RobotVtkView::HandleActorClicked(vtkActor* clickedActor, const double pickP
 
     // 【逆向驱动】保存当前选中连杆名称（纯 link_name），供滚轮关节驱动使用。
     m_current_picked_link = pickedLinkName;
+    emit signalLinkPicked(pickedLinkName);
 
     // 中文说明：状态栏显示，便于用户确认当前选中了哪个连杆/骨架。
     const QString displayName = pickedLinkName.isEmpty()
@@ -773,7 +784,17 @@ void RobotVtkView::HandleActorClicked(vtkActor* clickedActor, const double pickP
 
 void RobotVtkView::BuildFallbackView()
 {
-    m_layout->addStretch();
+    auto* viewportFrame = new QFrame(this);
+    viewportFrame->setObjectName(QStringLiteral("renderViewportFrame"));
+    auto* viewportLayout = new QVBoxLayout(viewportFrame);
+    viewportLayout->setContentsMargins(18, 18, 18, 18);
+
+    auto* fallbackLabel = new QLabel(QStringLiteral("VTK 渲染后端不可用"), viewportFrame);
+    fallbackLabel->setAlignment(Qt::AlignCenter);
+    fallbackLabel->setStyleSheet(QStringLiteral("color:#cbd5e1;font-size:16px;font-weight:700;"));
+    viewportLayout->addWidget(fallbackLabel, 1);
+
+    m_layout->addWidget(viewportFrame, 1);
     RefreshScene();
 }
 
@@ -791,14 +812,14 @@ void RobotVtkView::BuildCornerAxesWidget()
     axesActor->SetCylinderRadius(0.018);
     axesActor->SetConeRadius(0.075);
     axesActor->SetSphereRadius(0.045);
-    axesActor->GetXAxisShaftProperty()->SetColor(0.62, 0.25, 0.25);
-    axesActor->GetXAxisTipProperty()->SetColor(0.72, 0.34, 0.34);
-    axesActor->GetYAxisShaftProperty()->SetColor(0.26, 0.56, 0.32);
-    axesActor->GetYAxisTipProperty()->SetColor(0.32, 0.66, 0.38);
-    axesActor->GetZAxisShaftProperty()->SetColor(0.28, 0.40, 0.72);
-    axesActor->GetZAxisTipProperty()->SetColor(0.34, 0.48, 0.82);
+    axesActor->GetXAxisShaftProperty()->SetColor(1.0, 0.0, 0.0);
+    axesActor->GetXAxisTipProperty()->SetColor(1.0, 0.0, 0.0);
+    axesActor->GetYAxisShaftProperty()->SetColor(1.0, 1.0, 0.0);
+    axesActor->GetYAxisTipProperty()->SetColor(1.0, 1.0, 0.0);
+    axesActor->GetZAxisShaftProperty()->SetColor(0.0, 0.80, 0.0);
+    axesActor->GetZAxisTipProperty()->SetColor(0.0, 0.80, 0.0);
 
-    auto tuneCaption = [](vtkCaptionActor2D* captionActor) {
+    auto tuneCaption = [](vtkCaptionActor2D* captionActor, double red, double green, double blue) {
         if (captionActor == nullptr || captionActor->GetCaptionTextProperty() == nullptr)
         {
             return;
@@ -812,12 +833,12 @@ void RobotVtkView::BuildCornerAxesWidget()
         captionActor->LeaderOff();
         // 🔼🔼🔼 【修复结束】 🔼🔼🔼
         captionActor->GetCaptionTextProperty()->SetFontSize(12);
-        captionActor->GetCaptionTextProperty()->SetBold(false);
-        captionActor->GetCaptionTextProperty()->SetColor(0.80, 0.84, 0.88);
+        captionActor->GetCaptionTextProperty()->SetBold(true);
+        captionActor->GetCaptionTextProperty()->SetColor(red, green, blue);
     };
-    tuneCaption(axesActor->GetXAxisCaptionActor2D());
-    tuneCaption(axesActor->GetYAxisCaptionActor2D());
-    tuneCaption(axesActor->GetZAxisCaptionActor2D());
+    tuneCaption(axesActor->GetXAxisCaptionActor2D(), 1.0, 0.0, 0.0);
+    tuneCaption(axesActor->GetYAxisCaptionActor2D(), 1.0, 1.0, 0.0);
+    tuneCaption(axesActor->GetZAxisCaptionActor2D(), 0.0, 0.80, 0.0);
 
     m_corner_axes_actor = axesActor;
     m_corner_axes_widget = vtkSmartPointer<vtkOrientationMarkerWidget>::New();

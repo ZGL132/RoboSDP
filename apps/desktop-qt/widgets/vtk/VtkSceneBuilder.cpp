@@ -182,15 +182,15 @@ void AddAxes(vtkRenderer* renderer, double axisLength)
     axesActor->SetConeRadius(0.025);
     axesActor->SetSphereRadius(0.018);
 
-    // 中文说明：坐标轴是空间参考层，降低亮度和线宽，避免遮挡机械臂主体几何。
-    axesActor->GetXAxisShaftProperty()->SetColor(0.58, 0.24, 0.24);
-    axesActor->GetXAxisTipProperty()->SetColor(0.68, 0.32, 0.32);
-    axesActor->GetYAxisShaftProperty()->SetColor(0.28, 0.50, 0.30);
-    axesActor->GetYAxisTipProperty()->SetColor(0.34, 0.60, 0.36);
-    axesActor->GetZAxisShaftProperty()->SetColor(0.24, 0.36, 0.62);
-    axesActor->GetZAxisTipProperty()->SetColor(0.30, 0.44, 0.72);
+    // 中文说明：按 ParaView 常用方向色约定显示：X=红，Y=黄，Z=绿。
+    axesActor->GetXAxisShaftProperty()->SetColor(1.0, 0.0, 0.0);
+    axesActor->GetXAxisTipProperty()->SetColor(1.0, 0.0, 0.0);
+    axesActor->GetYAxisShaftProperty()->SetColor(1.0, 1.0, 0.0);
+    axesActor->GetYAxisTipProperty()->SetColor(1.0, 1.0, 0.0);
+    axesActor->GetZAxisShaftProperty()->SetColor(0.0, 0.80, 0.0);
+    axesActor->GetZAxisTipProperty()->SetColor(0.0, 0.80, 0.0);
 
-    auto tuneCaption = [](vtkCaptionActor2D* captionActor) {
+    auto tuneCaption = [](vtkCaptionActor2D* captionActor, double red, double green, double blue) {
         if (captionActor == nullptr || captionActor->GetCaptionTextProperty() == nullptr)
         {
             return;
@@ -214,13 +214,13 @@ void AddAxes(vtkRenderer* renderer, double axisLength)
         captionActor->LeaderOff();
         // 🔼🔼🔼 【修复结束】 🔼🔼🔼
         captionActor->GetCaptionTextProperty()->SetFontSize(14);
-        captionActor->GetCaptionTextProperty()->SetBold(false);
+        captionActor->GetCaptionTextProperty()->SetBold(true);
         captionActor->GetCaptionTextProperty()->SetItalic(false);
-        captionActor->GetCaptionTextProperty()->SetColor(0.72, 0.76, 0.80);
+        captionActor->GetCaptionTextProperty()->SetColor(red, green, blue);
     };
-    tuneCaption(axesActor->GetXAxisCaptionActor2D());
-    tuneCaption(axesActor->GetYAxisCaptionActor2D());
-    tuneCaption(axesActor->GetZAxisCaptionActor2D());
+    tuneCaption(axesActor->GetXAxisCaptionActor2D(), 1.0, 0.0, 0.0);
+    tuneCaption(axesActor->GetYAxisCaptionActor2D(), 1.0, 1.0, 0.0);
+    tuneCaption(axesActor->GetZAxisCaptionActor2D(), 0.0, 0.80, 0.0);
     renderer->AddActor(axesActor);
 }
 
@@ -289,10 +289,9 @@ void ApplyStableViewportBackground(vtkRenderer* renderer)
         return;
     }
 
-    // 中文说明：中央三维主视图区统一使用稳定的工程软件渐变背景，避免导入模型或刷新图层时背景色跳变。
-    renderer->SetGradientBackground(true);
-    renderer->SetBackground(0.075, 0.090, 0.110);
-    renderer->SetBackground2(0.300, 0.340, 0.380);
+    // 中文说明：匹配 ParaView RenderView 的黑色高对比视口。
+    renderer->SetGradientBackground(false);
+    renderer->SetBackground(0.0, 0.0, 0.0);
 }
 
 /**

@@ -14,6 +14,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QFrame>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -25,6 +26,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
+#include <QSizePolicy>
 #include <QStringList>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -169,6 +171,99 @@ bool IsFiniteTcpFrame(const RoboSDP::Kinematics::Dto::TcpFrameDto& frame)
     return IsFiniteArray3(frame.translation_m) && IsFiniteArray3(frame.rpy_deg);
 }
 
+QFrame* CreateKinematicsCard(QWidget* parent, const QString& objectName = QString())
+{
+    auto* card = new QFrame(parent);
+    if (!objectName.isEmpty())
+    {
+        card->setObjectName(objectName);
+    }
+    card->setFrameShape(QFrame::NoFrame);
+    return card;
+}
+
+QLabel* CreateStatusBadge(QWidget* parent, const QString& text)
+{
+    auto* label = new QLabel(text, parent);
+    label->setObjectName(QStringLiteral("kinematicsBadge"));
+    label->setAlignment(Qt::AlignCenter);
+    label->setMinimumHeight(22);
+    label->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    return label;
+}
+
+void ApplyBadgeStyle(QLabel* label, const QString& text, const QString& tone)
+{
+    if (label == nullptr)
+    {
+        return;
+    }
+
+    QString background = QStringLiteral("#eef2ff");
+    QString color = QStringLiteral("#3730a3");
+    QString border = QStringLiteral("#c7d2fe");
+    if (tone == QStringLiteral("success"))
+    {
+        background = QStringLiteral("#ecfdf3");
+        color = QStringLiteral("#027a48");
+        border = QStringLiteral("#abefc6");
+    }
+    else if (tone == QStringLiteral("warning"))
+    {
+        background = QStringLiteral("#fff7ed");
+        color = QStringLiteral("#b54708");
+        border = QStringLiteral("#fed7aa");
+    }
+    else if (tone == QStringLiteral("error"))
+    {
+        background = QStringLiteral("#fef3f2");
+        color = QStringLiteral("#b42318");
+        border = QStringLiteral("#fecdca");
+    }
+    else if (tone == QStringLiteral("neutral"))
+    {
+        background = QStringLiteral("#f8fafc");
+        color = QStringLiteral("#475467");
+        border = QStringLiteral("#d0d5dd");
+    }
+
+    label->setText(text);
+    label->setStyleSheet(QStringLiteral(
+        "QLabel#kinematicsBadge{"
+        "background:%1;color:%2;border:1px solid %3;border-radius:11px;"
+        "padding:2px 10px;font-size:12px;font-weight:700;"
+        "}").arg(background, color, border));
+}
+
+void StyleKinematicsTable(QTableWidget* table)
+{
+    if (table == nullptr)
+    {
+        return;
+    }
+
+    table->setAlternatingRowColors(true);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->verticalHeader()->setDefaultSectionSize(28);
+    table->verticalHeader()->setMinimumSectionSize(26);
+    table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    table->horizontalHeader()->setHighlightSections(false);
+    table->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
+    table->setShowGrid(true);
+    table->setStyleSheet(QStringLiteral(
+        "QTableWidget{"
+        "background:#ffffff;alternate-background-color:#f8fafc;"
+        "gridline-color:#e5e7eb;border:1px solid #d0d5dd;"
+        "selection-background-color:#dbeafe;selection-color:#0f172a;"
+        "font-size:12px;"
+        "}"
+        "QHeaderView::section{"
+        "background:#f1f5f9;color:#334155;border:0;border-right:1px solid #d0d5dd;"
+        "border-bottom:1px solid #d0d5dd;padding:5px 6px;font-weight:700;"
+        "}"));
+}
+
 QTableWidgetItem* EnsureItem(QTableWidget* table, int row, int column)
 {
     QTableWidgetItem* item = table->item(row, column);
@@ -215,6 +310,18 @@ QString ReadTableString(QTableWidget* table, int row, int column, const QString&
 void SetReadOnlyItem(QTableWidgetItem* item)
 {
     item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+    item->setBackground(QColor(QStringLiteral("#f8fafc")));
+    item->setForeground(QColor(QStringLiteral("#475467")));
+}
+
+void StyleTableItem(QTableWidgetItem* item, bool numeric)
+{
+    if (item == nullptr)
+    {
+        return;
+    }
+    item->setTextAlignment(numeric ? Qt::AlignRight | Qt::AlignVCenter
+                                   : Qt::AlignLeft | Qt::AlignVCenter);
 }
 
 void PopulatePoseEditors(
@@ -414,11 +521,13 @@ void KinematicsWidget::MarkDirty()
     }
     m_has_unsaved_changes = true;
     RefreshValidationState();
+    RefreshHeaderBadges();
 }
 
 void KinematicsWidget::MarkClean()
 {
     m_has_unsaved_changes = false;
+    RefreshHeaderBadges();
 }
 
 void KinematicsWidget::TriggerImportUrdf()
@@ -429,28 +538,77 @@ void KinematicsWidget::TriggerImportUrdf()
 void KinematicsWidget::BuildUi()
 {
     auto* rootLayout = new QVBoxLayout(this);
-    rootLayout->setContentsMargins(8, 8, 8, 8);
-    rootLayout->setSpacing(8);
+    rootLayout->setContentsMargins(10, 10, 10, 10);
+    rootLayout->setSpacing(10);
 
-    // 操作按钮已迁移至 Ribbon 运动学工具页签，此处仅保留状态提示和多页签面板
-    m_operation_label = new QLabel(QStringLiteral("就绪：请先保存 Topology，再生成 KinematicModel。"), this);
+    setObjectName(QStringLiteral("kinematicsWidget"));
+    setStyleSheet(QStringLiteral(
+        "QWidget#kinematicsWidget{background:#f8fafc;}"
+        "QFrame#kinematicsHeaderCard,QFrame#kinematicsModelCard{"
+        "background:#ffffff;border:1px solid #d0d5dd;border-radius:8px;"
+        "}"
+        "QGroupBox{"
+        "font-weight:700;color:#0f172a;border:1px solid #d0d5dd;"
+        "border-radius:8px;margin-top:9px;background:#ffffff;"
+        "}"
+        "QGroupBox::title{subcontrol-origin:margin;left:10px;padding:0 5px;}"
+        "QLineEdit,QComboBox,QDoubleSpinBox,QSpinBox{"
+        "min-height:24px;border:1px solid #cbd5e1;border-radius:4px;"
+        "padding:2px 6px;background:#ffffff;"
+        "}"
+        "QTabWidget::pane{border:1px solid #d0d5dd;background:#ffffff;}"
+        "QTabBar::tab{padding:5px 12px;color:#475467;}"
+        "QTabBar::tab:selected{color:#0f172a;font-weight:700;background:#ffffff;}"));
+
+    auto* headerCard = CreateKinematicsCard(this, QStringLiteral("kinematicsHeaderCard"));
+    auto* headerLayout = new QVBoxLayout(headerCard);
+    headerLayout->setContentsMargins(12, 10, 12, 10);
+    headerLayout->setSpacing(8);
+
+    auto* titleRow = new QHBoxLayout();
+    titleRow->setSpacing(8);
+    auto* titleLabel = new QLabel(QStringLiteral("运动学建模"), headerCard);
+    titleLabel->setStyleSheet(QStringLiteral("font-size:18px;font-weight:800;color:#0f172a;"));
+    auto* subtitleLabel = new QLabel(QStringLiteral("DH/MDH 参数、FK/IK 验证、工作空间与模型诊断"), headerCard);
+    subtitleLabel->setStyleSheet(QStringLiteral("font-size:12px;color:#64748b;"));
+    titleRow->addWidget(titleLabel);
+    titleRow->addWidget(subtitleLabel);
+    titleRow->addStretch(1);
+    headerLayout->addLayout(titleRow);
+
+    auto* badgeRow = new QHBoxLayout();
+    badgeRow->setSpacing(6);
+    m_validation_badge_label = CreateStatusBadge(headerCard, QStringLiteral("等待校验"));
+    m_dirty_badge_label = CreateStatusBadge(headerCard, QStringLiteral("已保存"));
+    m_sync_badge_label = CreateStatusBadge(headerCard, QStringLiteral("未生成"));
+    m_source_badge_label = CreateStatusBadge(headerCard, QStringLiteral("未加载"));
+    badgeRow->addWidget(m_validation_badge_label);
+    badgeRow->addWidget(m_dirty_badge_label);
+    badgeRow->addWidget(m_sync_badge_label);
+    badgeRow->addWidget(m_source_badge_label);
+    badgeRow->addStretch(1);
+    headerLayout->addLayout(badgeRow);
+
+    m_operation_label = new QLabel(QStringLiteral("就绪：请先保存 Topology，再生成 KinematicModel。"), headerCard);
     m_operation_label->setWordWrap(true);
+    m_operation_label->setStyleSheet(QStringLiteral("color:#475467;font-size:12px;"));
+    headerLayout->addWidget(m_operation_label);
 
-    m_validation_label = new QLabel(QStringLiteral("模型校验：等待载入运动学草稿。"), this);
+    m_validation_label = new QLabel(QStringLiteral("模型校验：等待载入运动学草稿。"), headerCard);
     m_validation_label->setWordWrap(true);
     m_validation_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_validation_label->setStyleSheet(QStringLiteral(
-        "padding:6px 8px;border-radius:4px;background:#f2f4f7;color:#475467;"));
+        "padding:7px 9px;border-radius:6px;background:#f8fafc;color:#475467;border:1px solid #e5e7eb;"));
+    headerLayout->addWidget(m_validation_label);
 
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
-    tabs->addTab(CreateScrollableTab(CreateDesignInputPage()), QStringLiteral("设计输入"));
-    tabs->addTab(CreateScrollableTab(CreateVerificationPage()), QStringLiteral("位姿验证(FK/IK)"));
-    tabs->addTab(CreateScrollableTab(CreateAdvancedAnalysisPage()), QStringLiteral("空间与性能分析"));
-    tabs->addTab(CreateScrollableTab(CreateDiagnosticsPage()), QStringLiteral("结果诊断"));
+    tabs->addTab(CreateScrollableTab(CreateDesignInputPage()), QStringLiteral("模型参数"));
+    tabs->addTab(CreateScrollableTab(CreateVerificationPage()), QStringLiteral("FK / IK"));
+    tabs->addTab(CreateScrollableTab(CreateAdvancedAnalysisPage()), QStringLiteral("工作空间"));
+    tabs->addTab(CreateScrollableTab(CreateDiagnosticsPage()), QStringLiteral("诊断"));
 
-    rootLayout->addWidget(m_operation_label);
-    rootLayout->addWidget(m_validation_label);
+    rootLayout->addWidget(headerCard);
     rootLayout->addWidget(tabs, 1);
 
     // A/B 通道：将涉及"结构变动"的输入项绑定至重量级通道 SyncStructureAndPreview
@@ -545,14 +703,18 @@ QWidget* KinematicsWidget::CreateScrollableTab(QWidget* contentWidget)
 
 QWidget* KinematicsWidget::CreateModelGroup()
 {
-    auto* pageWidget = new QWidget(this);
+    auto* pageWidget = CreateKinematicsCard(this, QStringLiteral("kinematicsModelCard"));
     auto* pageLayout = new QVBoxLayout(pageWidget);
-    pageLayout->setContentsMargins(0, 0, 0, 0);
+    pageLayout->setContentsMargins(12, 12, 12, 12);
+    pageLayout->setSpacing(10);
 
     // 1. Basic properties
     auto* basicPropsWidget = new QWidget(pageWidget);
     auto* formLayout = new QFormLayout(basicPropsWidget);
     formLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    formLayout->setContentsMargins(8, 8, 8, 8);
+    formLayout->setHorizontalSpacing(10);
+    formLayout->setVerticalSpacing(8);
     m_model_name_edit = new QLineEdit(basicPropsWidget);
     m_parameter_convention_combo = new QComboBox(basicPropsWidget);
     m_parameter_convention_combo->addItem(QStringLiteral("DH"), QStringLiteral("DH"));
@@ -565,7 +727,60 @@ QWidget* KinematicsWidget::CreateModelGroup()
     
     pageLayout->addWidget(basicSection);
 
-    // 2. Physical frames
+    // 2. Source / synchronization summary
+    auto* debugWidget = new QWidget(pageWidget);
+    auto* debugForm = new QFormLayout(debugWidget);
+    debugForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    debugForm->setContentsMargins(8, 8, 8, 8);
+    debugForm->setHorizontalSpacing(10);
+    debugForm->setVerticalSpacing(7);
+
+    m_topology_ref_edit = new QLineEdit(debugWidget);
+    m_topology_ref_edit->setReadOnly(true);
+    m_requirement_ref_edit = new QLineEdit(debugWidget);
+    m_requirement_ref_edit->setReadOnly(true);
+    m_master_model_mode_label = new QLabel(debugWidget);
+    m_derived_model_state_label = new QLabel(debugWidget);
+    m_preview_source_label = new QLabel(debugWidget);
+    m_master_switch_state_label = new QLabel(debugWidget);
+    m_urdf_source_type_label = new QLabel(debugWidget);
+    m_dh_draft_level_label = new QLabel(debugWidget);
+    m_dh_draft_status_label = new QLabel(debugWidget);
+
+    const QList<QLabel*> sourceLabels = {
+        m_master_model_mode_label,
+        m_derived_model_state_label,
+        m_preview_source_label,
+        m_master_switch_state_label,
+        m_urdf_source_type_label,
+        m_dh_draft_level_label,
+        m_dh_draft_status_label,
+    };
+    for (QLabel* label : sourceLabels)
+    {
+        if (label != nullptr)
+        {
+            label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            label->setStyleSheet(QStringLiteral("color:#334155;"));
+        }
+    }
+
+    debugForm->addRow(QStringLiteral("设计来源"), m_master_model_mode_label);
+    debugForm->addRow(QStringLiteral("Topology 引用"), m_topology_ref_edit);
+    debugForm->addRow(QStringLiteral("Requirement 引用"), m_requirement_ref_edit);
+    debugForm->addRow(QStringLiteral("派生状态"), m_derived_model_state_label);
+    debugForm->addRow(QStringLiteral("预览数据源"), m_preview_source_label);
+    debugForm->addRow(QStringLiteral("模型来源说明"), m_master_switch_state_label);
+    debugForm->addRow(QStringLiteral("URDF 来源类型"), m_urdf_source_type_label);
+    debugForm->addRow(QStringLiteral("DH 草案级别"), m_dh_draft_level_label);
+    debugForm->addRow(QStringLiteral("DH 草案状态"), m_dh_draft_status_label);
+
+    auto* sourceSection = new QGroupBox(QStringLiteral("模型来源与同步状态"), pageWidget);
+    auto* sourceLayout = new QVBoxLayout(sourceSection);
+    sourceLayout->addWidget(debugWidget);
+    pageLayout->addWidget(sourceSection);
+
+    // 3. Physical frames
     auto* framesWidget = new QWidget(pageWidget);
     auto* framesLayout = new QGridLayout(framesWidget);
     framesLayout->setSpacing(8);
@@ -626,38 +841,6 @@ QWidget* KinematicsWidget::CreateModelGroup()
 
     pageLayout->addWidget(framesSection);
 
-    // 3. Debug / Metadata section
-    auto* debugWidget = new QWidget(pageWidget);
-    auto* debugForm = new QFormLayout(debugWidget);
-    debugForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    
-    m_topology_ref_edit = new QLineEdit(debugWidget);
-    m_topology_ref_edit->setReadOnly(true);
-    m_requirement_ref_edit = new QLineEdit(debugWidget);
-    m_requirement_ref_edit->setReadOnly(true);
-    m_master_model_mode_label = new QLabel(debugWidget);
-    m_derived_model_state_label = new QLabel(debugWidget);
-    m_preview_source_label = new QLabel(debugWidget);
-    m_master_switch_state_label = new QLabel(debugWidget);
-    m_urdf_source_type_label = new QLabel(debugWidget);
-    m_dh_draft_level_label = new QLabel(debugWidget);
-    m_dh_draft_status_label = new QLabel(debugWidget);
-    
-    debugForm->addRow(QStringLiteral("Topology 引用"), m_topology_ref_edit);
-    debugForm->addRow(QStringLiteral("Requirement 引用"), m_requirement_ref_edit);
-    debugForm->addRow(QStringLiteral("当前设计真源"), m_master_model_mode_label);
-    debugForm->addRow(QStringLiteral("派生状态"), m_derived_model_state_label);
-    debugForm->addRow(QStringLiteral("预览数据源"), m_preview_source_label);
-    debugForm->addRow(QStringLiteral("模型来源说明"), m_master_switch_state_label);
-    debugForm->addRow(QStringLiteral("URDF 来源类型"), m_urdf_source_type_label);
-    debugForm->addRow(QStringLiteral("DH 诊断草案级别"), m_dh_draft_level_label);
-    debugForm->addRow(QStringLiteral("DH 诊断草案状态"), m_dh_draft_status_label);
-
-    auto* debugSection = new CollapsibleSectionWidget(QStringLiteral("模型诊断与高级属性 (调试)"), pageWidget);
-    debugSection->SetContent(debugWidget);
-    debugSection->SetCollapsed(true);
-    pageLayout->addWidget(debugSection);
-
     pageLayout->addStretch();
 
     if (m_tool_frame_enabled_check != nullptr)
@@ -685,12 +868,23 @@ QGroupBox* KinematicsWidget::CreateDhTableGroup()
 {
     auto* groupBox = new QGroupBox(QStringLiteral("DH/MDH 参数表"), this);
     auto* layout = new QVBoxLayout(groupBox);
+    layout->setContentsMargins(10, 14, 10, 10);
+    layout->setSpacing(8);
 
     m_dh_readonly_banner_label = new QLabel(groupBox);
     m_dh_readonly_banner_label->setWordWrap(true);
-    m_dh_readonly_banner_label->setStyleSheet(QStringLiteral("color: #b54708; background: #fff7ed; border: 1px solid #fdba74; padding: 6px;"));
+    m_dh_readonly_banner_label->setStyleSheet(QStringLiteral(
+        "color:#b54708;background:#fff7ed;border:1px solid #fdba74;"
+        "border-radius:6px;padding:7px 9px;font-weight:600;"));
     m_dh_readonly_banner_label->hide();
     layout->addWidget(m_dh_readonly_banner_label);
+
+    auto* hintLabel = new QLabel(
+        QStringLiteral("长度单位统一为 m，角度单位统一为 deg；修改 DH 参数会实时重建中央骨架预览。"),
+        groupBox);
+    hintLabel->setWordWrap(true);
+    hintLabel->setStyleSheet(QStringLiteral("color:#64748b;font-size:12px;"));
+    layout->addWidget(hintLabel);
 
     m_dh_table = new QTableWidget(groupBox);
     SetupDhTableColumns();
@@ -707,6 +901,7 @@ QGroupBox* KinematicsWidget::CreateJointLimitGroup()
         QStringLiteral("最小入口保留 soft/hard limit 与速度、加速度上限，joint_id 由模型自动生成。"),
         groupBox);
     hintLabel->setWordWrap(true);
+    hintLabel->setStyleSheet(QStringLiteral("color:#64748b;font-size:12px;"));
     layout->addWidget(hintLabel);
 
     m_joint_limit_table = new QTableWidget(groupBox);
@@ -1166,26 +1361,40 @@ void KinematicsWidget::SetupDhTableColumns()
 {
     m_dh_table->setColumnCount(5);
     m_dh_table->setHorizontalHeaderLabels({
-        QStringLiteral("link_id"),
+        QStringLiteral("Link"),
         QStringLiteral("a [m]"),
         QStringLiteral("alpha [deg]"),
         QStringLiteral("d [m]"),
-        QStringLiteral("theta_offset [deg]")});
-    m_dh_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        QStringLiteral("theta offset [deg]")});
+    m_dh_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    m_dh_table->horizontalHeader()->setStretchLastSection(true);
+    m_dh_table->setColumnWidth(0, 82);
+    m_dh_table->setColumnWidth(1, 74);
+    m_dh_table->setColumnWidth(2, 98);
+    m_dh_table->setColumnWidth(3, 74);
+    StyleKinematicsTable(m_dh_table);
 }
 
 void KinematicsWidget::SetupJointLimitTableColumns()
 {
     m_joint_limit_table->setColumnCount(7);
     m_joint_limit_table->setHorizontalHeaderLabels({
-        QStringLiteral("joint_id"),
-        QStringLiteral("soft_min"),
-        QStringLiteral("soft_max"),
-        QStringLiteral("hard_min"),
-        QStringLiteral("hard_max"),
-        QStringLiteral("max_velocity"),
-        QStringLiteral("max_acceleration")});
-    m_joint_limit_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        QStringLiteral("Joint"),
+        QStringLiteral("soft min [deg]"),
+        QStringLiteral("soft max [deg]"),
+        QStringLiteral("hard min [deg]"),
+        QStringLiteral("hard max [deg]"),
+        QStringLiteral("velocity [deg/s]"),
+        QStringLiteral("accel [deg/s²]")});
+    m_joint_limit_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    m_joint_limit_table->horizontalHeader()->setStretchLastSection(true);
+    m_joint_limit_table->setColumnWidth(0, 78);
+    m_joint_limit_table->setColumnWidth(1, 104);
+    m_joint_limit_table->setColumnWidth(2, 104);
+    m_joint_limit_table->setColumnWidth(3, 104);
+    m_joint_limit_table->setColumnWidth(4, 104);
+    m_joint_limit_table->setColumnWidth(5, 118);
+    StyleKinematicsTable(m_joint_limit_table);
 }
 
 RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsWidget::CollectModelFromForm() const
@@ -1279,10 +1488,19 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
         auto* idItem = EnsureItem(m_dh_table, row, 0);
         idItem->setText(link.link_id);
         SetReadOnlyItem(idItem);
-        EnsureItem(m_dh_table, row, 1)->setText(QString::number(link.a, 'f', 4));
-        EnsureItem(m_dh_table, row, 2)->setText(QString::number(link.alpha, 'f', 3));
-        EnsureItem(m_dh_table, row, 3)->setText(QString::number(link.d, 'f', 4));
-        EnsureItem(m_dh_table, row, 4)->setText(QString::number(link.theta_offset, 'f', 3));
+        StyleTableItem(idItem, false);
+        auto* aItem = EnsureItem(m_dh_table, row, 1);
+        auto* alphaItem = EnsureItem(m_dh_table, row, 2);
+        auto* dItem = EnsureItem(m_dh_table, row, 3);
+        auto* thetaItem = EnsureItem(m_dh_table, row, 4);
+        aItem->setText(QString::number(link.a, 'f', 4));
+        alphaItem->setText(QString::number(link.alpha, 'f', 3));
+        dItem->setText(QString::number(link.d, 'f', 4));
+        thetaItem->setText(QString::number(link.theta_offset, 'f', 3));
+        StyleTableItem(aItem, true);
+        StyleTableItem(alphaItem, true);
+        StyleTableItem(dItem, true);
+        StyleTableItem(thetaItem, true);
     }
 
     m_joint_limit_table->setRowCount(static_cast<int>(model.joint_limits.size()));
@@ -1292,12 +1510,18 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
         auto* idItem = EnsureItem(m_joint_limit_table, row, 0);
         idItem->setText(limit.joint_id);
         SetReadOnlyItem(idItem);
-        EnsureItem(m_joint_limit_table, row, 1)->setText(QString::number(limit.soft_limit[0], 'f', 3));
-        EnsureItem(m_joint_limit_table, row, 2)->setText(QString::number(limit.soft_limit[1], 'f', 3));
-        EnsureItem(m_joint_limit_table, row, 3)->setText(QString::number(limit.hard_limit[0], 'f', 3));
-        EnsureItem(m_joint_limit_table, row, 4)->setText(QString::number(limit.hard_limit[1], 'f', 3));
-        EnsureItem(m_joint_limit_table, row, 5)->setText(QString::number(limit.max_velocity, 'f', 3));
-        EnsureItem(m_joint_limit_table, row, 6)->setText(QString::number(limit.max_acceleration, 'f', 3));
+        StyleTableItem(idItem, false);
+        for (int column = 1; column <= 6; ++column)
+        {
+            QTableWidgetItem* item = EnsureItem(m_joint_limit_table, row, column);
+            StyleTableItem(item, true);
+        }
+        m_joint_limit_table->item(row, 1)->setText(QString::number(limit.soft_limit[0], 'f', 3));
+        m_joint_limit_table->item(row, 2)->setText(QString::number(limit.soft_limit[1], 'f', 3));
+        m_joint_limit_table->item(row, 3)->setText(QString::number(limit.hard_limit[0], 'f', 3));
+        m_joint_limit_table->item(row, 4)->setText(QString::number(limit.hard_limit[1], 'f', 3));
+        m_joint_limit_table->item(row, 5)->setText(QString::number(limit.max_velocity, 'f', 3));
+        m_joint_limit_table->item(row, 6)->setText(QString::number(limit.max_acceleration, 'f', 3));
     }
 
     const int solverIndex = m_solver_type_combo->findData(model.ik_solver_config.solver_type);
@@ -1552,8 +1776,16 @@ void KinematicsWidget::RefreshValidationHighlights(
                 {
                     continue;
                 }
-                item->setBackground(QBrush());
-                item->setForeground(QBrush());
+                if (column == 0)
+                {
+                    item->setBackground(QColor(QStringLiteral("#f8fafc")));
+                    item->setForeground(QColor(QStringLiteral("#475467")));
+                }
+                else
+                {
+                    item->setBackground(QBrush());
+                    item->setForeground(QBrush());
+                }
                 item->setToolTip(QString());
             }
         }
@@ -1683,12 +1915,13 @@ void KinematicsWidget::RefreshValidationState()
     {
         m_validation_label->setText(QStringLiteral("模型校验：通过。DH/MDH、关节限位、坐标系与主模型状态当前一致。"));
         m_validation_label->setStyleSheet(QStringLiteral(
-            "padding:6px 8px;border-radius:4px;background:#ecfdf3;color:#027a48;font-weight:600;"));
+            "padding:7px 9px;border-radius:6px;background:#ecfdf3;color:#027a48;border:1px solid #abefc6;font-weight:600;"));
         if (m_result_validation_label != nullptr)
         {
             m_result_validation_label->setText(QStringLiteral("状态：通过\n当前模型可用于 FK / IK / 工作空间分析。"));
             m_result_validation_label->setStyleSheet(QStringLiteral("color:#027a48;"));
         }
+        RefreshHeaderBadges();
         return;
     }
 
@@ -1702,7 +1935,7 @@ void KinematicsWidget::RefreshValidationState()
             .arg(previewIssues.join(QStringLiteral("；")))
             .arg(suffix));
     m_validation_label->setStyleSheet(QStringLiteral(
-        "padding:6px 8px;border-radius:4px;background:#fff4e5;color:#b54708;font-weight:600;"));
+        "padding:7px 9px;border-radius:6px;background:#fff7ed;color:#b54708;border:1px solid #fed7aa;font-weight:600;"));
     if (m_result_validation_label != nullptr)
     {
         QStringList lines;
@@ -1714,6 +1947,51 @@ void KinematicsWidget::RefreshValidationState()
         m_result_validation_label->setText(lines.join(QLatin1Char('\n')));
         m_result_validation_label->setStyleSheet(QStringLiteral("color:#b54708;"));
     }
+    RefreshHeaderBadges();
+}
+
+void KinematicsWidget::RefreshHeaderBadges()
+{
+    if (m_validation_badge_label == nullptr)
+    {
+        return;
+    }
+
+    const auto model = CollectModelFromForm();
+    const QStringList issues = BuildValidationIssues(model);
+    if (issues.isEmpty())
+    {
+        ApplyBadgeStyle(m_validation_badge_label, QStringLiteral("校验通过"), QStringLiteral("success"));
+    }
+    else
+    {
+        ApplyBadgeStyle(
+            m_validation_badge_label,
+            QStringLiteral("待确认 %1").arg(issues.size()),
+            QStringLiteral("warning"));
+    }
+
+    ApplyBadgeStyle(
+        m_dirty_badge_label,
+        m_has_unsaved_changes ? QStringLiteral("未保存") : QStringLiteral("已保存"),
+        m_has_unsaved_changes ? QStringLiteral("warning") : QStringLiteral("success"));
+
+    const QString derivedState = FormatDerivedModelState(m_state.current_model.derived_model_state);
+    ApplyBadgeStyle(
+        m_sync_badge_label,
+        derivedState,
+        derivedState == QStringLiteral("已同步") ? QStringLiteral("success") : QStringLiteral("warning"));
+
+    const QString sourceMode =
+        RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::IsImportedUrdfReference(m_state.current_model)
+            ? QStringLiteral("URDF 参考")
+            : (RoboSDP::Kinematics::Domain::KinematicModelStatePolicy::IsDhParametric(m_state.current_model)
+                   ? QStringLiteral("DH 主模型")
+                   : QStringLiteral("未加载"));
+    ApplyBadgeStyle(
+        m_source_badge_label,
+        sourceMode,
+        sourceMode == QStringLiteral("未加载") ? QStringLiteral("neutral") : QStringLiteral("info"));
 }
 
 void KinematicsWidget::RefreshBackendDiagnostics()
@@ -2129,6 +2407,35 @@ void KinematicsWidget::HandleTcpPoseDragged(
 
     // 触发 IK 求解：求解结果将通过 RenderResults 自动刷新 FK 滑块和 3D 视图
     OnRunIkClicked();
+}
+
+void KinematicsWidget::HandlePreviewLinkPicked(const QString& linkName)
+{
+    if (m_dh_table == nullptr)
+    {
+        return;
+    }
+
+    m_dh_table->clearSelection();
+    const QString normalizedLinkName = linkName.trimmed();
+    if (normalizedLinkName.isEmpty())
+    {
+        return;
+    }
+
+    for (int row = 0; row < m_dh_table->rowCount(); ++row)
+    {
+        const QTableWidgetItem* item = m_dh_table->item(row, 0);
+        if (item != nullptr && item->text().trimmed() == normalizedLinkName)
+        {
+            m_dh_table->selectRow(row);
+            m_dh_table->scrollToItem(m_dh_table->item(row, 0), QAbstractItemView::PositionAtCenter);
+            SetOperationMessage(
+                QStringLiteral("已在 DH 参数表中定位 3D 选中连杆：%1").arg(normalizedLinkName),
+                true);
+            return;
+        }
+    }
 }
 
 void KinematicsWidget::ClearPreviewContext()

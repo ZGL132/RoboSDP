@@ -164,6 +164,9 @@ signals:
     /// @brief TCP Gizmo 被拖动 → 发出目标位姿信号，由 KinematicsWidget 的 IK 槽处理。
     void signalTcpPoseDragged(const RoboSDP::Kinematics::Dto::CartesianPoseDto& newPose);
 
+    /// @brief 用户在 3D 视图中拾取到 link，用于属性表格同步选中对应行。
+    void signalLinkPicked(const QString& linkName);
+
 private:
     void BuildLayout();
     void BuildControlBar();

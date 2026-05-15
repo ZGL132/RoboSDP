@@ -59,6 +59,7 @@ CMakeLists.txt.user*
 .vs/
 .vscode/
 .idea/
+.claude/
 
 # Python generated files
 __pycache__/
@@ -94,3 +95,7 @@ selection-smoke-project/
 # Historical local backup folder, not part of the current CMake target graph
 modules/kinematics/source/
 modules/dynamics/source/
+
+# Project build helper scripts are source files, not generated build output.
+!/tools/build/
+!/tools/build/**

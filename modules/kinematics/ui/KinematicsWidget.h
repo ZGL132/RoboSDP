@@ -109,6 +109,9 @@ public:
     /// @brief TCP Gizmo 拖动时触发，填充 IK 目标位姿并执行逆运动学求解。
     void HandleTcpPoseDragged(const RoboSDP::Kinematics::Dto::CartesianPoseDto& newPose);
 
+    /// @brief 3D 视图拾取 link 后，同步选中 DH 参数表中的对应行。
+    void HandlePreviewLinkPicked(const QString& linkName);
+
 signals:
     /// @brief 将 Kinematics 操作消息抛给主窗口底部日志面板。
     void LogMessageGenerated(const QString& message);
@@ -166,6 +169,7 @@ private:
     void RenderResults();
     void RefreshEditingState();
     void RefreshValidationState();
+    void RefreshHeaderBadges();
     QStringList BuildValidationIssues(const RoboSDP::Kinematics::Dto::KinematicModelDto& model) const;
     void RefreshValidationHighlights(const RoboSDP::Kinematics::Dto::KinematicModelDto& model);
     void SetOperationMessage(const QString& message, bool success, bool warning = false);
@@ -236,6 +240,10 @@ private:
 
     QLabel* m_operation_label = nullptr;
     QLabel* m_validation_label = nullptr;
+    QLabel* m_validation_badge_label = nullptr;
+    QLabel* m_dirty_badge_label = nullptr;
+    QLabel* m_sync_badge_label = nullptr;
+    QLabel* m_source_badge_label = nullptr;
 
     QLineEdit* m_model_name_edit = nullptr;
     QComboBox* m_parameter_convention_combo = nullptr;

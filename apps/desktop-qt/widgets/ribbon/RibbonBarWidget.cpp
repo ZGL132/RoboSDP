@@ -27,34 +27,37 @@ void RibbonBarWidget::BuildUi()
     m_tabs->setDocumentMode(true);
     m_tabs->setTabPosition(QTabWidget::North);
 
-    // 页签顺序：文件 → 需求校验 → 构型工具 → 运动学工具 → 动力学工具 → 视图 → 选型工具
+    // 页签顺序：文件 → 视图 → 需求 → 构型 → 运动学 → 动力学 → 选型 → 规划 → 导出 → 诊断
     int index = 0;
     m_tabs->addTab(CreateFileTab(), QStringLiteral("文件"));
     m_moduleTabIndexMap.insert(QStringLiteral("File"), index++);
 
-    m_tabs->insertTab(index, CreateRequirementTab(), QStringLiteral("需求校验"));
-    m_moduleTabIndexMap.insert(QStringLiteral("Requirement"), index++);
-
-    m_tabs->addTab(CreateTopologyTab(), QStringLiteral("构型工具"));
-    m_moduleTabIndexMap.insert(QStringLiteral("Topology"), index++);
-
-    m_tabs->addTab(CreateKinematicsTab(), QStringLiteral("运动学工具"));
-    m_moduleTabIndexMap.insert(QStringLiteral("Kinematics"), index++);
-
-    m_tabs->addTab(CreateDynamicsTab(), QStringLiteral("动力学工具"));
-    m_moduleTabIndexMap.insert(QStringLiteral("Dynamics"), index++);
-
     m_tabs->addTab(CreateViewTab(), QStringLiteral("视图"));
     m_moduleTabIndexMap.insert(QStringLiteral("View"), index++);
 
-    m_tabs->insertTab(index, CreateSelectionTab(), QStringLiteral("选型工具"));
+    m_tabs->addTab(CreateRequirementTab(), QStringLiteral("需求"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Requirement"), index++);
+
+    m_tabs->addTab(CreateTopologyTab(), QStringLiteral("构型"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Topology"), index++);
+
+    m_tabs->addTab(CreateKinematicsTab(), QStringLiteral("运动学"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Kinematics"), index++);
+
+    m_tabs->addTab(CreateDynamicsTab(), QStringLiteral("动力学"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Dynamics"), index++);
+
+    m_tabs->addTab(CreateSelectionTab(), QStringLiteral("选型"));
     m_moduleTabIndexMap.insert(QStringLiteral("Selection"), index++);
 
-    m_tabs->addTab(CreatePlanningTab(), QStringLiteral("规划工具"));
+    m_tabs->addTab(CreatePlanningTab(), QStringLiteral("规划"));
     m_moduleTabIndexMap.insert(QStringLiteral("Planning"), index++);
 
-    m_tabs->addTab(CreateSchemeTab(), QStringLiteral("方案导出"));
+    m_tabs->addTab(CreateSchemeTab(), QStringLiteral("导出"));
     m_moduleTabIndexMap.insert(QStringLiteral("Scheme"), index++);
+
+    m_tabs->addTab(CreateDiagnosticsTab(), QStringLiteral("诊断"));
+    m_moduleTabIndexMap.insert(QStringLiteral("Diagnostics"), index++);
 
     rootLayout->addWidget(m_tabs);
     setMaximumHeight(128);
@@ -371,6 +374,34 @@ QWidget* RibbonBarWidget::CreateSchemeTab()
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("方案操作"),
         { generateSnapshotBtn, regenerateSaveBtn, loadSnapshotBtn, exportJsonBtn }));
+    layout->addStretch();
+    return tab;
+}
+
+QWidget* RibbonBarWidget::CreateDiagnosticsTab()
+{
+    auto* tab = new QWidget(this);
+    auto* layout = new QHBoxLayout(tab);
+    layout->setContentsMargins(8, 4, 8, 6);
+    layout->setSpacing(8);
+
+    auto* diagnosticPresetBtn = CreateActionButton(
+        QStringLiteral("诊断视图"),
+        QStringLiteral("显示骨架、关节轴、Link/Joint 标签，适合排查关节顺序和坐标系。"));
+    connect(diagnosticPresetBtn, &QToolButton::clicked, this, [this]() {
+        ApplyViewToggleState(true, false, false, true, true, true, true, true, true);
+        emit signalApplyDiagnosticViewPreset();
+    });
+
+    layout->addWidget(CreateButtonGroup(
+        QStringLiteral("显示诊断"),
+        {
+            diagnosticPresetBtn,
+            CreateDisabledButton(QStringLiteral("校验问题"), QStringLiteral("等待统一诊断面板接入。")),
+            CreateDisabledButton(QStringLiteral("依赖状态"), QStringLiteral("等待模块依赖状态汇总接入。")),
+            CreateDisabledButton(QStringLiteral("性能耗时"), QStringLiteral("等待运行耗时遥测汇总接入。")),
+        }));
+
     layout->addStretch();
     return tab;
 }

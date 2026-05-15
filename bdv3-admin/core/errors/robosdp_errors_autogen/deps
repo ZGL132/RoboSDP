@@ -1,6 +1,0 @@
-robosdp_errors_autogen/timestamp: \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/errors/CMakeLists.txt \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/errors/ErrorCode.cpp \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/errors/ErrorCode.h \
-	D:/10_Source_Repos/21_robot/RoboSDP_v1.0/core/errors/ErrorInfo.h \
-	D:/software/CMake/bin/cmake.exe
