@@ -136,6 +136,19 @@ signals:
         const std::vector<std::array<double, 3>>& tcpPositions,
         const std::vector<bool>& isSingular);
 
+    /// @brief 将 IK 目标位姿与求解后实际 TCP 位姿发送给中央三维视图做叠加对比。
+    /// @param hasActualPose false 表示仅显示目标位姿，并清除上一轮实际 TCP/误差线。
+    void IkPoseComparisonUpdated(
+        const RoboSDP::Kinematics::Dto::CartesianPoseDto& targetPose,
+        const RoboSDP::Kinematics::Dto::CartesianPoseDto& actualPose,
+        double positionErrorMm,
+        double orientationErrorDeg,
+        bool withinTolerance,
+        bool hasActualPose);
+
+    /// @brief 清除中央三维视图中的 IK 目标/实际末端对比层。
+    void IkPoseComparisonCleared();
+
     /// @brief Kinematics 页面内部状态变更信号，通知 MainWindow 重新查询按钮启用状态。
     void StatusChanged();
 

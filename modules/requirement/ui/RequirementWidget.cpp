@@ -1,14 +1,18 @@
-#include "modules/requirement/ui/RequirementWidget.h"
+﻿#include "modules/requirement/ui/RequirementWidget.h"
 
 #include "core/infrastructure/ProjectManager.h"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDir>
 #include <QDoubleSpinBox>
+#include <QFile>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
@@ -21,6 +25,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 
 namespace RoboSDP::Requirement::Ui
 {
@@ -34,6 +39,12 @@ RequirementWidget::RequirementWidget(RoboSDP::Logging::ILogger* logger, QWidget*
     BuildUi();
     PopulateForm(m_service.CreateDefaultModel());
     ConnectDirtyTracking();
+    connect(
+        &RoboSDP::Infrastructure::ProjectManager::instance(),
+        &RoboSDP::Infrastructure::ProjectManager::projectPathChanged,
+        this,
+        [this](const QString&) { SyncProjectNameFromProjectContext(); });
+    SyncProjectNameFromProjectContext();
     MarkClean();
 }
 
@@ -45,6 +56,11 @@ QString RequirementWidget::ModuleName() const
 bool RequirementWidget::HasUnsavedChanges() const
 {
     return m_has_unsaved_changes;
+}
+
+void RequirementWidget::RefreshPreview()
+{
+    EmitRequirementPreview();
 }
 
 RoboSDP::Infrastructure::ProjectSaveItemResult RequirementWidget::SaveCurrentDraft()
@@ -74,29 +90,42 @@ void RequirementWidget::ConnectDirtyTracking()
 {
     for (QLineEdit* editor : findChildren<QLineEdit*>())
     {
-        connect(editor, &QLineEdit::textEdited, this, [this]() { MarkDirty(); });
+        connect(editor, &QLineEdit::textEdited, this, [this]() {
+            MarkDirty();
+            EmitRequirementPreview();
+        });
     }
     for (QComboBox* editor : findChildren<QComboBox*>())
     {
         connect(editor, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged), this, [this](int) {
             MarkDirty();
+            EmitRequirementPreview();
         });
     }
     for (QDoubleSpinBox* editor : findChildren<QDoubleSpinBox*>())
     {
         connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
             MarkDirty();
+            EmitRequirementPreview();
         });
     }
     for (QSpinBox* editor : findChildren<QSpinBox*>())
     {
         connect(editor, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, [this](int) {
             MarkDirty();
+            EmitRequirementPreview();
         });
     }
     for (QCheckBox* editor : findChildren<QCheckBox*>())
     {
-        connect(editor, &QCheckBox::toggled, this, [this](bool) { MarkDirty(); });
+        if (editor == m_show_workspace_preview_check || editor == m_show_key_pose_preview_check)
+        {
+            continue;
+        }
+        connect(editor, &QCheckBox::toggled, this, [this](bool) {
+            MarkDirty();
+            EmitRequirementPreview();
+        });
     }
 }
 
@@ -110,13 +139,111 @@ void RequirementWidget::MarkClean()
     m_has_unsaved_changes = false;
 }
 
+void RequirementWidget::EmitRequirementPreview()
+{
+    if (m_is_populating_form)
+    {
+        return;
+    }
+
+    EmitWorkspacePreview();
+    EmitKeyPosePreview();
+}
+
+void RequirementWidget::EmitWorkspacePreview()
+{
+    if (m_show_workspace_preview_check != nullptr && !m_show_workspace_preview_check->isChecked())
+    {
+        emit WorkspacePreviewUpdated({});
+        return;
+    }
+
+    emit WorkspacePreviewUpdated(BuildWorkspacePreviewPoints());
+}
+
+void RequirementWidget::EmitKeyPosePreview()
+{
+    SaveCurrentKeyPoseEdits();
+    NormalizeWorkingKeyPoseIdsAndNames();
+    RefreshKeyPoseList();
+    if (m_key_pose_list != nullptr && m_current_key_pose_index >= 0)
+    {
+        const QSignalBlocker blocker(m_key_pose_list);
+        m_key_pose_list->setCurrentRow(m_current_key_pose_index);
+    }
+    if (m_show_key_pose_preview_check != nullptr && !m_show_key_pose_preview_check->isChecked())
+    {
+        emit KeyPosePreviewUpdated({}, -1);
+        return;
+    }
+
+    emit KeyPosePreviewUpdated(m_working_model.workspace_requirements.key_poses, m_current_key_pose_index);
+}
+
+std::vector<std::array<double, 3>> RequirementWidget::BuildWorkspacePreviewPoints() const
+{
+    std::vector<std::array<double, 3>> points;
+
+    const double maxRadius = std::max(0.0, m_max_radius_spin != nullptr ? m_max_radius_spin->value() : 0.0);
+    const double minRadius = std::clamp(
+        m_min_radius_spin != nullptr ? m_min_radius_spin->value() : 0.0,
+        0.0,
+        maxRadius);
+    const double minHeight = m_min_height_spin != nullptr ? m_min_height_spin->value() : 0.0;
+    const double maxHeight = m_max_height_spin != nullptr ? m_max_height_spin->value() : 0.0;
+    if (maxRadius <= 0.0 || maxHeight <= minHeight)
+    {
+        return points;
+    }
+
+    constexpr int kSegments = 96;
+    constexpr double kPi = 3.14159265358979323846;
+    points.reserve(static_cast<std::size_t>(kSegments * 6));
+
+    auto appendRing = [&points](double radius, double height) {
+        if (radius <= 0.0)
+        {
+            return;
+        }
+        for (int i = 0; i < kSegments; ++i)
+        {
+            const double angle = 2.0 * kPi * static_cast<double>(i) / static_cast<double>(kSegments);
+            points.push_back({radius * std::cos(angle), radius * std::sin(angle), height});
+        }
+    };
+
+    appendRing(maxRadius, minHeight);
+    appendRing(maxRadius, maxHeight);
+    appendRing(minRadius, minHeight);
+    appendRing(minRadius, maxHeight);
+
+    for (int i = 0; i < kSegments; i += 8)
+    {
+        const double angle = 2.0 * kPi * static_cast<double>(i) / static_cast<double>(kSegments);
+        const double cosValue = std::cos(angle);
+        const double sinValue = std::sin(angle);
+        for (int h = 0; h <= 6; ++h)
+        {
+            const double t = static_cast<double>(h) / 6.0;
+            const double height = minHeight + (maxHeight - minHeight) * t;
+            points.push_back({maxRadius * cosValue, maxRadius * sinValue, height});
+            if (minRadius > 0.0)
+            {
+                points.push_back({minRadius * cosValue, minRadius * sinValue, height});
+            }
+        }
+    }
+
+    return points;
+}
+
 void RequirementWidget::BuildUi()
 {
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    m_operation_label = new QLabel(QStringLiteral("就绪：请录入 Requirement 基础字段。"), this);
+    m_operation_label = new QLabel(QStringLiteral("就绪：请录入任务需求基础字段。"), this);
     m_operation_label->setWordWrap(true);
 
     auto* tabs = new QTabWidget(this);
@@ -165,6 +292,9 @@ QGroupBox* RequirementWidget::CreateProjectMetaGroup()
     auto* layout = new QFormLayout(groupBox);
 
     m_project_name_edit = new QLineEdit(groupBox);
+    m_project_name_edit->setReadOnly(true);
+    m_project_name_edit->setPlaceholderText(QStringLiteral("由 project.json 决定"));
+    m_project_name_edit->setToolTip(QStringLiteral("项目名称属于项目级元数据，Requirement 页面仅只读引用。"));
     m_scenario_type_combo = new QComboBox(groupBox);
     m_description_edit = new QLineEdit(groupBox);
 
@@ -242,22 +372,34 @@ QGroupBox* RequirementWidget::CreateWorkspaceGroup()
 {
     auto* groupBox = new QGroupBox(QStringLiteral("工作空间与关键工位"), this);
     auto* layout = new QFormLayout(groupBox);
+    auto* workspaceGroup = new QGroupBox(QStringLiteral("工作空间约束"), groupBox);
+    auto* workspaceLayout = new QFormLayout(workspaceGroup);
+    auto* keyPoseGroup = new QGroupBox(QStringLiteral("关键工位"), groupBox);
+    auto* keyPoseLayout = new QFormLayout(keyPoseGroup);
+    layout->addRow(workspaceGroup);
+    layout->addRow(keyPoseGroup);
 
     m_max_radius_spin = CreateDoubleSpinBox(0.0, 1.0e6, 4, 0.01);
     m_min_radius_spin = CreateDoubleSpinBox(0.0, 1.0e6, 4, 0.01);
     m_max_height_spin = CreateDoubleSpinBox(-1.0e6, 1.0e6, 4, 0.01);
     m_min_height_spin = CreateDoubleSpinBox(-1.0e6, 1.0e6, 4, 0.01);
-    m_base_mount_type_combo = new QComboBox(groupBox);
-    m_hollow_wrist_requirement_combo = new QComboBox(groupBox);
+    m_base_mount_type_combo = new QComboBox(workspaceGroup);
+    m_hollow_wrist_requirement_combo = new QComboBox(workspaceGroup);
     m_reserved_channel_diameter_spin = CreateDoubleSpinBox(0.0, 1.0e6, 2, 1.0);
-    m_key_pose_list = new QListWidget(groupBox);
+    m_show_workspace_preview_check = new QCheckBox(QStringLiteral("显示工作空间"), workspaceGroup);
+    m_show_workspace_preview_check->setChecked(true);
+    m_show_workspace_preview_check->setToolTip(QStringLiteral("控制三维视图中的工作空间边界显示，不影响保存内容。"));
+    m_show_key_pose_preview_check = new QCheckBox(QStringLiteral("显示关键工位"), keyPoseGroup);
+    m_show_key_pose_preview_check->setChecked(true);
+    m_show_key_pose_preview_check->setToolTip(QStringLiteral("控制三维视图中的关键工位标记显示，不影响保存内容。"));
+    m_key_pose_list = new QListWidget(keyPoseGroup);
     m_key_pose_list->setSelectionMode(QAbstractItemView::SingleSelection);
     m_key_pose_list->setMinimumHeight(120);
-    m_add_key_pose_button = new QPushButton(QStringLiteral("新增工位"), groupBox);
-    m_remove_key_pose_button = new QPushButton(QStringLiteral("删除工位"), groupBox);
+    m_add_key_pose_button = new QPushButton(QStringLiteral("新增工位"), keyPoseGroup);
+    m_remove_key_pose_button = new QPushButton(QStringLiteral("删除工位"), keyPoseGroup);
 
     /**
-     * @brief 显式录入与 Topology 直接相关的 base_constraints 字段。
+     * @brief 显式录入 Topology 直接相关的 base_constraints 字段。
      *
      * 本轮只暴露 Topology 已消费的最小约束，避免 Requirement 页面提前承载二期结构设计字段。
      */
@@ -271,15 +413,18 @@ QGroupBox* RequirementWidget::CreateWorkspaceGroup()
     m_hollow_wrist_requirement_combo->addItem(QStringLiteral("需要中空腕"), QStringLiteral("true"));
     m_hollow_wrist_requirement_combo->addItem(QStringLiteral("不要求中空腕"), QStringLiteral("false"));
 
-    auto* keyPoseToolbarWidget = new QWidget(groupBox);
+    auto* keyPoseToolbarWidget = new QWidget(keyPoseGroup);
     auto* keyPoseToolbarLayout = new QHBoxLayout(keyPoseToolbarWidget);
     keyPoseToolbarLayout->setContentsMargins(0, 0, 0, 0);
     keyPoseToolbarLayout->addWidget(m_add_key_pose_button);
     keyPoseToolbarLayout->addWidget(m_remove_key_pose_button);
     keyPoseToolbarLayout->addStretch();
 
-    m_key_pose_id_edit = new QLineEdit(groupBox);
-    m_key_pose_name_edit = new QLineEdit(groupBox);
+    m_key_pose_id_edit = new QLineEdit(keyPoseGroup);
+    m_key_pose_id_edit->setVisible(false);
+    m_key_pose_name_edit = new QLineEdit(keyPoseGroup);
+    m_key_pose_name_edit->setReadOnly(true);
+    m_key_pose_name_edit->setToolTip(QStringLiteral("名称由工位顺序自动生成，新增或删除后自动重排。"));
     m_key_pose_x_spin = CreateDoubleSpinBox(-1.0e6, 1.0e6, 4, 0.01);
     m_key_pose_y_spin = CreateDoubleSpinBox(-1.0e6, 1.0e6, 4, 0.01);
     m_key_pose_z_spin = CreateDoubleSpinBox(-1.0e6, 1.0e6, 4, 0.01);
@@ -288,35 +433,36 @@ QGroupBox* RequirementWidget::CreateWorkspaceGroup()
     m_key_pose_rz_spin = CreateDoubleSpinBox(-360.0, 360.0, 3, 1.0);
     m_key_pose_position_tol_spin = CreateDoubleSpinBox(0.0, 1.0e6, 3, 0.1);
     m_key_pose_orientation_tol_spin = CreateDoubleSpinBox(0.0, 1.0e6, 3, 0.1);
-    m_key_pose_required_direction_check = new QCheckBox(QStringLiteral("启用工具方向要求"), groupBox);
+    m_key_pose_required_direction_check = new QCheckBox(QStringLiteral("启用工具方向要求"), keyPoseGroup);
+    m_key_pose_required_direction_check->setVisible(false);
     m_key_pose_direction_x_spin = CreateDoubleSpinBox(-1.0, 1.0, 4, 0.1);
     m_key_pose_direction_y_spin = CreateDoubleSpinBox(-1.0, 1.0, 4, 0.1);
     m_key_pose_direction_z_spin = CreateDoubleSpinBox(-1.0, 1.0, 4, 0.1);
+    m_key_pose_direction_x_spin->setVisible(false);
+    m_key_pose_direction_y_spin->setVisible(false);
+    m_key_pose_direction_z_spin->setVisible(false);
 
-    layout->addRow(QStringLiteral("最大半径 [m]"), m_max_radius_spin);
-    layout->addRow(QStringLiteral("最小半径 [m]"), m_min_radius_spin);
-    layout->addRow(QStringLiteral("最大高度 [m]"), m_max_height_spin);
-    layout->addRow(QStringLiteral("最小高度 [m]"), m_min_height_spin);
-    layout->addRow(QStringLiteral("基座安装偏好"), m_base_mount_type_combo);
-    layout->addRow(QStringLiteral("中空腕需求"), m_hollow_wrist_requirement_combo);
-    layout->addRow(QStringLiteral("预留通道直径 [mm]"), m_reserved_channel_diameter_spin);
-    layout->addRow(QStringLiteral("关键工位 ID"), m_key_pose_id_edit);
-    layout->addRow(QStringLiteral("关键工位名称"), m_key_pose_name_edit);
-    layout->addRow(QStringLiteral("工位 X [m]"), m_key_pose_x_spin);
-    layout->addRow(QStringLiteral("工位 Y [m]"), m_key_pose_y_spin);
-    layout->addRow(QStringLiteral("工位 Z [m]"), m_key_pose_z_spin);
-    layout->addRow(QStringLiteral("工位 RX [deg]"), m_key_pose_rx_spin);
-    layout->addRow(QStringLiteral("工位 RY [deg]"), m_key_pose_ry_spin);
-    layout->addRow(QStringLiteral("工位 RZ [deg]"), m_key_pose_rz_spin);
-    layout->addRow(QStringLiteral("位置容限 [mm]"), m_key_pose_position_tol_spin);
-    layout->addRow(QStringLiteral("姿态容限 [deg]"), m_key_pose_orientation_tol_spin);
+    workspaceLayout->addRow(QStringLiteral("最大半径 [m]"), m_max_radius_spin);
+    workspaceLayout->addRow(QStringLiteral("最小半径 [m]"), m_min_radius_spin);
+    workspaceLayout->addRow(QStringLiteral("最大高度 [m]"), m_max_height_spin);
+    workspaceLayout->addRow(QStringLiteral("最小高度 [m]"), m_min_height_spin);
+    workspaceLayout->addRow(QStringLiteral("基座安装偏好"), m_base_mount_type_combo);
+    workspaceLayout->addRow(QStringLiteral("中空腕需求"), m_hollow_wrist_requirement_combo);
+    workspaceLayout->addRow(QStringLiteral("预留通道直径 [mm]"), m_reserved_channel_diameter_spin);
+    workspaceLayout->addRow(QStringLiteral("三维显示"), m_show_workspace_preview_check);
+    keyPoseLayout->addRow(QStringLiteral("三维显示"), m_show_key_pose_preview_check);
+    keyPoseLayout->addRow(QStringLiteral("关键工位名称"), m_key_pose_name_edit);
+    keyPoseLayout->addRow(QStringLiteral("工位 X [m]"), m_key_pose_x_spin);
+    keyPoseLayout->addRow(QStringLiteral("工位 Y [m]"), m_key_pose_y_spin);
+    keyPoseLayout->addRow(QStringLiteral("工位 Z [m]"), m_key_pose_z_spin);
+    keyPoseLayout->addRow(QStringLiteral("工位 RX [deg]"), m_key_pose_rx_spin);
+    keyPoseLayout->addRow(QStringLiteral("工位 RY [deg]"), m_key_pose_ry_spin);
+    keyPoseLayout->addRow(QStringLiteral("工位 RZ [deg]"), m_key_pose_rz_spin);
+    keyPoseLayout->addRow(QStringLiteral("位置容限 [mm]"), m_key_pose_position_tol_spin);
+    keyPoseLayout->addRow(QStringLiteral("姿态容限 [deg]"), m_key_pose_orientation_tol_spin);
 
-    layout->addRow(QStringLiteral("关键工位操作"), keyPoseToolbarWidget);
-    layout->addRow(QStringLiteral("关键工位列表"), m_key_pose_list);
-    layout->addRow(QStringLiteral("方向要求"), m_key_pose_required_direction_check);
-    layout->addRow(QStringLiteral("方向 X"), m_key_pose_direction_x_spin);
-    layout->addRow(QStringLiteral("方向 Y"), m_key_pose_direction_y_spin);
-    layout->addRow(QStringLiteral("方向 Z"), m_key_pose_direction_z_spin);
+    keyPoseLayout->addRow(QStringLiteral("关键工位操作"), keyPoseToolbarWidget);
+    keyPoseLayout->addRow(QStringLiteral("关键工位列表"), m_key_pose_list);
 
     RegisterFieldWidget(QStringLiteral("workspace_requirements.max_radius"), m_max_radius_spin);
     RegisterFieldWidget(QStringLiteral("workspace_requirements.min_radius"), m_min_radius_spin);
@@ -348,6 +494,16 @@ QGroupBox* RequirementWidget::CreateWorkspaceGroup()
         &QCheckBox::toggled,
         this,
         [this](bool checked) { SetRequiredDirectionEditorsEnabled(checked); });
+    connect(
+        m_show_workspace_preview_check,
+        &QCheckBox::toggled,
+        this,
+        [this](bool) { OnPreviewVisibilityChanged(); });
+    connect(
+        m_show_key_pose_preview_check,
+        &QCheckBox::toggled,
+        this,
+        [this](bool) { OnPreviewVisibilityChanged(); });
     connect(m_add_key_pose_button, &QPushButton::clicked, this, [this]() { OnAddKeyPoseClicked(); });
     connect(m_remove_key_pose_button, &QPushButton::clicked, this, [this]() { OnRemoveKeyPoseClicked(); });
     connect(
@@ -474,6 +630,7 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementWidget::CollectModelFr
     // 从当前工作模型出发，保留 UI 未直接编辑的透传字段。
     RequirementModelDto model = m_working_model;
 
+    SyncProjectNameFromProjectContext();
     model.project_meta.project_name = m_project_name_edit->text().trimmed();
     model.project_meta.scenario_type = m_scenario_type_combo->currentData().toString();
     model.project_meta.description = m_description_edit->text().trimmed();
@@ -534,6 +691,8 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementWidget::CollectModelFr
     {
         model.workspace_requirements.key_poses.push_back(RequirementKeyPoseDto {});
     }
+    NormalizeWorkingKeyPoseIdsAndNames();
+    model.workspace_requirements.key_poses = m_working_model.workspace_requirements.key_poses;
 
     const int currentIndex = std::clamp(
         m_current_key_pose_index,
@@ -541,6 +700,9 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementWidget::CollectModelFr
         static_cast<int>(model.workspace_requirements.key_poses.size()) - 1);
     model.workspace_requirements.key_poses[static_cast<std::size_t>(currentIndex)] =
         CollectKeyPoseFromEditor();
+    m_working_model.workspace_requirements.key_poses = model.workspace_requirements.key_poses;
+    NormalizeWorkingKeyPoseIdsAndNames();
+    model.workspace_requirements.key_poses = m_working_model.workspace_requirements.key_poses;
 
     model.motion_requirements.max_linear_speed = m_max_linear_speed_spin->value();
     model.motion_requirements.max_angular_speed = m_max_angular_speed_spin->value();
@@ -568,14 +730,16 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementWidget::CollectModelFr
 
 void RequirementWidget::PopulateForm(const RoboSDP::Requirement::Dto::RequirementModelDto& model)
 {
+    m_is_populating_form = true;
     m_working_model = model;
     if (m_working_model.workspace_requirements.key_poses.empty())
     {
         m_working_model.workspace_requirements.key_poses.push_back(
             RoboSDP::Requirement::Dto::RequirementKeyPoseDto {});
     }
+    NormalizeWorkingKeyPoseIdsAndNames();
 
-    m_project_name_edit->setText(m_working_model.project_meta.project_name);
+    SyncProjectNameFromProjectContext();
 
     const int scenarioIndex = m_scenario_type_combo->findData(m_working_model.project_meta.scenario_type);
     m_scenario_type_combo->setCurrentIndex(scenarioIndex >= 0 ? scenarioIndex : 0);
@@ -645,6 +809,47 @@ void RequirementWidget::PopulateForm(const RoboSDP::Requirement::Dto::Requiremen
         m_key_pose_list->setCurrentRow(m_current_key_pose_index);
     }
     LoadCurrentKeyPoseToEditor();
+    m_is_populating_form = false;
+    EmitRequirementPreview();
+}
+
+void RequirementWidget::SyncProjectNameFromProjectContext()
+{
+    const QString projectRootPath =
+        RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
+
+    QString projectName = ResolveProjectNameFromProjectFile(projectRootPath);
+    if (projectName.trimmed().isEmpty() && !projectRootPath.trimmed().isEmpty())
+    {
+        projectName = QFileInfo(projectRootPath).fileName();
+    }
+
+    const QSignalBlocker blocker(m_project_name_edit);
+    m_project_name_edit->setText(projectName.trimmed());
+    m_working_model.project_meta.project_name = projectName.trimmed();
+}
+
+QString RequirementWidget::ResolveProjectNameFromProjectFile(const QString& projectRootPath) const
+{
+    if (projectRootPath.trimmed().isEmpty())
+    {
+        return {};
+    }
+
+    QFile projectFile(QDir(projectRootPath).filePath(QStringLiteral("project.json")));
+    if (!projectFile.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        return {};
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(projectFile.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return {};
+    }
+
+    return document.object().value(QStringLiteral("project_name")).toString().trimmed();
 }
 
 void RequirementWidget::RefreshKeyPoseList()
@@ -661,6 +866,17 @@ void RequirementWidget::RefreshKeyPoseList()
     m_remove_key_pose_button->setEnabled(m_working_model.workspace_requirements.key_poses.size() > 1);
 }
 
+void RequirementWidget::NormalizeWorkingKeyPoseIdsAndNames()
+{
+    for (std::size_t index = 0; index < m_working_model.workspace_requirements.key_poses.size(); ++index)
+    {
+        auto& keyPose = m_working_model.workspace_requirements.key_poses[index];
+        const int displayIndex = static_cast<int>(index) + 1;
+        keyPose.pose_id = QStringLiteral("pose_%1").arg(displayIndex, 3, 10, QChar('0'));
+        keyPose.name = QStringLiteral("工位%1").arg(displayIndex);
+    }
+}
+
 void RequirementWidget::SaveCurrentKeyPoseEdits()
 {
     if (m_current_key_pose_index < 0 ||
@@ -671,6 +887,7 @@ void RequirementWidget::SaveCurrentKeyPoseEdits()
 
     m_working_model.workspace_requirements.key_poses[static_cast<std::size_t>(m_current_key_pose_index)] =
         CollectKeyPoseFromEditor();
+    NormalizeWorkingKeyPoseIdsAndNames();
 
     if (m_key_pose_list != nullptr && m_current_key_pose_index < m_key_pose_list->count())
     {
@@ -890,10 +1107,13 @@ void RequirementWidget::OnAddKeyPoseClicked()
     SaveCurrentKeyPoseEdits();
 
     RoboSDP::Requirement::Dto::RequirementKeyPoseDto keyPose;
-    const int nextIndex = static_cast<int>(m_working_model.workspace_requirements.key_poses.size()) + 1;
-    keyPose.pose_id = QStringLiteral("pose_%1").arg(nextIndex, 3, 10, QChar('0'));
-    keyPose.name = QStringLiteral("工位%1").arg(nextIndex);
+    if (m_current_key_pose_index >= 0 &&
+        m_current_key_pose_index < static_cast<int>(m_working_model.workspace_requirements.key_poses.size()))
+    {
+        keyPose = m_working_model.workspace_requirements.key_poses[static_cast<std::size_t>(m_current_key_pose_index)];
+    }
     m_working_model.workspace_requirements.key_poses.push_back(keyPose);
+    NormalizeWorkingKeyPoseIdsAndNames();
 
     RefreshKeyPoseList();
     m_current_key_pose_index = static_cast<int>(m_working_model.workspace_requirements.key_poses.size()) - 1;
@@ -904,6 +1124,7 @@ void RequirementWidget::OnAddKeyPoseClicked()
     }
     LoadCurrentKeyPoseToEditor();
     MarkDirty();
+    EmitRequirementPreview();
 }
 
 void RequirementWidget::OnRemoveKeyPoseClicked()
@@ -917,6 +1138,7 @@ void RequirementWidget::OnRemoveKeyPoseClicked()
 
     m_working_model.workspace_requirements.key_poses.erase(
         m_working_model.workspace_requirements.key_poses.begin() + m_current_key_pose_index);
+    NormalizeWorkingKeyPoseIdsAndNames();
 
     RefreshKeyPoseList();
     m_current_key_pose_index = std::min(
@@ -929,6 +1151,7 @@ void RequirementWidget::OnRemoveKeyPoseClicked()
     }
     LoadCurrentKeyPoseToEditor();
     MarkDirty();
+    EmitRequirementPreview();
 }
 
 void RequirementWidget::OnKeyPoseSelectionChanged(int currentRow)
@@ -945,6 +1168,12 @@ void RequirementWidget::OnKeyPoseSelectionChanged(int currentRow)
     }
 
     LoadCurrentKeyPoseToEditor();
+    EmitKeyPosePreview();
+}
+
+void RequirementWidget::OnPreviewVisibilityChanged()
+{
+    EmitRequirementPreview();
 }
 
 QDoubleSpinBox* RequirementWidget::CreateDoubleSpinBox(

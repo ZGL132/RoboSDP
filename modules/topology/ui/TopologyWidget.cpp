@@ -374,12 +374,29 @@ void TopologyWidget::RefreshTemplateOptions()
 QGroupBox* TopologyWidget::CreateTopologyGroup()
 {
     auto* groupBox = new QGroupBox(QStringLiteral("构型骨架"), this);
-    auto* layout = new QFormLayout(groupBox);
-    m_topology_form_layout = layout;
+    auto* layout = new QVBoxLayout(groupBox);
+    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setSpacing(10);
 
-    m_topology_name_edit = new QLineEdit(groupBox);
+    auto* metaGroup = new QGroupBox(QStringLiteral("基础信息"), groupBox);
+    auto* metaLayout = new QFormLayout(metaGroup);
+    auto* dimensionGroup = new QGroupBox(QStringLiteral("运动学关键尺寸（DH）"), groupBox);
+    auto* dimensionLayout = new QFormLayout(dimensionGroup);
+    m_installation_group = new QGroupBox(QStringLiteral("附加机械与安装配置"), groupBox);
+    auto* installationLayout = new QFormLayout(m_installation_group);
+    m_installation_form_layout = installationLayout;
+    auto* wiringGroup = new QGroupBox(QStringLiteral("走线预留与扩展"), groupBox);
+    auto* wiringLayout = new QFormLayout(wiringGroup);
+
+    layout->addWidget(metaGroup);
+    layout->addWidget(dimensionGroup);
+    layout->addWidget(m_installation_group);
+    layout->addWidget(wiringGroup);
+    m_topology_form_layout = installationLayout;
+
+    m_topology_name_edit = new QLineEdit(metaGroup);
     
-    // --- DH 运动学关键尺寸 (负责决定机器人在 3D 视图中的形状) ---
+    // DH 运动学关键尺寸决定机器人在 3D 视图中的主体骨架形状。
     m_base_height_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
     m_shoulder_offset_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
     m_upper_arm_length_spin = CreateDoubleSpinBox(0.001, 10.0, 4, 0.001);
@@ -388,7 +405,7 @@ QGroupBox* TopologyWidget::CreateTopologyGroup()
     m_wrist_offset_spin = CreateDoubleSpinBox(0.0, 10.0, 4, 0.001);
 
     // --- 机械与安装配置 ---
-    m_base_mount_combo = new QComboBox(groupBox);
+    m_base_mount_combo = new QComboBox(m_installation_group);
     m_base_mount_combo->addItem(QStringLiteral("落地"), QStringLiteral("floor"));
     m_base_mount_combo->addItem(QStringLiteral("壁挂"), QStringLiteral("wall"));
     m_base_mount_combo->addItem(QStringLiteral("顶装"), QStringLiteral("ceiling"));
@@ -399,45 +416,34 @@ QGroupBox* TopologyWidget::CreateTopologyGroup()
     m_j1_range_min_spin = CreateDoubleSpinBox(-720.0, 720.0, 3, 1.0);
     m_j1_range_max_spin = CreateDoubleSpinBox(-720.0, 720.0, 3, 1.0);
     
-    // --- 走线与扩展配置 ---
-    m_internal_routing_check = new QCheckBox(QStringLiteral("需要内部走线"), groupBox);
-    m_hollow_wrist_check = new QCheckBox(QStringLiteral("需要中空腕"), groupBox);
+    // 走线与扩展配置描述中空腕、预留通道和第七轴等工程约束。
+    m_internal_routing_check = new QCheckBox(QStringLiteral("需要内部走线"), wiringGroup);
+    m_hollow_wrist_check = new QCheckBox(QStringLiteral("需要中空腕"), wiringGroup);
     m_reserved_channel_spin = CreateDoubleSpinBox(0.0, 1.0e6, 2, 1.0);
-    m_seventh_axis_reserved_check = new QCheckBox(QStringLiteral("预留第七轴"), groupBox);
-    m_hollow_joint_ids_edit = new QLineEdit(groupBox);
+    m_seventh_axis_reserved_check = new QCheckBox(QStringLiteral("预留第七轴"), wiringGroup);
+    m_hollow_joint_ids_edit = new QLineEdit(wiringGroup);
     m_hollow_joint_ids_edit->setPlaceholderText(QStringLiteral("例如: joint_4, joint_5, joint_6"));
 
-    // 将上面创建的控件添加到表单布局中，并使用 QLabel 作为分隔区域的标题
-    layout->addRow(QStringLiteral("构型名称"), m_topology_name_edit);
-    
-    auto* labelDH = new QLabel(QStringLiteral("--- 运动学关键尺寸 (DH) ---"), groupBox);
-    labelDH->setStyleSheet(QStringLiteral("color: #0284c7; font-weight: bold; margin-top: 10px;"));
-    layout->addRow(labelDH);
-    layout->addRow(QStringLiteral("基座高度 (d1) [m]"), m_base_height_spin);
-    layout->addRow(QStringLiteral("肩部偏置 (a1) [m]"), m_shoulder_offset_spin);
-    layout->addRow(QStringLiteral("大臂长度 (a2) [m]"), m_upper_arm_length_spin);
-    layout->addRow(QStringLiteral("肘部偏移 (a3) [m]"), m_elbow_offset_spin);
-    layout->addRow(QStringLiteral("小臂长度 (d4) [m]"), m_forearm_length_spin);
-    layout->addRow(QStringLiteral("腕法兰偏置 (d6) [m]"), m_wrist_offset_spin);
+    metaLayout->addRow(QStringLiteral("构型名称"), m_topology_name_edit);
+    dimensionLayout->addRow(QStringLiteral("基座高度 (d1) [m]"), m_base_height_spin);
+    dimensionLayout->addRow(QStringLiteral("肩部偏置 (a1) [m]"), m_shoulder_offset_spin);
+    dimensionLayout->addRow(QStringLiteral("大臂长度 (a2) [m]"), m_upper_arm_length_spin);
+    dimensionLayout->addRow(QStringLiteral("肘部偏移 (a3) [m]"), m_elbow_offset_spin);
+    dimensionLayout->addRow(QStringLiteral("小臂长度 (d4) [m]"), m_forearm_length_spin);
+    dimensionLayout->addRow(QStringLiteral("腕法兰偏置 (d6) [m]"), m_wrist_offset_spin);
 
-    m_installation_section_label = new QLabel(QStringLiteral("--- 附加机械与安装配置 ---"), groupBox);
-    m_installation_section_label->setStyleSheet(QStringLiteral("color: #4b5563; font-weight: bold; margin-top: 10px;"));
-    layout->addRow(m_installation_section_label);
-    layout->addRow(QStringLiteral("基座安装方式"), m_base_mount_combo);
-    layout->addRow(QStringLiteral("基座 RX [deg]"), m_base_orientation_x_spin);
-    layout->addRow(QStringLiteral("基座 RY [deg]"), m_base_orientation_y_spin);
-    layout->addRow(QStringLiteral("基座 RZ [deg]"), m_base_orientation_z_spin);
-    layout->addRow(QStringLiteral("J1 行程最小 [deg]"), m_j1_range_min_spin);
-    layout->addRow(QStringLiteral("J1 行程最大 [deg]"), m_j1_range_max_spin);
-    
-    auto* labelWiring = new QLabel(QStringLiteral("--- 走线预留与扩展 ---"), groupBox);
-    labelWiring->setStyleSheet(QStringLiteral("color: #4b5563; font-weight: bold; margin-top: 10px;"));
-    layout->addRow(labelWiring);
-    layout->addRow(QStringLiteral("内部走线"), m_internal_routing_check);
-    layout->addRow(QStringLiteral("中空腕"), m_hollow_wrist_check);
-    layout->addRow(QStringLiteral("预留通道直径 [mm]"), m_reserved_channel_spin);
-    layout->addRow(QStringLiteral("中空关节 ID"), m_hollow_joint_ids_edit);
-    layout->addRow(QStringLiteral("预留第七轴"), m_seventh_axis_reserved_check);
+    installationLayout->addRow(QStringLiteral("基座安装方式"), m_base_mount_combo);
+    installationLayout->addRow(QStringLiteral("基座 RX [deg]"), m_base_orientation_x_spin);
+    installationLayout->addRow(QStringLiteral("基座 RY [deg]"), m_base_orientation_y_spin);
+    installationLayout->addRow(QStringLiteral("基座 RZ [deg]"), m_base_orientation_z_spin);
+    installationLayout->addRow(QStringLiteral("J1 行程最小 [deg]"), m_j1_range_min_spin);
+    installationLayout->addRow(QStringLiteral("J1 行程最大 [deg]"), m_j1_range_max_spin);
+
+    wiringLayout->addRow(QStringLiteral("内部走线"), m_internal_routing_check);
+    wiringLayout->addRow(QStringLiteral("中空腕"), m_hollow_wrist_check);
+    wiringLayout->addRow(QStringLiteral("预留通道直径 [mm]"), m_reserved_channel_spin);
+    wiringLayout->addRow(QStringLiteral("中空关节 ID"), m_hollow_joint_ids_edit);
+    wiringLayout->addRow(QStringLiteral("预留第七轴"), m_seventh_axis_reserved_check);
 
     // 注册字段路径（JSON路径）与 UI 控件的映射关系。
     // 这一步非常重要：当后台校验（Validate）发现某个参数（如 d1 越界）出错时，
@@ -611,22 +617,22 @@ void TopologyWidget::UpdateTemplateDrivenUiState()
     }
 
     const bool isFloorGeneralTemplate = IsFloorGeneralTemplate(activeTemplateId);
-    if (m_topology_form_layout == nullptr)
+    if (m_installation_form_layout == nullptr)
     {
         return;
     }
 
-    if (m_installation_section_label != nullptr)
+    if (m_installation_group != nullptr)
     {
-        m_installation_section_label->setVisible(!isFloorGeneralTemplate);
+        m_installation_group->setVisible(!isFloorGeneralTemplate);
     }
 
-    SetFormRowVisible(m_topology_form_layout, m_base_mount_combo, !isFloorGeneralTemplate);
-    SetFormRowVisible(m_topology_form_layout, m_base_orientation_x_spin, !isFloorGeneralTemplate);
-    SetFormRowVisible(m_topology_form_layout, m_base_orientation_y_spin, !isFloorGeneralTemplate);
-    SetFormRowVisible(m_topology_form_layout, m_base_orientation_z_spin, !isFloorGeneralTemplate);
-    SetFormRowVisible(m_topology_form_layout, m_j1_range_min_spin, !isFloorGeneralTemplate);
-    SetFormRowVisible(m_topology_form_layout, m_j1_range_max_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_installation_form_layout, m_base_mount_combo, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_installation_form_layout, m_base_orientation_x_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_installation_form_layout, m_base_orientation_y_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_installation_form_layout, m_base_orientation_z_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_installation_form_layout, m_j1_range_min_spin, !isFloorGeneralTemplate);
+    SetFormRowVisible(m_installation_form_layout, m_j1_range_max_spin, !isFloorGeneralTemplate);
 }
 
 // ==================== UI 渲染与更新 ====================

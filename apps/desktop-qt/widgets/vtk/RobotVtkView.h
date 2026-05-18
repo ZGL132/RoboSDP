@@ -2,10 +2,13 @@
 
 #include "modules/kinematics/dto/KinematicModelDto.h"
 #include "modules/kinematics/dto/UrdfPreviewSceneDto.h"
+#include "modules/requirement/dto/RequirementModelDto.h"
 
 #include <QWidget>
 
+#include <array>
 #include <map>
+#include <vector>
 
 class QLabel;
 class QVBoxLayout;
@@ -22,6 +25,7 @@ class vtkTransform;
 
 class QVTKOpenGLNativeWidget;
 class vtkAxesActor;
+class vtkBillboardTextActor3D;
 class vtkBoxWidget2;
 class vtkGenericOpenGLRenderWindow;
 class vtkOrientationMarkerWidget;
@@ -115,6 +119,23 @@ public:
         const std::vector<std::array<double, 3>>& tcpPositions,
         const std::vector<bool>& isSingular);
 
+    /// @brief 在 3D 视图中实时显示 Requirement 关键工位。
+    void ShowRequirementKeyPoses(
+        const std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto>& keyPoses,
+        int selectedIndex);
+
+    /// @brief 显示 IK 目标位姿与实际 TCP 位姿对比层；hasActualPose=false 时仅显示目标。
+    void ShowIkPoseComparison(
+        const RoboSDP::Kinematics::Dto::CartesianPoseDto& targetPose,
+        const RoboSDP::Kinematics::Dto::CartesianPoseDto& actualPose,
+        double positionErrorMm,
+        double orientationErrorDeg,
+        bool withinTolerance,
+        bool hasActualPose);
+
+    /// @brief 清除 IK 目标/实际 TCP 对比层。
+    void ClearIkPoseComparison();
+
     /// @brief 设置关节轴诊断层显示状态，供顶部视图页签统一控制。
     void SetJointAxesVisible(bool visible);
 
@@ -175,6 +196,11 @@ private:
     void BuildCornerAxesWidget();
     void RefreshCornerAxesVisibility();
     void RefreshScene(bool resetCamera = true);
+    void RenderIkPoseComparisonLayer();
+    void ClearIkPoseComparisonActors();
+    void RenderWorkspacePointCloud(bool renderNow = true);
+    void RenderRequirementKeyPoseLayer();
+    void ClearRequirementKeyPoseActors();
     void ApplyCameraPreset(
         double directionX,
         double directionY,
@@ -198,6 +224,16 @@ private:
     bool m_showJointLabels = true;
     bool m_showTcpGizmo = false;
     PreviewSceneDto m_currentScene;
+    bool m_hasIkPoseComparison = false;
+    bool m_hasIkActualPose = false;
+    bool m_ikWithinTolerance = false;
+    double m_ikPositionErrorMm = 0.0;
+    double m_ikOrientationErrorDeg = 0.0;
+    RoboSDP::Kinematics::Dto::CartesianPoseDto m_ikTargetPose;
+    RoboSDP::Kinematics::Dto::CartesianPoseDto m_ikActualPose;
+    std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto> m_requirementKeyPoses;
+    int m_requirementSelectedKeyPoseIndex = -1;
+    std::vector<std::array<double, 3>> m_workspacePointCloudPositions;
 
 #if defined(ROBOSDP_HAVE_VTK)
     QVTKOpenGLNativeWidget* m_vtkWidget = nullptr;
@@ -225,6 +261,17 @@ private:
 
     /// @brief 工作空间采样点云 Actor：MC 采样得到的可达 TCP 位置散点图。
     vtkSmartPointer<vtkActor> m_workspace_point_cloud_actor;
+
+    vtkSmartPointer<vtkAxesActor> m_ik_target_axes_actor;
+    vtkSmartPointer<vtkAxesActor> m_ik_actual_axes_actor;
+    vtkSmartPointer<vtkActor> m_ik_error_line_actor;
+    vtkSmartPointer<vtkActor> m_ik_target_marker_actor;
+    vtkSmartPointer<vtkBillboardTextActor3D> m_ik_target_label_actor;
+    vtkSmartPointer<vtkBillboardTextActor3D> m_ik_actual_label_actor;
+    vtkSmartPointer<vtkBillboardTextActor3D> m_ik_error_label_actor;
+    std::vector<vtkSmartPointer<vtkActor>> m_requirement_key_pose_marker_actors;
+    std::vector<vtkSmartPointer<vtkAxesActor>> m_requirement_key_pose_axes_actors;
+    std::vector<vtkSmartPointer<vtkBillboardTextActor3D>> m_requirement_key_pose_label_actors;
 #endif
 
     // ── 以下成员不使用 VTK 类型，放在宏外以便非 VTK 编译路径也能访问 ──

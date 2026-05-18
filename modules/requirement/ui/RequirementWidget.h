@@ -9,6 +9,9 @@
 #include <QString>
 #include <QWidget>
 
+#include <array>
+#include <vector>
+
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
@@ -46,10 +49,15 @@ public:
 
     /// @brief 由 Ribbon 按钮触发校验（职责分离：Widget 不持有 action 按钮）。
     void TriggerValidate() { OnValidateClicked(); }
+    void RefreshPreview();
 
 signals:
     /// 将 Requirement 操作消息抛给主窗口底部日志面板。
     void LogMessageGenerated(const QString& message);
+    void WorkspacePreviewUpdated(const std::vector<std::array<double, 3>>& workspacePoints);
+    void KeyPosePreviewUpdated(
+        const std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto>& keyPoses,
+        int selectedIndex);
 
 private:
     void BuildUi();
@@ -68,13 +76,24 @@ private:
     void ConnectDirtyTracking();
     void MarkDirty();
     void MarkClean();
+    void EmitRequirementPreview();
+    void EmitWorkspacePreview();
+    void EmitKeyPosePreview();
+    std::vector<std::array<double, 3>> BuildWorkspacePreviewPoints() const;
 
     /// 从当前表单收集 Requirement 模型，同时保留界面未直接编辑的透传字段。
     RoboSDP::Requirement::Dto::RequirementModelDto CollectModelFromForm();
     void PopulateForm(const RoboSDP::Requirement::Dto::RequirementModelDto& model);
 
+    /// 从项目级 project.json 同步只读项目名称，避免 Requirement 形成第二份项目名事实来源。
+    void SyncProjectNameFromProjectContext();
+
+    /// 读取 project.json 中的 project_name；读取失败时返回空字符串，由调用方决定兜底策略。
+    QString ResolveProjectNameFromProjectFile(const QString& projectRootPath) const;
+
     /// 刷新关键工位列表，确保列表项与当前工作模型保持一致。
     void RefreshKeyPoseList();
+    void NormalizeWorkingKeyPoseIdsAndNames();
 
     /// 将当前关键工位编辑器的值回写到工作模型，避免切换列表项时丢失编辑内容。
     void SaveCurrentKeyPoseEdits();
@@ -106,6 +125,7 @@ private:
     void OnAddKeyPoseClicked();
     void OnRemoveKeyPoseClicked();
     void OnKeyPoseSelectionChanged(int currentRow);
+    void OnPreviewVisibilityChanged();
 
 private:
     RoboSDP::Logging::ILogger* m_logger = nullptr;
@@ -118,6 +138,7 @@ private:
     QHash<QString, QWidget*> m_field_widgets;
     int m_current_key_pose_index = -1;
     bool m_has_unsaved_changes = false;
+    bool m_is_populating_form = false;
 
     QLabel* m_operation_label = nullptr;
     QLabel* m_validation_summary_label = nullptr;
@@ -150,6 +171,8 @@ private:
     QComboBox* m_base_mount_type_combo = nullptr;
     QComboBox* m_hollow_wrist_requirement_combo = nullptr;
     QDoubleSpinBox* m_reserved_channel_diameter_spin = nullptr;
+    QCheckBox* m_show_workspace_preview_check = nullptr;
+    QCheckBox* m_show_key_pose_preview_check = nullptr;
     QListWidget* m_key_pose_list = nullptr;
     QPushButton* m_add_key_pose_button = nullptr;
     QPushButton* m_remove_key_pose_button = nullptr;

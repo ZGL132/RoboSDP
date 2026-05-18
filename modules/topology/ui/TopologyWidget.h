@@ -159,7 +159,8 @@ private:
     QComboBox* m_template_combo = nullptr;
     QLabel* m_operation_label = nullptr;
     QFormLayout* m_topology_form_layout = nullptr;
-    QLabel* m_installation_section_label = nullptr;
+    QGroupBox* m_installation_group = nullptr;
+    QFormLayout* m_installation_form_layout = nullptr;
 
     QLineEdit* m_topology_name_edit = nullptr;
     QComboBox* m_base_mount_combo = nullptr;

@@ -105,6 +105,9 @@ private:
     /// 显示项目已打开后的业务工作状态。
     void ShowActiveProjectState(const QString& projectRootPath);
 
+    /// 读取 project.json 中的项目名称；失败时返回空字符串并由调用方兜底。
+    QString ResolveProjectDisplayName(const QString& projectRootPath) const;
+
     /// 清空项目树节点指针，避免树重建后保留悬空地址。
     void ResetProjectTreeItemPointers();
 

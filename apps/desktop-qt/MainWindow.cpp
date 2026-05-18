@@ -21,8 +21,11 @@
 #include <QDateTime>
 #include <QDockWidget>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QStackedWidget>
@@ -303,6 +306,27 @@ void MainWindow::CreatePropertyDock()
         &RoboSDP::Requirement::Ui::RequirementWidget::LogMessageGenerated,
         this,
         [this](const QString& message) { AppendLogLine(message); });
+    connect(
+        m_requirementWidget,
+        &RoboSDP::Requirement::Ui::RequirementWidget::WorkspacePreviewUpdated,
+        this,
+        [this](const std::vector<std::array<double, 3>>& workspacePoints) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->ShowWorkspacePointCloud(workspacePoints);
+            }
+        });
+    connect(
+        m_requirementWidget,
+        &RoboSDP::Requirement::Ui::RequirementWidget::KeyPosePreviewUpdated,
+        this,
+        [this](const std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto>& keyPoses, int selectedIndex) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->ShowRequirementKeyPoses(keyPoses, selectedIndex);
+            }
+        });
+    m_requirementWidget->RefreshPreview();
 
     connect(
         m_topologyWidget,
@@ -449,6 +473,39 @@ void MainWindow::CreatePropertyDock()
             if (m_robotVtkView != nullptr)
             {
                 m_robotVtkView->ShowColoredWorkspacePointCloud(tcpPositions, isSingular);
+            }
+        });
+
+    connect(
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::IkPoseComparisonUpdated,
+        this,
+        [this](const RoboSDP::Kinematics::Dto::CartesianPoseDto& targetPose,
+               const RoboSDP::Kinematics::Dto::CartesianPoseDto& actualPose,
+               double positionErrorMm,
+               double orientationErrorDeg,
+               bool withinTolerance,
+               bool hasActualPose) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->ShowIkPoseComparison(
+                    targetPose,
+                    actualPose,
+                    positionErrorMm,
+                    orientationErrorDeg,
+                    withinTolerance,
+                    hasActualPose);
+            }
+        });
+
+    connect(
+        m_kinematicsWidget,
+        &RoboSDP::Kinematics::Ui::KinematicsWidget::IkPoseComparisonCleared,
+        this,
+        [this]() {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->ClearIkPoseComparison();
             }
         });
 
@@ -620,6 +677,11 @@ void MainWindow::ShowActiveProjectState(const QString& projectRootPath)
     }
 
     const QFileInfo projectRootInfo(projectRootPath);
+    QString projectDisplayName = ResolveProjectDisplayName(projectRootPath);
+    if (projectDisplayName.trimmed().isEmpty())
+    {
+        projectDisplayName = projectRootInfo.fileName();
+    }
 
     m_projectTree->blockSignals(true);
     m_projectTree->clear();
@@ -627,7 +689,7 @@ void MainWindow::ShowActiveProjectState(const QString& projectRootPath)
 
     m_projectRootTreeItem = new QTreeWidgetItem(QStringList{
         QStringLiteral("%1 (%2)")
-            .arg(projectRootInfo.fileName(), QDir::toNativeSeparators(projectRootInfo.absoluteFilePath()))});
+            .arg(projectDisplayName, QDir::toNativeSeparators(projectRootInfo.absoluteFilePath()))});
     m_requirementTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("任务需求")});
     m_topologyTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("构型设计")});
     m_kinematicsTreeItem = new QTreeWidgetItem(QStringList{QStringLiteral("运动学分析")});
@@ -651,6 +713,29 @@ void MainWindow::ShowActiveProjectState(const QString& projectRootPath)
     m_projectTree->blockSignals(false);
 
     HandleProjectTreeSelectionChanged(m_requirementTreeItem);
+}
+
+QString MainWindow::ResolveProjectDisplayName(const QString& projectRootPath) const
+{
+    if (projectRootPath.trimmed().isEmpty())
+    {
+        return {};
+    }
+
+    QFile projectFile(QDir(projectRootPath).filePath(QStringLiteral("project.json")));
+    if (!projectFile.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        return {};
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(projectFile.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return {};
+    }
+
+    return document.object().value(QStringLiteral("project_name")).toString().trimmed();
 }
 
 void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)

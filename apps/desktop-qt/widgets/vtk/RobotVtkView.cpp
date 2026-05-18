@@ -14,11 +14,13 @@
 #include <QVTKOpenGLNativeWidget.h>
 #include <vtkActor.h>
 #include <vtkAxesActor.h>
+#include <vtkBillboardTextActor3D.h>
 #include <vtkBoxWidget2.h>
 #include <vtkBoxRepresentation.h>
 #include <vtkCamera.h>
 #include <vtkCaptionActor2D.h>
 #include <vtkGlyph3D.h>
+#include <vtkLineSource.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
 #include <vtkPolyDataMapper.h>
@@ -39,6 +41,91 @@
 #include <vtkTransform.h>
 #include <vtkUnsignedCharArray.h>
 #include <vtkPointData.h>
+
+namespace
+{
+
+vtkSmartPointer<vtkTransform> BuildPoseTransform(
+    const RoboSDP::Kinematics::Dto::CartesianPoseDto& pose)
+{
+    auto transform = vtkSmartPointer<vtkTransform>::New();
+    transform->Translate(pose.position_m[0], pose.position_m[1], pose.position_m[2]);
+    transform->RotateZ(pose.rpy_deg[2]);
+    transform->RotateY(pose.rpy_deg[1]);
+    transform->RotateX(pose.rpy_deg[0]);
+    return transform;
+}
+
+RoboSDP::Kinematics::Dto::CartesianPoseDto ToCartesianPose(
+    const RoboSDP::Requirement::Dto::RequirementKeyPoseDto& keyPose)
+{
+    RoboSDP::Kinematics::Dto::CartesianPoseDto pose;
+    pose.position_m = {keyPose.pose[0], keyPose.pose[1], keyPose.pose[2]};
+    pose.rpy_deg = {keyPose.pose[3], keyPose.pose[4], keyPose.pose[5]};
+    return pose;
+}
+
+void TuneAxesCaption(vtkCaptionActor2D* captionActor, double red, double green, double blue)
+{
+    if (captionActor == nullptr || captionActor->GetCaptionTextProperty() == nullptr)
+    {
+        return;
+    }
+    if (captionActor->GetTextActor() != nullptr)
+    {
+        captionActor->GetTextActor()->SetTextScaleModeToNone();
+    }
+    captionActor->BorderOff();
+    captionActor->LeaderOff();
+    captionActor->GetCaptionTextProperty()->SetFontSize(12);
+    captionActor->GetCaptionTextProperty()->SetBold(true);
+    captionActor->GetCaptionTextProperty()->SetColor(red, green, blue);
+}
+
+vtkSmartPointer<vtkAxesActor> CreateTcpComparisonAxes(double length)
+{
+    auto axes = vtkSmartPointer<vtkAxesActor>::New();
+    axes->SetTotalLength(length, length, length);
+    axes->SetNormalizedShaftLength(0.8, 0.8, 0.8);
+    axes->SetNormalizedTipLength(0.2, 0.2, 0.2);
+    axes->GetXAxisShaftProperty()->SetColor(1.0, 0.0, 0.0);
+    axes->GetXAxisTipProperty()->SetColor(1.0, 0.0, 0.0);
+    axes->GetYAxisShaftProperty()->SetColor(1.0, 1.0, 0.0);
+    axes->GetYAxisTipProperty()->SetColor(1.0, 1.0, 0.0);
+    axes->GetZAxisShaftProperty()->SetColor(0.0, 0.8, 0.0);
+    axes->GetZAxisTipProperty()->SetColor(0.0, 0.8, 0.0);
+    TuneAxesCaption(axes->GetXAxisCaptionActor2D(), 1.0, 0.0, 0.0);
+    TuneAxesCaption(axes->GetYAxisCaptionActor2D(), 1.0, 1.0, 0.0);
+    TuneAxesCaption(axes->GetZAxisCaptionActor2D(), 0.0, 0.8, 0.0);
+    return axes;
+}
+
+vtkSmartPointer<vtkBillboardTextActor3D> CreateBillboardLabel(
+    const QString& text,
+    const std::array<double, 3>& position,
+    double red,
+    double green,
+    double blue,
+    int offsetX,
+    int offsetY)
+{
+    auto label = vtkSmartPointer<vtkBillboardTextActor3D>::New();
+    label->SetInput(text.toStdString().c_str());
+    label->SetPosition(position[0], position[1], position[2]);
+    label->SetDisplayOffset(offsetX, offsetY);
+    vtkTextProperty* textProp = label->GetTextProperty();
+    if (textProp != nullptr)
+    {
+        textProp->SetFontSize(13);
+        textProp->SetColor(red, green, blue);
+        textProp->SetBold(true);
+        textProp->SetShadow(true);
+        textProp->SetShadowOffset(1, -1);
+    }
+    return label;
+}
+
+} // namespace
 
 /// @brief 自定义 VTK 鼠标交互器，支持左键点击拾取 3D Actor、滚轮关节驱动、虚线框选等。
 class VtkClickInteractorStyle : public vtkInteractorStyleTrackballCamera
@@ -131,6 +218,7 @@ void RobotVtkView::ShowPreviewScene(const PreviewSceneDto& scene, bool resetCame
 {
     // 清理旧的 Actor 缓存（如 Mesh），但不一定会重置相机
     ClearCache();
+    ClearIkPoseComparison();
     m_currentScene = scene;
 
     // 【修复】场景数据更新后，重建 link_name → joint_index 映射表，
@@ -139,6 +227,40 @@ void RobotVtkView::ShowPreviewScene(const PreviewSceneDto& scene, bool resetCame
 
     // 将 resetCamera 参数透传给实际的刷新函数
     RefreshScene(resetCamera);
+}
+
+void RobotVtkView::ShowIkPoseComparison(
+    const RoboSDP::Kinematics::Dto::CartesianPoseDto& targetPose,
+    const RoboSDP::Kinematics::Dto::CartesianPoseDto& actualPose,
+    double positionErrorMm,
+    double orientationErrorDeg,
+    bool withinTolerance,
+    bool hasActualPose)
+{
+    m_ikTargetPose = targetPose;
+    m_ikActualPose = actualPose;
+    m_ikPositionErrorMm = positionErrorMm;
+    m_ikOrientationErrorDeg = orientationErrorDeg;
+    m_ikWithinTolerance = withinTolerance;
+    m_hasIkPoseComparison = true;
+    m_hasIkActualPose = hasActualPose;
+    RenderIkPoseComparisonLayer();
+}
+
+void RobotVtkView::ClearIkPoseComparison()
+{
+    m_hasIkPoseComparison = false;
+    m_hasIkActualPose = false;
+    m_ikWithinTolerance = false;
+    m_ikPositionErrorMm = 0.0;
+    m_ikOrientationErrorDeg = 0.0;
+    ClearIkPoseComparisonActors();
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderWindow != nullptr)
+    {
+        m_renderWindow->Render();
+    }
+#endif
 }
 
 void RobotVtkView::UpdatePreviewPoses(
@@ -237,6 +359,12 @@ void RobotVtkView::UpdatePreviewPoses(
 void RobotVtkView::ShowWorkspacePointCloud(
     const std::vector<std::array<double, 3>>& tcpPositions)
 {
+    m_workspacePointCloudPositions = tcpPositions;
+    RenderWorkspacePointCloud(true);
+}
+
+void RobotVtkView::RenderWorkspacePointCloud(bool renderNow)
+{
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderer == nullptr) return;
 
@@ -246,24 +374,28 @@ void RobotVtkView::ShowWorkspacePointCloud(
         m_renderer->RemoveActor(m_workspace_point_cloud_actor);
     }
 
-    if (tcpPositions.empty())
+    if (m_workspacePointCloudPositions.empty())
     {
         m_workspace_point_cloud_actor = nullptr;
-        if (m_renderWindow != nullptr) m_renderWindow->Render();
+        if (renderNow && m_renderWindow != nullptr) m_renderWindow->Render();
         return;
     }
 
     // 构建点云数据：将 TCP 位置坐标填入 vtkPoints
-    vtkNew<vtkPoints> points;
-    points->SetNumberOfPoints(static_cast<vtkIdType>(tcpPositions.size()));
-    for (vtkIdType i = 0; i < static_cast<vtkIdType>(tcpPositions.size()); ++i)
+    vtkNew<vtkPoints> vtkPointsData;
+    vtkPointsData->SetNumberOfPoints(static_cast<vtkIdType>(m_workspacePointCloudPositions.size()));
+    for (vtkIdType i = 0; i < static_cast<vtkIdType>(m_workspacePointCloudPositions.size()); ++i)
     {
-        points->SetPoint(i, tcpPositions[i][0], tcpPositions[i][1], tcpPositions[i][2]);
+        vtkPointsData->SetPoint(
+            i,
+            m_workspacePointCloudPositions[static_cast<std::size_t>(i)][0],
+            m_workspacePointCloudPositions[static_cast<std::size_t>(i)][1],
+            m_workspacePointCloudPositions[static_cast<std::size_t>(i)][2]);
     }
 
     // 构建 PolyData
     vtkNew<vtkPolyData> polyData;
-    polyData->SetPoints(points);
+    polyData->SetPoints(vtkPointsData);
 
     // 使用 VertexGlyphFilter 将每个点渲染为一个顶点
     vtkNew<vtkVertexGlyphFilter> glyphFilter;
@@ -284,12 +416,12 @@ void RobotVtkView::ShowWorkspacePointCloud(
     m_renderer->AddActor(m_workspace_point_cloud_actor);
 
     // 点云显示后，将点云 Actor 添加到点云可见性列表中，方便后续开关
-    if (m_renderWindow != nullptr)
+    if (renderNow && m_renderWindow != nullptr)
     {
         m_renderWindow->Render();
     }
 #else
-    Q_UNUSED(tcpPositions);
+    Q_UNUSED(renderNow);
 #endif
 }
 
@@ -297,6 +429,7 @@ void RobotVtkView::ShowColoredWorkspacePointCloud(
     const std::vector<std::array<double, 3>>& tcpPositions,
     const std::vector<bool>& isSingular)
 {
+    m_workspacePointCloudPositions = tcpPositions;
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderer == nullptr) return;
 
@@ -356,6 +489,15 @@ void RobotVtkView::ShowColoredWorkspacePointCloud(
 #endif
 }
 
+void RobotVtkView::ShowRequirementKeyPoses(
+    const std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto>& keyPoses,
+    int selectedIndex)
+{
+    m_requirementKeyPoses = keyPoses;
+    m_requirementSelectedKeyPoseIndex = selectedIndex;
+    RenderRequirementKeyPoseLayer();
+}
+
 void RobotVtkView::ClearCache()
 {
 #if defined(ROBOSDP_HAVE_VTK)
@@ -377,10 +519,255 @@ void RobotVtkView::ClearCache()
     m_link_actors.clear();
     m_link_mesh_geometries.clear();
     m_link_to_joint_index.clear();
+    ClearRequirementKeyPoseActors();
+    m_workspacePointCloudPositions.clear();
+    m_workspace_point_cloud_actor = nullptr;
 #endif
 
     // 【修复】模型场景切换时，清除当前选中的连杆名称，避免旧引用残留。
     m_current_picked_link.clear();
+}
+
+void RobotVtkView::ClearIkPoseComparisonActors()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr)
+    {
+        return;
+    }
+
+    if (m_ik_target_axes_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_ik_target_axes_actor);
+        m_ik_target_axes_actor = nullptr;
+    }
+    if (m_ik_actual_axes_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_ik_actual_axes_actor);
+        m_ik_actual_axes_actor = nullptr;
+    }
+    if (m_ik_error_line_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_ik_error_line_actor);
+        m_ik_error_line_actor = nullptr;
+    }
+    if (m_ik_target_marker_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_ik_target_marker_actor);
+        m_ik_target_marker_actor = nullptr;
+    }
+    if (m_ik_target_label_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_ik_target_label_actor);
+        m_ik_target_label_actor = nullptr;
+    }
+    if (m_ik_actual_label_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_ik_actual_label_actor);
+        m_ik_actual_label_actor = nullptr;
+    }
+    if (m_ik_error_label_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_ik_error_label_actor);
+        m_ik_error_label_actor = nullptr;
+    }
+#endif
+}
+
+void RobotVtkView::ClearRequirementKeyPoseActors()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr)
+    {
+        return;
+    }
+
+    for (const auto& actor : m_requirement_key_pose_marker_actors)
+    {
+        if (actor != nullptr)
+        {
+            m_renderer->RemoveActor(actor);
+        }
+    }
+    for (const auto& actor : m_requirement_key_pose_axes_actors)
+    {
+        if (actor != nullptr)
+        {
+            m_renderer->RemoveActor(actor);
+        }
+    }
+    for (const auto& actor : m_requirement_key_pose_label_actors)
+    {
+        if (actor != nullptr)
+        {
+            m_renderer->RemoveActor(actor);
+        }
+    }
+    m_requirement_key_pose_marker_actors.clear();
+    m_requirement_key_pose_axes_actors.clear();
+    m_requirement_key_pose_label_actors.clear();
+#endif
+}
+
+void RobotVtkView::RenderRequirementKeyPoseLayer()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr)
+    {
+        return;
+    }
+
+    ClearRequirementKeyPoseActors();
+    for (std::size_t index = 0; index < m_requirementKeyPoses.size(); ++index)
+    {
+        const auto& keyPose = m_requirementKeyPoses[index];
+        const bool selected = static_cast<int>(index) == m_requirementSelectedKeyPoseIndex;
+        const double red = selected ? 1.0 : 0.18;
+        const double green = selected ? 0.62 : 0.72;
+        const double blue = selected ? 0.12 : 1.0;
+
+        vtkNew<vtkSphereSource> markerSource;
+        markerSource->SetRadius(selected ? 0.032 : 0.022);
+        markerSource->SetThetaResolution(24);
+        markerSource->SetPhiResolution(16);
+        vtkNew<vtkPolyDataMapper> markerMapper;
+        markerMapper->SetInputConnection(markerSource->GetOutputPort());
+        auto markerActor = vtkSmartPointer<vtkActor>::New();
+        markerActor->SetMapper(markerMapper);
+        markerActor->SetPosition(keyPose.pose[0], keyPose.pose[1], keyPose.pose[2]);
+        markerActor->GetProperty()->SetColor(red, green, blue);
+        markerActor->GetProperty()->SetOpacity(selected ? 0.92 : 0.72);
+        markerActor->GetProperty()->SetAmbient(0.35);
+        m_renderer->AddActor(markerActor);
+        m_requirement_key_pose_marker_actors.push_back(markerActor);
+
+        auto axesActor = CreateTcpComparisonAxes(selected ? 0.18 : 0.13);
+        axesActor->SetUserTransform(BuildPoseTransform(ToCartesianPose(keyPose)));
+        m_renderer->AddActor(axesActor);
+        m_requirement_key_pose_axes_actors.push_back(axesActor);
+
+        const QString labelText = keyPose.name.trimmed().isEmpty()
+                                      ? QStringLiteral("工位%1").arg(static_cast<int>(index) + 1)
+                                      : keyPose.name.trimmed();
+        std::array<double, 3> labelPosition {
+            keyPose.pose[0],
+            keyPose.pose[1],
+            keyPose.pose[2] + (selected ? 0.08 : 0.06)};
+        auto labelActor = CreateBillboardLabel(labelText, labelPosition, red, green, blue, 16, selected ? 18 : 12);
+        m_renderer->AddActor(labelActor);
+        m_requirement_key_pose_label_actors.push_back(labelActor);
+    }
+
+    if (m_renderWindow != nullptr)
+    {
+        m_renderWindow->Render();
+    }
+#endif
+}
+
+void RobotVtkView::RenderIkPoseComparisonLayer()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr || !m_hasIkPoseComparison)
+    {
+        return;
+    }
+
+    ClearIkPoseComparisonActors();
+
+    m_ik_target_axes_actor = CreateTcpComparisonAxes(0.18);
+    m_ik_target_axes_actor->SetUserTransform(BuildPoseTransform(m_ikTargetPose));
+    m_renderer->AddActor(m_ik_target_axes_actor);
+
+    vtkNew<vtkSphereSource> targetMarkerSource;
+    targetMarkerSource->SetRadius(0.018);
+    targetMarkerSource->SetThetaResolution(24);
+    targetMarkerSource->SetPhiResolution(16);
+    vtkNew<vtkPolyDataMapper> targetMarkerMapper;
+    targetMarkerMapper->SetInputConnection(targetMarkerSource->GetOutputPort());
+    m_ik_target_marker_actor = vtkSmartPointer<vtkActor>::New();
+    m_ik_target_marker_actor->SetMapper(targetMarkerMapper);
+    m_ik_target_marker_actor->SetPosition(
+        m_ikTargetPose.position_m[0],
+        m_ikTargetPose.position_m[1],
+        m_ikTargetPose.position_m[2]);
+    m_ik_target_marker_actor->GetProperty()->SetColor(0.0, 0.78, 1.0);
+    m_ik_target_marker_actor->GetProperty()->SetOpacity(0.45);
+    m_ik_target_marker_actor->GetProperty()->SetAmbient(0.55);
+    m_renderer->AddActor(m_ik_target_marker_actor);
+
+    m_ik_target_label_actor = CreateBillboardLabel(
+        QStringLiteral("Target TCP"),
+        m_ikTargetPose.position_m,
+        0.32,
+        0.90,
+        1.0,
+        18,
+        18);
+    m_renderer->AddActor(m_ik_target_label_actor);
+
+    if (m_hasIkActualPose)
+    {
+        m_ik_actual_axes_actor = CreateTcpComparisonAxes(0.16);
+        m_ik_actual_axes_actor->SetUserTransform(BuildPoseTransform(m_ikActualPose));
+        m_renderer->AddActor(m_ik_actual_axes_actor);
+
+        const double okRed = 0.22;
+        const double okGreen = 0.86;
+        const double okBlue = 0.42;
+        const double warnRed = 1.0;
+        const double warnGreen = 0.34;
+        const double warnBlue = 0.18;
+        const double red = m_ikWithinTolerance ? okRed : warnRed;
+        const double green = m_ikWithinTolerance ? okGreen : warnGreen;
+        const double blue = m_ikWithinTolerance ? okBlue : warnBlue;
+
+        m_ik_actual_label_actor = CreateBillboardLabel(
+            QStringLiteral("Actual TCP"),
+            m_ikActualPose.position_m,
+            red,
+            green,
+            blue,
+            18,
+            -18);
+        m_renderer->AddActor(m_ik_actual_label_actor);
+
+        vtkNew<vtkLineSource> lineSource;
+        lineSource->SetPoint1(
+            m_ikTargetPose.position_m[0],
+            m_ikTargetPose.position_m[1],
+            m_ikTargetPose.position_m[2]);
+        lineSource->SetPoint2(
+            m_ikActualPose.position_m[0],
+            m_ikActualPose.position_m[1],
+            m_ikActualPose.position_m[2]);
+        vtkNew<vtkPolyDataMapper> lineMapper;
+        lineMapper->SetInputConnection(lineSource->GetOutputPort());
+        m_ik_error_line_actor = vtkSmartPointer<vtkActor>::New();
+        m_ik_error_line_actor->SetMapper(lineMapper);
+        m_ik_error_line_actor->GetProperty()->SetColor(red, green, blue);
+        m_ik_error_line_actor->GetProperty()->SetLineWidth(3.0);
+        m_ik_error_line_actor->GetProperty()->SetOpacity(0.85);
+        m_renderer->AddActor(m_ik_error_line_actor);
+
+        const std::array<double, 3> midPoint {
+            (m_ikTargetPose.position_m[0] + m_ikActualPose.position_m[0]) * 0.5,
+            (m_ikTargetPose.position_m[1] + m_ikActualPose.position_m[1]) * 0.5,
+            (m_ikTargetPose.position_m[2] + m_ikActualPose.position_m[2]) * 0.5};
+        const QString stateText = m_ikWithinTolerance ? QStringLiteral("OK") : QStringLiteral("OUT OF TOL");
+        const QString errorText = QStringLiteral("%1 | pos: %2 mm / ori: %3 deg")
+                                      .arg(stateText)
+                                      .arg(m_ikPositionErrorMm, 0, 'f', 2)
+                                      .arg(m_ikOrientationErrorDeg, 0, 'f', 2);
+        m_ik_error_label_actor = CreateBillboardLabel(errorText, midPoint, red, green, blue, 18, 0);
+        m_renderer->AddActor(m_ik_error_label_actor);
+    }
+
+    if (m_renderWindow != nullptr)
+    {
+        m_renderWindow->Render();
+    }
+#endif
 }
 
 void RobotVtkView::ResetCameraToCurrentScene()
@@ -941,6 +1328,13 @@ void RobotVtkView::RefreshScene(bool resetCamera)
             m_renderer->AddActor(m_tcp_axes_actor);
         }
         // 🔼🔼🔼 🔼🔼🔼
+
+        if (m_hasIkPoseComparison)
+        {
+            RenderIkPoseComparisonLayer();
+        }
+        RenderWorkspacePointCloud(false);
+        RenderRequirementKeyPoseLayer();
 
         // ── 【逆向驱动】TCP 3D Gizmo 初始化（vtkBoxWidget2）────────────
         // 默认关闭：该控件表示“IK 目标拖拽”，不是机械臂尺寸编辑器，必须由显式交互模式打开。

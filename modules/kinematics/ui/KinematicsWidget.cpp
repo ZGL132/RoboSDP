@@ -1026,6 +1026,32 @@ QWidget* KinematicsWidget::CreateInteractivePage()
             ? QStringLiteral("位置单位为 m。常规工业机械臂建议保持在 ±10 m 以内。")
             : QStringLiteral("姿态单位为 deg，使用 RPY 欧拉角。"));
         m_ik_target_pose_spins[static_cast<std::size_t>(index)] = spinBox;
+        connect(
+            spinBox,
+            QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this,
+            [this](double) {
+                if (m_is_populating_form)
+                {
+                    return;
+                }
+                RoboSDP::Kinematics::Dto::CartesianPoseDto targetPose;
+                targetPose.position_m = {
+                    m_ik_target_pose_spins[0]->value(),
+                    m_ik_target_pose_spins[1]->value(),
+                    m_ik_target_pose_spins[2]->value()};
+                targetPose.rpy_deg = {
+                    m_ik_target_pose_spins[3]->value(),
+                    m_ik_target_pose_spins[4]->value(),
+                    m_ik_target_pose_spins[5]->value()};
+                emit IkPoseComparisonUpdated(
+                    targetPose,
+                    RoboSDP::Kinematics::Dto::CartesianPoseDto {},
+                    0.0,
+                    0.0,
+                    false,
+                    false);
+            });
         const int row = index % 3;
         const int labelColumn = index < 3 ? 0 : 2;
         const int editorColumn = index < 3 ? 1 : 3;
@@ -2444,6 +2470,7 @@ void KinematicsWidget::ClearPreviewContext()
     m_preview_scene = PreviewSceneDto {};
     m_preview_model = RoboSDP::Kinematics::Dto::KinematicModelDto {};
     m_preview_source_mode = QStringLiteral("none");
+    emit IkPoseComparisonCleared();
     emit PreviewSceneGenerated(m_preview_scene);
     RefreshModelStatusLabels();
 }
@@ -3104,6 +3131,55 @@ void KinematicsWidget::OnRunIkClicked()
         {
             m_fk_joint_spins[i]->setValue(ikJoints[i]);
         }
+
+        RoboSDP::Kinematics::Dto::FkRequestDto fkVerifyRequest;
+        fkVerifyRequest.joint_positions_deg = ikJoints;
+        m_state.last_fk_result = m_service.SolveFk(m_state.current_model, fkVerifyRequest);
+        if (m_state.last_fk_result.success)
+        {
+            PreviewPoseMap poseMap;
+            poseMap[QStringLiteral("base_link")] = m_state.current_model.base_frame;
+            for (const auto& linkPose : m_state.last_fk_result.link_poses)
+            {
+                poseMap[linkPose.link_id] = linkPose.pose;
+            }
+            poseMap[QStringLiteral("tcp_frame")] = m_state.last_fk_result.tcp_pose;
+            emit PreviewPosesUpdated(poseMap);
+
+            const bool withinTolerance =
+                m_state.last_ik_result.position_error_mm <= m_state.current_model.ik_solver_config.position_tolerance_mm &&
+                m_state.last_ik_result.orientation_error_deg <= m_state.current_model.ik_solver_config.orientation_tolerance_deg;
+            emit IkPoseComparisonUpdated(
+                request.target_pose,
+                m_state.last_fk_result.tcp_pose,
+                m_state.last_ik_result.position_error_mm,
+                m_state.last_ik_result.orientation_error_deg,
+                withinTolerance,
+                true);
+        }
+        else
+        {
+            emit LogMessageGenerated(
+                QStringLiteral("[Kinematics][Warning] IK 解 FK 验证失败：%1")
+                    .arg(m_state.last_fk_result.message));
+            emit IkPoseComparisonUpdated(
+                request.target_pose,
+                RoboSDP::Kinematics::Dto::CartesianPoseDto {},
+                m_state.last_ik_result.position_error_mm,
+                m_state.last_ik_result.orientation_error_deg,
+                false,
+                false);
+        }
+    }
+    else
+    {
+        emit IkPoseComparisonUpdated(
+            request.target_pose,
+            RoboSDP::Kinematics::Dto::CartesianPoseDto {},
+            m_state.last_ik_result.position_error_mm,
+            m_state.last_ik_result.orientation_error_deg,
+            false,
+            false);
     }
 
     RenderResults();
