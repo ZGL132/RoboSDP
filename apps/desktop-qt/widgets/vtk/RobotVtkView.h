@@ -287,8 +287,22 @@ private:
     ///        由 KinematicsWidget 的步长控件通过 SetScrollStep() 设置。
     double m_scroll_step_deg = 1.0;
 
+    /// @brief 比例尺半透明覆盖层 QWidget（QPainter 绘制白色刻度线与标签）。
+    QWidget* m_scaleBarOverlay = nullptr;
+    /// @brief 当前比例尺代表的世界距离（米）。
+    double m_scaleBarNiceDist = 0.5;
+    /// @brief 当前比例尺单位字符串（m / cm / mm）。
+    QString m_scaleBarUnit = QStringLiteral("m");
+
     /// @brief 从 m_currentScene.segments 重建 m_link_to_joint_index 映射表。
     void RebuildLinkToJointMap();
+
+    /// @brief 更新比例尺：根据当前相机参数计算世界距离并刷新底部比例尺覆盖层。
+    void UpdateScaleBar();
+
+protected:
+    /// @brief 监听 VTK 视口鼠标事件，在旋转/缩放/平移结束后刷新比例尺。
+    bool eventFilter(QObject* watched, QEvent* event) override;
 };
 
 } // namespace RoboSDP::Desktop::Vtk

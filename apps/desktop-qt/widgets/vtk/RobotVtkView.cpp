@@ -4,6 +4,9 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPainter>
+#include <QPen>
+#include <QResizeEvent>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -28,6 +31,7 @@
 #include <vtkVertexGlyphFilter.h>
 #include <vtkCallbackCommand.h>
 #include <vtkCommand.h>
+#include <vtkCoordinate.h>
 #include <vtkGenericOpenGLRenderWindow.h>
 #include <vtkInteractorStyleTrackballCamera.h>
 #include <vtkNew.h>
@@ -125,6 +129,164 @@ vtkSmartPointer<vtkBillboardTextActor3D> CreateBillboardLabel(
     return label;
 }
 
+// 中文说明：QPainter 绘制的地图风格比例尺覆盖层，白色刻度线与标签，置于三维视图底部。
+class ScaleBarOverlay : public QWidget
+{
+public:
+    explicit ScaleBarOverlay(QWidget* parent)
+        : QWidget(parent)
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_TranslucentBackground);
+        setAttribute(Qt::WA_NoSystemBackground);
+        setStyleSheet(QStringLiteral("background:transparent;"));
+        setFixedHeight(28);
+    }
+
+    void setScale(double niceDistMeters, const QString& unit, double barRatio)
+    {
+        m_niceDist = niceDistMeters;
+        m_unit = unit;
+        m_barRatio = barRatio;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        if (width() < 60 || height() < 8)
+            return;
+
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        const int w = width();
+        const int h = height();
+        const int barY = h - 6;        // 主刻度线 y 坐标（底部）
+        const int tickTop = barY - 7;  // 短刻度顶部
+        const int tickMid = barY - 5;  // 中刻度顶部
+        const int textY = 0;           // 文字顶部 y（贴顶，避免与刻度线重叠）
+
+        const int margin = 4;
+        const int barWidth = w - 2 * margin;
+        const int barLeft = margin;
+        const int barRight = margin + barWidth;
+
+        // 根据 barRatio 决定分段数（1~5 段）
+        int segments = 1;
+        if (m_barRatio >= 2.5) segments = 5;
+        else if (m_barRatio >= 2.0) segments = 4;
+        else if (m_barRatio >= 1.5) segments = 3;
+        else if (m_barRatio >= 0.8) segments = 2;
+
+        const double segWidth = static_cast<double>(barWidth) / segments;
+        const double segDist = m_niceDist / segments;
+
+        // ── 白色画笔 ──
+        QPen linePen(QColor(230, 230, 235), 1.5);
+        painter.setPen(linePen);
+
+        // 主水平线
+        painter.drawLine(QPointF(barLeft, barY), QPointF(barRight, barY));
+
+        // 左端竖线
+        painter.drawLine(QPointF(barLeft, tickTop), QPointF(barLeft, barY));
+        // 右端竖线
+        painter.drawLine(QPointF(barRight, tickTop), QPointF(barRight, barY));
+
+        // 分段刻度和填充
+        QColor fillA(255, 255, 255, 140);
+        QColor fillB(255, 255, 255, 45);
+        for (int i = 0; i < segments; ++i)
+        {
+            double segLeft = barLeft + i * segWidth;
+            double segRight = segLeft + segWidth;
+
+            // 交替填充
+            if (segments > 1)
+            {
+                painter.fillRect(QRectF(segLeft, barY - 4, segWidth, 5.0),
+                                 (i % 2 == 0) ? fillA : fillB);
+            }
+
+            // 中间刻度线（在每段起始处）
+            if (i > 0)
+            {
+                painter.drawLine(QPointF(segLeft, tickMid), QPointF(segLeft, barY));
+            }
+
+            // 细分小刻度（每段内再分 2 或 5 小格）
+            int subTicks = (segments <= 3) ? 5 : 2;
+            for (int j = 1; j < subTicks; ++j)
+            {
+                double subX = segLeft + j * segWidth / subTicks;
+                painter.drawLine(QPointF(subX, barY - 4), QPointF(subX, barY));
+            }
+
+            // 最后一段末尾的小刻度（在 barRight 处）
+            if (i == segments - 1 && segments > 1)
+            {
+                for (int j = 1; j < subTicks; ++j)
+                {
+                    double subX = segRight - (subTicks - j) * segWidth / subTicks;
+                    // 已通过 i>0 处理了 segLeft（即上一段的末尾）
+                    // 这里不需要重复
+                }
+            }
+        }
+
+        // ── 文字标签 ──
+        painter.setPen(QPen(QColor(220, 222, 228), 1.0));
+        QFont font(QStringLiteral("Consolas"), 9);
+        font.setStyleHint(QFont::Monospace);
+        painter.setFont(font);
+
+        const QFontMetrics fm(font);
+        // 只在分段端点绘制标签
+        for (int i = 0; i <= segments; ++i)
+        {
+            double val = i * segDist;
+            double labelX = barLeft + i * segWidth;
+
+            QString label;
+            if (m_unit == QStringLiteral("m"))
+            {
+                if (val >= 1.0)
+                    label = QStringLiteral("%1").arg(val, 0, 'g', 3);
+                else
+                    label = QStringLiteral("%1").arg(val, 0, 'f', 2);
+            }
+            else
+            {
+                label = QStringLiteral("%1").arg(val, 0, 'g', 3);
+            }
+
+            // 最右端标签附加单位
+            if (i == segments)
+            {
+                label = label + QStringLiteral(" ") + m_unit;
+            }
+
+            int textWidth = fm.horizontalAdvance(label);
+            double textX = labelX - textWidth / 2.0;
+            // 避免文字溢出左边界
+            if (i == 0)
+                textX = std::max(0.0, labelX - 2.0);
+            // 避免文字溢出右边界
+            if (i == segments)
+                textX = std::min(static_cast<double>(w - textWidth - 2), labelX - textWidth / 2.0);
+
+            painter.drawText(QPointF(textX, textY + fm.ascent()), label);
+        }
+
+    }
+
+private:
+    double m_niceDist = 0.5;
+    QString m_unit = QStringLiteral("m");
+    double m_barRatio = 1.0;
+};
+
 } // namespace
 
 /// @brief 自定义 VTK 鼠标交互器，支持左键点击拾取 3D Actor、滚轮关节驱动、虚线框选等。
@@ -148,7 +310,8 @@ public:
 
     void OnLeftButtonDown() override
     {
-        // 中文说明：左键按下时先执行拾取，再传递给父类保持视角旋转功能。
+        // 中文说明：左键按下时先执行拾取；若命中 Actor 则只高亮不旋转视角；若未命中则保留默认相机操作。
+        bool pickedActor = false;
         if (renderer != nullptr && parentView != nullptr && this->GetInteractor() != nullptr)
         {
             const int* clickPos = this->GetInteractor()->GetEventPosition();
@@ -159,9 +322,13 @@ public:
             // 中文说明：传递拾取位置（世界坐标），供 HandleActorClicked 在骨架节点查找时使用。
             const double* pickPos = picker->GetPickPosition();
             parentView->HandleActorClicked(clickedActor, pickPos);
+            pickedActor = (clickedActor != nullptr);
         }
-        // 保留原有的视角旋转/平移功能
-        vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
+        // 中文说明：仅未命中 Actor 时才保留默认的视角旋转/平移交互，避免点击标签导致相机偏移。
+        if (!pickedActor)
+        {
+            vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
+        }
     }
 
     // ── 【逆向驱动】鼠标滚轮事件重写 ──────────────────────────────
@@ -520,7 +687,9 @@ void RobotVtkView::ClearCache()
     m_link_mesh_geometries.clear();
     m_link_to_joint_index.clear();
     ClearRequirementKeyPoseActors();
-    m_workspacePointCloudPositions.clear();
+    // 中文说明：不在此处清空 m_workspacePointCloudPositions；
+    // 工作空间点云数据属于 Requirement 模块，切换页面不应丢失，
+    // RefreshScene() 末尾的 RenderWorkspacePointCloud() 会自动从保留数据重建 Actor。
     m_workspace_point_cloud_actor = nullptr;
 #endif
 
@@ -773,7 +942,11 @@ void RobotVtkView::RenderIkPoseComparisonLayer()
 void RobotVtkView::ResetCameraToCurrentScene()
 {
 #if defined(ROBOSDP_HAVE_VTK)
-    // 中文说明：重置视角先包围当前可见场景，再统一回到产品要求的等轴测观察方向。
+    // 中文说明：显式重置时先让 VTK 包围场景自适应焦距，再覆写等轴测方向。
+    if (m_renderer != nullptr)
+    {
+        m_renderer->ResetCamera();
+    }
     ApplyCameraPreset(1.0, -1.0, 1.0, 0.0, 0.0, 1.0);
 #endif
 }
@@ -1054,6 +1227,12 @@ void RobotVtkView::BuildVtkView()
     m_renderer->AddActor2D(m_watermark_actor); // 加入渲染器 (2D 覆盖层)
     // 🔼🔼🔼 【新增结束】 🔼🔼🔼
 
+    // ── 比例尺初始化（QWidget 覆盖层，QPainter 绘制白色刻度线）────────
+    m_scaleBarOverlay = new ScaleBarOverlay(viewportFrame);
+    m_scaleBarOverlay->show();
+    viewportFrame->installEventFilter(this);
+    // ── 比例尺初始化结束 ──────────────────────────────────────────
+
 
     viewportLayout->addWidget(m_vtkWidget, 1);
     m_layout->addWidget(viewportFrame, 1);
@@ -1064,6 +1243,9 @@ void RobotVtkView::BuildVtkView()
     clickStyle->renderer = m_renderer;
     clickStyle->SetDefaultRenderer(m_renderer);
     m_vtkWidget->interactor()->SetInteractorStyle(clickStyle);
+
+    // 中文说明：安装 Qt 事件过滤器，监听鼠标释放与滚轮事件，自动刷新比例尺。
+    m_vtkWidget->installEventFilter(this);
 
     RefreshScene();
 #endif
@@ -1425,8 +1607,133 @@ void RobotVtkView::RefreshScene(bool resetCamera)
     if (m_renderWindow != nullptr)
     {
         m_renderWindow->Render();
+        UpdateScaleBar();
     }
 #endif
+}
+
+void RobotVtkView::UpdateScaleBar()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr || m_scaleBarOverlay == nullptr)
+    {
+        return;
+    }
+
+    vtkCamera* camera = m_renderer->GetActiveCamera();
+    if (camera == nullptr)
+    {
+        return;
+    }
+
+    // 中文说明：在视口底部选择两个归一化坐标点，通过 vtkCoordinate 转换到世界坐标，
+    // 计算两点世界距离，再圆整为"好看"的刻度值，传递给 QPainter 覆盖层重绘。
+    vtkNew<vtkCoordinate> coordLeft, coordRight;
+    coordLeft->SetCoordinateSystemToNormalizedViewport();
+    coordLeft->SetViewport(m_renderer);
+    coordRight->SetCoordinateSystemToNormalizedViewport();
+    coordRight->SetViewport(m_renderer);
+
+    const double barLeftVp = 0.10;
+    const double barRightVp = 0.42;
+    const double barY = 0.07;
+
+    coordLeft->SetValue(barLeftVp, barY);
+    double* worldLeft = coordLeft->GetComputedWorldValue(m_renderer);
+    coordRight->SetValue(barRightVp, barY);
+    double* worldRight = coordRight->GetComputedWorldValue(m_renderer);
+
+    if (worldLeft == nullptr || worldRight == nullptr)
+    {
+        return;
+    }
+
+    double refWorldDist = std::sqrt(
+        (worldRight[0] - worldLeft[0]) * (worldRight[0] - worldLeft[0]) +
+        (worldRight[1] - worldLeft[1]) * (worldRight[1] - worldLeft[1]) +
+        (worldRight[2] - worldLeft[2]) * (worldRight[2] - worldLeft[2]));
+
+    if (!std::isfinite(refWorldDist) || refWorldDist < 1.0e-9)
+    {
+        return;
+    }
+
+    // 圆整为"好看"的刻度值：1×10ⁿ、2×10ⁿ、2.5×10ⁿ、5×10ⁿ 系列
+    double expFloor = std::floor(std::log10(refWorldDist));
+    double pow10 = std::pow(10.0, expFloor);
+    double mantissa = refWorldDist / pow10;
+    double niceDist;
+    if (mantissa <= 1.0)
+        niceDist = pow10;
+    else if (mantissa <= 2.0)
+        niceDist = 2.0 * pow10;
+    else if (mantissa <= 2.5)
+        niceDist = 2.5 * pow10;
+    else if (mantissa <= 5.0)
+        niceDist = 5.0 * pow10;
+    else
+        niceDist = 10.0 * pow10;
+
+    // 根据距离选择合适单位
+    QString unit;
+    if (niceDist >= 1.0)
+    {
+        unit = QStringLiteral("m");
+    }
+    else if (niceDist >= 0.01)
+    {
+        niceDist *= 100.0;
+        unit = QStringLiteral("cm");
+    }
+    else
+    {
+        niceDist *= 1000.0;
+        unit = QStringLiteral("mm");
+    }
+
+    double barRatio = niceDist / refWorldDist;
+    if (unit == QStringLiteral("cm"))
+        barRatio = (niceDist / 100.0) / refWorldDist;
+    else if (unit == QStringLiteral("mm"))
+        barRatio = (niceDist / 1000.0) / refWorldDist;
+
+    m_scaleBarNiceDist = niceDist;
+    m_scaleBarUnit = unit;
+
+    auto* overlay = static_cast<ScaleBarOverlay*>(m_scaleBarOverlay);
+    if (overlay != nullptr)
+    {
+        overlay->setScale(niceDist, unit, barRatio);
+    }
+#endif
+}
+
+bool RobotVtkView::eventFilter(QObject* watched, QEvent* event)
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (watched == m_vtkWidget
+        && (event->type() == QEvent::MouseButtonRelease
+            || event->type() == QEvent::Wheel))
+    {
+        UpdateScaleBar();
+    }
+
+    // 中文说明：viewportFrame 尺寸变化时重新定位比例尺覆盖层到底部。
+    if (event->type() == QEvent::Resize && m_scaleBarOverlay != nullptr
+        && watched == m_scaleBarOverlay->parent())
+    {
+        auto* resizeEvent = static_cast<QResizeEvent*>(event);
+        int w = resizeEvent->size().width();
+        int h = resizeEvent->size().height();
+        m_scaleBarOverlay->setGeometry(8, h - 32, 260, 28);
+        m_scaleBarOverlay->raise();
+    }
+#else
+    Q_UNUSED(watched);
+    Q_UNUSED(event);
+#endif
+
+    return QWidget::eventFilter(watched, event);
 }
 
 void RobotVtkView::ApplyCameraPreset(
@@ -1462,8 +1769,8 @@ void RobotVtkView::ApplyCameraPreset(
         return;
     }
 
-    m_renderer->ResetCamera();
-
+    // 中文说明：保留当前相机的焦距/距离，只覆写观察方向和上向量。
+    // 不再调用 ResetCamera()，避免用户手工缩放后被视角切换按钮强制重置。
     double focalPoint[3] = {0.0, 0.0, 0.0};
     double position[3] = {0.0, 0.0, 1.0};
     camera->GetFocalPoint(focalPoint);
@@ -1478,8 +1785,6 @@ void RobotVtkView::ApplyCameraPreset(
         distance = 3.0;
     }
 
-    // 中文说明：先让 VTK 用当前场景安全求出包围相机，再只覆写观察方向，避免标签/辅助层把手算包围盒拉坏。
-    camera->SetFocalPoint(focalPoint);
     camera->SetPosition(
         focalPoint[0] + directionX * distance,
         focalPoint[1] + directionY * distance,
@@ -1490,6 +1795,7 @@ void RobotVtkView::ApplyCameraPreset(
 
     if (m_renderWindow != nullptr)
     {
+        UpdateScaleBar();
         m_renderWindow->Render();
     }
 #else
