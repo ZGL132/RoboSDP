@@ -53,6 +53,7 @@ public:
         RoboSDP::Logging::ILogger* logger = nullptr);
 
     RoboSDP::Requirement::Dto::RequirementModelDto CreateDefaultModel() const;
+    RoboSDP::Requirement::Dto::RequirementModelDto CreateTemplateModelByPayload(double ratedPayloadKg) const;
 
     RoboSDP::Requirement::Validation::RequirementValidationResult Validate(
         const RoboSDP::Requirement::Dto::RequirementModelDto& model) const;

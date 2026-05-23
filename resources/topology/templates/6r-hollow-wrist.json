@@ -1,7 +1,15 @@
 {
   "template_id": "tpl_6r_hollow_wrist",
   "display_name": "中空腕工艺型 6R 串联",
+  "vendor": "Generic",
+  "model_name": "Generic 6R Hollow Wrist",
   "description": "适合焊接、喷涂等需要中空走线的模板。",
+  "specs": {
+    "rated_payload_kg": 6.0,
+    "max_payload_kg": 8.0,
+    "reach_m": 0.81,
+    "repeatability_mm": 0.04
+  },
   "model": {
     "meta": {
       "topology_id": "template_topology_hollow_wrist",

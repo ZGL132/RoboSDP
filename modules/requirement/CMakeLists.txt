@@ -2,6 +2,10 @@ add_library(robosdp_requirement STATIC
     dto/RequirementModelDto.h
     persistence/RequirementJsonStorage.h
     persistence/RequirementJsonStorage.cpp
+    service/KukaRequirementTemplateProvider.h
+    service/KukaRequirementTemplateProvider.cpp
+    service/RequirementTemplateCatalog.h
+    service/RequirementTemplateCatalog.cpp
     service/RequirementService.h
     service/RequirementService.cpp
     ui/RequirementWidget.h
@@ -13,6 +17,11 @@ add_library(robosdp_requirement STATIC
 target_include_directories(robosdp_requirement
     PUBLIC
         ${PROJECT_SOURCE_DIR}
+)
+
+target_compile_definitions(robosdp_requirement
+    PRIVATE
+        ROBOSDP_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
 )
 
 target_link_libraries(robosdp_requirement

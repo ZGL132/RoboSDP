@@ -17,6 +17,12 @@ struct TopologyTemplateSummary
     QString template_id;
     QString display_name;
     QString description;
+    QString vendor;
+    QString model_name;
+    double rated_payload_kg = 0.0;
+    double max_payload_kg = 0.0;
+    double reach_m = 0.0;
+    double repeatability_mm = 0.0;
 };
 
 /// 模板完整记录 DTO。

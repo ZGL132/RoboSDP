@@ -180,6 +180,151 @@ void RequirementWidget::EmitKeyPosePreview()
     emit KeyPosePreviewUpdated(m_working_model.workspace_requirements.key_poses, m_current_key_pose_index);
 }
 
+void RequirementWidget::RefreshTemplateOptions()
+{
+    if (m_template_combo == nullptr)
+    {
+        return;
+    }
+
+    const QSignalBlocker blocker(m_template_combo);
+    const QString previousTemplateId = !m_working_model.project_meta.selected_template_id.trimmed().isEmpty()
+        ? m_working_model.project_meta.selected_template_id.trimmed()
+        : m_template_combo->currentData().toString().trimmed();
+
+    const double ratedPayload = m_rated_payload_spin != nullptr ? m_rated_payload_spin->value() : 0.0;
+    const double maxPayload = m_max_payload_spin != nullptr ? m_max_payload_spin->value() : 0.0;
+    const double maxRadius = m_max_radius_spin != nullptr ? m_max_radius_spin->value() : 0.0;
+    const double repeatability = m_repeatability_spin != nullptr ? m_repeatability_spin->value() : 0.0;
+    const auto summaries = m_template_catalog.FilterByRequirement(ratedPayload, maxPayload, maxRadius, repeatability);
+
+    m_template_combo->clear();
+    m_template_combo->addItem(QStringLiteral("自动推荐（按需求筛选）"), QString());
+    for (const auto& summary : summaries)
+    {
+        const QString itemText = QStringLiteral("%1 | %2kg | %3m | ±%4mm")
+                                     .arg(summary.display_name)
+                                     .arg(summary.rated_payload_kg, 0, 'f', 1)
+                                     .arg(summary.reach_m, 0, 'f', 3)
+                                     .arg(summary.repeatability_mm, 0, 'f', 3);
+        m_template_combo->addItem(itemText, summary.template_id);
+        const int index = m_template_combo->count() - 1;
+        m_template_combo->setItemData(index, summary.display_name, Qt::UserRole + 1);
+        m_template_combo->setItemData(index, summary.brand, Qt::UserRole + 2);
+        m_template_combo->setItemData(index, summary.rated_payload_kg, Qt::UserRole + 3);
+        m_template_combo->setItemData(index, summary.max_payload_kg, Qt::UserRole + 4);
+        m_template_combo->setItemData(index, summary.reach_m, Qt::UserRole + 5);
+        m_template_combo->setItemData(index, summary.repeatability_mm, Qt::UserRole + 6);
+        m_template_combo->setItemData(index, summary.description, Qt::ToolTipRole);
+    }
+
+    const int previousIndex = m_template_combo->findData(previousTemplateId);
+    if (previousIndex >= 0)
+    {
+        m_template_combo->setCurrentIndex(previousIndex);
+    }
+    else if (m_template_combo->count() > 1)
+    {
+        m_template_combo->setCurrentIndex(1);
+    }
+    else
+    {
+        m_template_combo->setCurrentIndex(0);
+    }
+
+    ApplySelectedTemplateToForm(false);
+}
+
+void RequirementWidget::ApplySelectedTemplateToForm(bool refreshParameters)
+{
+    if (m_template_combo == nullptr)
+    {
+        return;
+    }
+
+    const int index = m_template_combo->currentIndex();
+    const QString templateId = m_template_combo->currentData().toString().trimmed();
+    const QString templateName = m_template_combo->itemData(index, Qt::UserRole + 1).toString();
+    const QString brand = m_template_combo->itemData(index, Qt::UserRole + 2).toString();
+    const double ratedPayload = m_template_combo->itemData(index, Qt::UserRole + 3).toDouble();
+    const double maxPayload = m_template_combo->itemData(index, Qt::UserRole + 4).toDouble();
+    const double reach = m_template_combo->itemData(index, Qt::UserRole + 5).toDouble();
+    const double repeatability = m_template_combo->itemData(index, Qt::UserRole + 6).toDouble();
+
+    m_working_model.project_meta.selected_template_id = templateId;
+    m_working_model.project_meta.selected_template_name = templateName;
+    m_working_model.project_meta.selected_template_brand = brand;
+
+    if (m_template_summary_label != nullptr)
+    {
+        if (templateId.isEmpty())
+        {
+            m_template_summary_label->setText(QStringLiteral("自动推荐会在构型生成时按当前 Requirement 选择评分最高的模板。"));
+        }
+        else
+        {
+            m_template_summary_label->setText(
+                QStringLiteral("%1：额定负载 %2 kg，最大负载 %3 kg，臂展 %4 m，重复定位精度 ±%5 mm。")
+                    .arg(templateName)
+                    .arg(ratedPayload, 0, 'f', 1)
+                    .arg(maxPayload, 0, 'f', 1)
+                    .arg(reach, 0, 'f', 3)
+                    .arg(repeatability, 0, 'f', 3));
+        }
+    }
+
+    if (!refreshParameters || templateId.isEmpty())
+    {
+        return;
+    }
+
+    const QString projectName = m_project_name_edit != nullptr ? m_project_name_edit->text() : QString();
+    const QString scenarioType =
+        m_scenario_type_combo != nullptr ? m_scenario_type_combo->currentData().toString() : QString();
+    auto templateModel = m_service.CreateTemplateModelByPayload(ratedPayload > 0.0 ? ratedPayload : m_rated_payload_spin->value());
+    templateModel.project_meta.project_name = projectName;
+    templateModel.project_meta.scenario_type = scenarioType;
+    templateModel.project_meta.description =
+        QStringLiteral("参考 %1 级别 6R 工业机器人任务需求默认值").arg(templateName);
+    templateModel.project_meta.selected_template_id = templateId;
+    templateModel.project_meta.selected_template_name = templateName;
+    templateModel.project_meta.selected_template_brand = brand;
+    if (ratedPayload > 0.0)
+    {
+        templateModel.load_requirements.rated_payload = ratedPayload;
+    }
+    if (maxPayload > 0.0)
+    {
+        templateModel.load_requirements.max_payload = maxPayload;
+    }
+    if (reach > 0.0)
+    {
+        templateModel.workspace_requirements.max_radius = reach;
+        templateModel.workspace_requirements.min_radius = std::max(0.12, reach * 0.16);
+        templateModel.workspace_requirements.max_height = reach * 1.05;
+        templateModel.workspace_requirements.min_height = -reach * 0.32;
+        if (!templateModel.workspace_requirements.key_poses.empty())
+        {
+            auto& keyPose = templateModel.workspace_requirements.key_poses.front();
+            keyPose.pose[0] = reach * 0.58;
+            keyPose.pose[2] = reach * 0.40;
+        }
+    }
+    if (repeatability > 0.0)
+    {
+        templateModel.accuracy_requirements.repeatability = repeatability;
+        templateModel.accuracy_requirements.absolute_accuracy = std::max(0.2, repeatability * 10.0);
+        templateModel.accuracy_requirements.tracking_accuracy = std::max(0.15, repeatability * 6.0);
+        templateModel.accuracy_requirements.tcp_position_tol = std::max(0.2, repeatability * 10.0);
+        if (!templateModel.workspace_requirements.key_poses.empty())
+        {
+            templateModel.workspace_requirements.key_poses.front().position_tol = std::max(0.1, repeatability * 10.0);
+        }
+    }
+
+    PopulateForm(templateModel);
+}
+
 std::vector<std::array<double, 3>> RequirementWidget::BuildWorkspacePreviewPoints() const
 {
     std::vector<std::array<double, 3>> points;
@@ -297,6 +442,12 @@ QGroupBox* RequirementWidget::CreateProjectMetaGroup()
     m_project_name_edit->setToolTip(QStringLiteral("项目名称属于项目级元数据，Requirement 页面仅只读引用。"));
     m_scenario_type_combo = new QComboBox(groupBox);
     m_description_edit = new QLineEdit(groupBox);
+    m_template_combo = new QComboBox(groupBox);
+    m_template_combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_template_combo->setMinimumContentsLength(28);
+    m_template_summary_label = new QLabel(groupBox);
+    m_template_summary_label->setWordWrap(true);
+    m_template_summary_label->setText(QStringLiteral("请先输入负载和工作空间参数，系统会筛选相近的经典机器人模板。"));
 
     m_scenario_type_combo->addItem(QStringLiteral("搬运"), QStringLiteral("handling"));
     m_scenario_type_combo->addItem(QStringLiteral("焊接"), QStringLiteral("welding"));
@@ -307,10 +458,18 @@ QGroupBox* RequirementWidget::CreateProjectMetaGroup()
 
     layout->addRow(QStringLiteral("项目名称"), m_project_name_edit);
     layout->addRow(QStringLiteral("场景类型"), m_scenario_type_combo);
+    layout->addRow(QStringLiteral("参考模板"), m_template_combo);
+    layout->addRow(QStringLiteral("模板参数"), m_template_summary_label);
     layout->addRow(QStringLiteral("描述"), m_description_edit);
 
     RegisterFieldWidget(QStringLiteral("project_meta.project_name"), m_project_name_edit);
     RegisterFieldWidget(QStringLiteral("project_meta.scenario_type"), m_scenario_type_combo);
+
+    connect(
+        m_template_combo,
+        static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+        this,
+        [this](int index) { OnTemplateSelectionChanged(index); });
 
     return groupBox;
 }
@@ -364,6 +523,12 @@ QGroupBox* RequirementWidget::CreateLoadRequirementsGroup()
     RegisterFieldWidget(QStringLiteral("load_requirements.payload_inertia[4]"), m_payload_inertia_yz_spin);
     RegisterFieldWidget(QStringLiteral("load_requirements.payload_inertia[5]"), m_payload_inertia_xz_spin);
     RegisterFieldWidget(QStringLiteral("load_requirements.cable_drag_load"), m_cable_drag_load_spin);
+
+    connect(
+        m_rated_payload_spin,
+        static_cast<void (QDoubleSpinBox::*)()>(&QDoubleSpinBox::editingFinished),
+        this,
+        [this]() { OnRatedPayloadChanged(m_rated_payload_spin->value()); });
 
     return groupBox;
 }
@@ -634,6 +799,15 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementWidget::CollectModelFr
     model.project_meta.project_name = m_project_name_edit->text().trimmed();
     model.project_meta.scenario_type = m_scenario_type_combo->currentData().toString();
     model.project_meta.description = m_description_edit->text().trimmed();
+    if (m_template_combo != nullptr)
+    {
+        const int templateIndex = m_template_combo->currentIndex();
+        model.project_meta.selected_template_id = m_template_combo->currentData().toString().trimmed();
+        model.project_meta.selected_template_name =
+            m_template_combo->itemData(templateIndex, Qt::UserRole + 1).toString();
+        model.project_meta.selected_template_brand =
+            m_template_combo->itemData(templateIndex, Qt::UserRole + 2).toString();
+    }
 
     model.load_requirements.rated_payload = m_rated_payload_spin->value();
     model.load_requirements.max_payload = m_max_payload_spin->value();
@@ -801,6 +975,7 @@ void RequirementWidget::PopulateForm(const RoboSDP::Requirement::Dto::Requiremen
     m_duty_cycle_spin->setValue(m_working_model.reliability_requirements.duty_cycle);
     m_operating_hours_per_day_spin->setValue(m_working_model.reliability_requirements.operating_hours_per_day);
     m_mtbf_target_spin->setValue(m_working_model.reliability_requirements.mtbf_target);
+    RefreshTemplateOptions();
 
     RefreshKeyPoseList();
     m_current_key_pose_index = 0;
@@ -811,6 +986,46 @@ void RequirementWidget::PopulateForm(const RoboSDP::Requirement::Dto::Requiremen
     LoadCurrentKeyPoseToEditor();
     m_is_populating_form = false;
     EmitRequirementPreview();
+}
+
+void RequirementWidget::OnRatedPayloadChanged(double ratedPayloadKg)
+{
+    if (m_is_populating_form)
+    {
+        return;
+    }
+
+    const QString projectName = m_project_name_edit != nullptr ? m_project_name_edit->text() : QString();
+    const QString scenarioType =
+        m_scenario_type_combo != nullptr ? m_scenario_type_combo->currentData().toString() : QString();
+    auto templateModel = m_service.CreateTemplateModelByPayload(ratedPayloadKg);
+    templateModel.project_meta.project_name = projectName;
+    if (!scenarioType.trimmed().isEmpty())
+    {
+        templateModel.project_meta.scenario_type = scenarioType;
+    }
+    templateModel.project_meta.selected_template_id = QString();
+    templateModel.project_meta.selected_template_name = QString();
+    templateModel.project_meta.selected_template_brand = QString();
+
+    PopulateForm(templateModel);
+    MarkDirty();
+    SetOperationMessage(
+        QStringLiteral("已按额定负载匹配 KUKA 参考型号，并刷新任务需求默认参数。"),
+        true);
+}
+
+void RequirementWidget::OnTemplateSelectionChanged(int index)
+{
+    if (m_is_populating_form || index < 0)
+    {
+        return;
+    }
+
+    ApplySelectedTemplateToForm(true);
+    MarkDirty();
+    EmitRequirementPreview();
+    SetOperationMessage(QStringLiteral("已按所选参考模板刷新任务需求默认参数。"), true);
 }
 
 void RequirementWidget::SyncProjectNameFromProjectContext()

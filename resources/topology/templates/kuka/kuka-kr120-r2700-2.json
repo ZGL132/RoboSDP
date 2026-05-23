@@ -1,0 +1,254 @@
+{
+  "template_id": "tpl_kuka_kr120_r2700_2",
+  "vendor": "KUKA",
+  "model_name": "KR 120 R2700-2",
+  "display_name": "KUKA KR 120 R2700-2",
+  "description": "KUKA QUANTEC ?? 120 kg ???????????????????????",
+  "specs": {
+    "rated_payload_kg": 120.0,
+    "max_payload_kg": 167.0,
+    "reach_m": 2.701,
+    "repeatability_mm": 0.05,
+    "axis_count": 6,
+    "source_url": "https://www.kuka.com/en-de/products/robot-systems/industrial-robots/kr-quantec"
+  },
+  "model": {
+    "meta": {
+      "topology_id": "template_topology_kuka_kr120_r2700_2",
+      "name": "KUKA KR 120 R2700-2",
+      "version": 1,
+      "source": "kuka_reference_template",
+      "status": "draft",
+      "remarks": "??? KUKA ????????????????????????DH ???????????",
+      "template_id": "tpl_kuka_kr120_r2700_2"
+    },
+    "robot_definition": {
+      "robot_type": "6R_serial",
+      "joint_count": 6,
+      "application_tags": [
+        "handling",
+        "palletizing",
+        "welding",
+        "machine_tending"
+      ],
+      "base_mount_type": "floor",
+      "base_height_m": 0.7,
+      "base_orientation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "shoulder_offset_m": 0.3,
+      "upper_arm_length_m": 1.1,
+      "elbow_offset_m": 0.0,
+      "forearm_length_m": 1.1,
+      "wrist_offset_m": 0.28,
+      "j1_rotation_range_deg": [
+        -185.0,
+        185.0
+      ]
+    },
+    "layout": {
+      "internal_routing_required": false,
+      "hollow_joint_ids": [
+        "joint_4",
+        "joint_5",
+        "joint_6"
+      ],
+      "hollow_wrist_required": false,
+      "reserved_channel_diameter_mm": 100.0,
+      "seventh_axis_reserved": false
+    },
+    "joints": [
+      {
+        "joint_id": "joint_1",
+        "axis_index": 1,
+        "role": "base",
+        "joint_type": "revolute",
+        "parent_link_id": "base_link",
+        "child_link_id": "link_1",
+        "axis_direction": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "motion_range_deg": [
+          -185.0,
+          185.0
+        ]
+      },
+      {
+        "joint_id": "joint_2",
+        "axis_index": 2,
+        "role": "shoulder",
+        "joint_type": "revolute",
+        "parent_link_id": "link_1",
+        "child_link_id": "link_2",
+        "axis_direction": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "motion_range_deg": [
+          -135.0,
+          85.0
+        ]
+      },
+      {
+        "joint_id": "joint_3",
+        "axis_index": 3,
+        "role": "elbow",
+        "joint_type": "revolute",
+        "parent_link_id": "link_2",
+        "child_link_id": "link_3",
+        "axis_direction": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "motion_range_deg": [
+          -150.0,
+          150.0
+        ]
+      },
+      {
+        "joint_id": "joint_4",
+        "axis_index": 4,
+        "role": "wrist_roll",
+        "joint_type": "revolute",
+        "parent_link_id": "link_3",
+        "child_link_id": "link_4",
+        "axis_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "motion_range_deg": [
+          -200.0,
+          200.0
+        ]
+      },
+      {
+        "joint_id": "joint_5",
+        "axis_index": 5,
+        "role": "wrist_pitch",
+        "joint_type": "revolute",
+        "parent_link_id": "link_4",
+        "child_link_id": "link_5",
+        "axis_direction": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "motion_range_deg": [
+          -125.0,
+          125.0
+        ]
+      },
+      {
+        "joint_id": "joint_6",
+        "axis_index": 6,
+        "role": "wrist_yaw",
+        "joint_type": "revolute",
+        "parent_link_id": "link_5",
+        "child_link_id": "tool_link",
+        "axis_direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "motion_range_deg": [
+          -360.0,
+          360.0
+        ]
+      }
+    ],
+    "axis_relations": [
+      {
+        "joint_pair": [
+          "joint_2",
+          "joint_3"
+        ],
+        "relation_type": "parallel"
+      },
+      {
+        "joint_pair": [
+          "joint_4",
+          "joint_5"
+        ],
+        "relation_type": "perpendicular"
+      }
+    ],
+    "topology_graph": {
+      "links": [
+        {
+          "link_id": "base_link",
+          "parent_joint_id": "",
+          "name": "??"
+        },
+        {
+          "link_id": "link_1",
+          "parent_joint_id": "joint_1",
+          "name": "??????"
+        },
+        {
+          "link_id": "link_2",
+          "parent_joint_id": "joint_2",
+          "name": "????"
+        },
+        {
+          "link_id": "link_3",
+          "parent_joint_id": "joint_3",
+          "name": "????"
+        },
+        {
+          "link_id": "link_4",
+          "parent_joint_id": "joint_4",
+          "name": "???? 1"
+        },
+        {
+          "link_id": "link_5",
+          "parent_joint_id": "joint_5",
+          "name": "???? 2"
+        },
+        {
+          "link_id": "tool_link",
+          "parent_joint_id": "joint_6",
+          "name": "????"
+        }
+      ],
+      "joints_graph": [
+        {
+          "joint_id": "joint_1",
+          "parent_link_id": "base_link",
+          "child_link_id": "link_1"
+        },
+        {
+          "joint_id": "joint_2",
+          "parent_link_id": "link_1",
+          "child_link_id": "link_2"
+        },
+        {
+          "joint_id": "joint_3",
+          "parent_link_id": "link_2",
+          "child_link_id": "link_3"
+        },
+        {
+          "joint_id": "joint_4",
+          "parent_link_id": "link_3",
+          "child_link_id": "link_4"
+        },
+        {
+          "joint_id": "joint_5",
+          "parent_link_id": "link_4",
+          "child_link_id": "link_5"
+        },
+        {
+          "joint_id": "joint_6",
+          "parent_link_id": "link_5",
+          "child_link_id": "tool_link"
+        }
+      ]
+    }
+  }
+}

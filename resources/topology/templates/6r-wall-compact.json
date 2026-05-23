@@ -1,7 +1,15 @@
 {
   "template_id": "tpl_6r_wall_compact",
   "display_name": "壁挂紧凑型 6R 串联",
-  "description": "适合壁挂安装受限空间的紧凑构型模板。",
+  "vendor": "Generic",
+  "model_name": "Generic 6R Wall Compact",
+  "description": "适合壁挂安装、受限空间的紧凑构型模板。",
+  "specs": {
+    "rated_payload_kg": 3.0,
+    "max_payload_kg": 5.0,
+    "reach_m": 0.56,
+    "repeatability_mm": 0.05
+  },
   "model": {
     "meta": {
       "topology_id": "template_topology_wall_compact",

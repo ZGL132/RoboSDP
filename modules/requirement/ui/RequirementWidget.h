@@ -4,6 +4,7 @@
 #include "core/logging/ILogger.h"
 #include "core/repository/LocalJsonRepository.h"
 #include "modules/requirement/service/RequirementService.h"
+#include "modules/requirement/service/RequirementTemplateCatalog.h"
 
 #include <QHash>
 #include <QString>
@@ -79,6 +80,8 @@ private:
     void EmitRequirementPreview();
     void EmitWorkspacePreview();
     void EmitKeyPosePreview();
+    void RefreshTemplateOptions();
+    void ApplySelectedTemplateToForm(bool refreshParameters);
     std::vector<std::array<double, 3>> BuildWorkspacePreviewPoints() const;
 
     /// 从当前表单收集 Requirement 模型，同时保留界面未直接编辑的透传字段。
@@ -122,6 +125,8 @@ private:
     void OnValidateClicked();
     void OnSaveDraftClicked();
     void OnLoadClicked();
+    void OnRatedPayloadChanged(double ratedPayloadKg);
+    void OnTemplateSelectionChanged(int index);
     void OnAddKeyPoseClicked();
     void OnRemoveKeyPoseClicked();
     void OnKeyPoseSelectionChanged(int currentRow);
@@ -133,6 +138,7 @@ private:
     RoboSDP::Requirement::Validation::RequirementValidator m_validator;
     RoboSDP::Requirement::Persistence::RequirementJsonStorage m_storage;
     RoboSDP::Requirement::Service::RequirementService m_service;
+    RoboSDP::Requirement::Service::RequirementTemplateCatalog m_template_catalog;
     RoboSDP::Requirement::Dto::RequirementModelDto m_working_model;
 
     QHash<QString, QWidget*> m_field_widgets;
@@ -147,6 +153,8 @@ private:
     QLineEdit* m_project_name_edit = nullptr;
     QComboBox* m_scenario_type_combo = nullptr;
     QLineEdit* m_description_edit = nullptr;
+    QComboBox* m_template_combo = nullptr;
+    QLabel* m_template_summary_label = nullptr;
 
     QDoubleSpinBox* m_rated_payload_spin = nullptr;
     QDoubleSpinBox* m_max_payload_spin = nullptr;

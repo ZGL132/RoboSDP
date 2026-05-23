@@ -134,6 +134,9 @@ QJsonObject RequirementJsonStorage::ToJsonObject(
     projectMetaObject.insert(QStringLiteral("project_name"), model.project_meta.project_name);
     projectMetaObject.insert(QStringLiteral("scenario_type"), model.project_meta.scenario_type);
     projectMetaObject.insert(QStringLiteral("description"), model.project_meta.description);
+    projectMetaObject.insert(QStringLiteral("selected_template_id"), model.project_meta.selected_template_id);
+    projectMetaObject.insert(QStringLiteral("selected_template_name"), model.project_meta.selected_template_name);
+    projectMetaObject.insert(QStringLiteral("selected_template_brand"), model.project_meta.selected_template_brand);
     rootObject.insert(QStringLiteral("project_meta"), projectMetaObject);
 
     QJsonObject loadRequirementsObject;
@@ -259,47 +262,66 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementJsonStorage::FromJsonO
     RequirementModelDto model = RequirementModelDto::CreateDefault();
 
     const QJsonObject projectMetaObject = jsonObject.value(QStringLiteral("project_meta")).toObject();
-    model.project_meta.project_name = ReadString(projectMetaObject, QStringLiteral("project_name"));
+    model.project_meta.project_name =
+        ReadString(projectMetaObject, QStringLiteral("project_name"), model.project_meta.project_name);
     model.project_meta.scenario_type =
-        ReadString(projectMetaObject, QStringLiteral("scenario_type"), QStringLiteral("custom"));
-    model.project_meta.description = ReadString(projectMetaObject, QStringLiteral("description"));
+        ReadString(projectMetaObject, QStringLiteral("scenario_type"), model.project_meta.scenario_type);
+    model.project_meta.description =
+        ReadString(projectMetaObject, QStringLiteral("description"), model.project_meta.description);
+    model.project_meta.selected_template_id =
+        ReadString(projectMetaObject, QStringLiteral("selected_template_id"), model.project_meta.selected_template_id);
+    model.project_meta.selected_template_name = ReadString(
+        projectMetaObject,
+        QStringLiteral("selected_template_name"),
+        model.project_meta.selected_template_name);
+    model.project_meta.selected_template_brand = ReadString(
+        projectMetaObject,
+        QStringLiteral("selected_template_brand"),
+        model.project_meta.selected_template_brand);
 
     const QJsonObject loadRequirementsObject = jsonObject.value(QStringLiteral("load_requirements")).toObject();
     model.load_requirements.rated_payload =
-        ReadDouble(loadRequirementsObject, QStringLiteral("rated_payload"));
+        ReadDouble(loadRequirementsObject, QStringLiteral("rated_payload"), model.load_requirements.rated_payload);
     model.load_requirements.max_payload =
-        ReadDouble(loadRequirementsObject, QStringLiteral("max_payload"));
+        ReadDouble(loadRequirementsObject, QStringLiteral("max_payload"), model.load_requirements.max_payload);
     model.load_requirements.tool_mass =
-        ReadDouble(loadRequirementsObject, QStringLiteral("tool_mass"));
+        ReadDouble(loadRequirementsObject, QStringLiteral("tool_mass"), model.load_requirements.tool_mass);
     model.load_requirements.fixture_mass =
-        ReadDouble(loadRequirementsObject, QStringLiteral("fixture_mass"));
+        ReadDouble(loadRequirementsObject, QStringLiteral("fixture_mass"), model.load_requirements.fixture_mass);
     model.load_requirements.payload_cog =
-        ReadArray3(loadRequirementsObject.value(QStringLiteral("payload_cog")).toArray());
+        loadRequirementsObject.contains(QStringLiteral("payload_cog"))
+            ? ReadArray3(loadRequirementsObject.value(QStringLiteral("payload_cog")).toArray())
+            : model.load_requirements.payload_cog;
     model.load_requirements.payload_inertia =
-        ReadArray6(loadRequirementsObject.value(QStringLiteral("payload_inertia")).toArray());
+        loadRequirementsObject.contains(QStringLiteral("payload_inertia"))
+            ? ReadArray6(loadRequirementsObject.value(QStringLiteral("payload_inertia")).toArray())
+            : model.load_requirements.payload_inertia;
     model.load_requirements.off_center_load =
-        ReadBool(loadRequirementsObject, QStringLiteral("off_center_load"));
+        ReadBool(loadRequirementsObject, QStringLiteral("off_center_load"), model.load_requirements.off_center_load);
     model.load_requirements.cable_drag_load =
-        ReadDouble(loadRequirementsObject, QStringLiteral("cable_drag_load"));
+        ReadDouble(loadRequirementsObject, QStringLiteral("cable_drag_load"), model.load_requirements.cable_drag_load);
     model.load_requirements.load_variants =
         loadRequirementsObject.value(QStringLiteral("load_variants")).toArray();
 
     const QJsonObject workspaceRequirementsObject =
         jsonObject.value(QStringLiteral("workspace_requirements")).toObject();
     model.workspace_requirements.max_radius =
-        ReadDouble(workspaceRequirementsObject, QStringLiteral("max_radius"));
+        ReadDouble(workspaceRequirementsObject, QStringLiteral("max_radius"), model.workspace_requirements.max_radius);
     model.workspace_requirements.min_radius =
-        ReadDouble(workspaceRequirementsObject, QStringLiteral("min_radius"));
+        ReadDouble(workspaceRequirementsObject, QStringLiteral("min_radius"), model.workspace_requirements.min_radius);
     model.workspace_requirements.max_height =
-        ReadDouble(workspaceRequirementsObject, QStringLiteral("max_height"));
+        ReadDouble(workspaceRequirementsObject, QStringLiteral("max_height"), model.workspace_requirements.max_height);
     model.workspace_requirements.min_height =
-        ReadDouble(workspaceRequirementsObject, QStringLiteral("min_height"));
+        ReadDouble(workspaceRequirementsObject, QStringLiteral("min_height"), model.workspace_requirements.min_height);
     model.workspace_requirements.forbidden_regions =
         workspaceRequirementsObject.value(QStringLiteral("forbidden_regions")).toArray();
     model.workspace_requirements.obstacle_regions =
         workspaceRequirementsObject.value(QStringLiteral("obstacle_regions")).toArray();
-    model.workspace_requirements.base_constraints =
-        workspaceRequirementsObject.value(QStringLiteral("base_constraints")).toObject();
+    if (workspaceRequirementsObject.contains(QStringLiteral("base_constraints")))
+    {
+        model.workspace_requirements.base_constraints =
+            workspaceRequirementsObject.value(QStringLiteral("base_constraints")).toObject();
+    }
 
     model.workspace_requirements.key_poses.clear();
     const QJsonArray keyPosesArray = workspaceRequirementsObject.value(QStringLiteral("key_poses")).toArray();
@@ -307,11 +329,14 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementJsonStorage::FromJsonO
     {
         const QJsonObject keyPoseObject = keyPoseValue.toObject();
         RequirementKeyPoseDto keyPose;
-        keyPose.pose_id = ReadString(keyPoseObject, QStringLiteral("pose_id"));
-        keyPose.name = ReadString(keyPoseObject, QStringLiteral("name"));
-        keyPose.pose = ReadArray6(keyPoseObject.value(QStringLiteral("pose")).toArray());
-        keyPose.position_tol = ReadDouble(keyPoseObject, QStringLiteral("position_tol"));
-        keyPose.orientation_tol = ReadDouble(keyPoseObject, QStringLiteral("orientation_tol"));
+        keyPose.pose_id = ReadString(keyPoseObject, QStringLiteral("pose_id"), keyPose.pose_id);
+        keyPose.name = ReadString(keyPoseObject, QStringLiteral("name"), keyPose.name);
+        keyPose.pose = keyPoseObject.contains(QStringLiteral("pose"))
+                           ? ReadArray6(keyPoseObject.value(QStringLiteral("pose")).toArray())
+                           : keyPose.pose;
+        keyPose.position_tol = ReadDouble(keyPoseObject, QStringLiteral("position_tol"), keyPose.position_tol);
+        keyPose.orientation_tol =
+            ReadDouble(keyPoseObject, QStringLiteral("orientation_tol"), keyPose.orientation_tol);
 
         const QJsonArray requiredDirectionArray =
             keyPoseObject.value(QStringLiteral("required_direction")).toArray();
@@ -332,45 +357,45 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementJsonStorage::FromJsonO
     const QJsonObject motionRequirementsObject =
         jsonObject.value(QStringLiteral("motion_requirements")).toObject();
     model.motion_requirements.max_linear_speed =
-        ReadDouble(motionRequirementsObject, QStringLiteral("max_linear_speed"));
+        ReadDouble(motionRequirementsObject, QStringLiteral("max_linear_speed"), model.motion_requirements.max_linear_speed);
     model.motion_requirements.max_angular_speed =
-        ReadDouble(motionRequirementsObject, QStringLiteral("max_angular_speed"));
+        ReadDouble(motionRequirementsObject, QStringLiteral("max_angular_speed"), model.motion_requirements.max_angular_speed);
     model.motion_requirements.max_acceleration =
-        ReadDouble(motionRequirementsObject, QStringLiteral("max_acceleration"));
+        ReadDouble(motionRequirementsObject, QStringLiteral("max_acceleration"), model.motion_requirements.max_acceleration);
     model.motion_requirements.max_angular_acceleration =
-        ReadDouble(motionRequirementsObject, QStringLiteral("max_angular_acceleration"));
+        ReadDouble(motionRequirementsObject, QStringLiteral("max_angular_acceleration"), model.motion_requirements.max_angular_acceleration);
     model.motion_requirements.jerk_limit =
-        ReadDouble(motionRequirementsObject, QStringLiteral("jerk_limit"));
+        ReadDouble(motionRequirementsObject, QStringLiteral("jerk_limit"), model.motion_requirements.jerk_limit);
     model.motion_requirements.takt_time =
-        ReadDouble(motionRequirementsObject, QStringLiteral("takt_time"));
+        ReadDouble(motionRequirementsObject, QStringLiteral("takt_time"), model.motion_requirements.takt_time);
 
     const QJsonObject accuracyRequirementsObject =
         jsonObject.value(QStringLiteral("accuracy_requirements")).toObject();
     model.accuracy_requirements.absolute_accuracy =
-        ReadDouble(accuracyRequirementsObject, QStringLiteral("absolute_accuracy"));
+        ReadDouble(accuracyRequirementsObject, QStringLiteral("absolute_accuracy"), model.accuracy_requirements.absolute_accuracy);
     model.accuracy_requirements.repeatability =
-        ReadDouble(accuracyRequirementsObject, QStringLiteral("repeatability"));
+        ReadDouble(accuracyRequirementsObject, QStringLiteral("repeatability"), model.accuracy_requirements.repeatability);
     model.accuracy_requirements.tracking_accuracy =
-        ReadDouble(accuracyRequirementsObject, QStringLiteral("tracking_accuracy"));
+        ReadDouble(accuracyRequirementsObject, QStringLiteral("tracking_accuracy"), model.accuracy_requirements.tracking_accuracy);
     model.accuracy_requirements.orientation_accuracy =
-        ReadDouble(accuracyRequirementsObject, QStringLiteral("orientation_accuracy"));
+        ReadDouble(accuracyRequirementsObject, QStringLiteral("orientation_accuracy"), model.accuracy_requirements.orientation_accuracy);
     model.accuracy_requirements.tcp_position_tol =
-        ReadDouble(accuracyRequirementsObject, QStringLiteral("tcp_position_tol"));
+        ReadDouble(accuracyRequirementsObject, QStringLiteral("tcp_position_tol"), model.accuracy_requirements.tcp_position_tol);
     model.accuracy_requirements.tcp_orientation_tol =
-        ReadDouble(accuracyRequirementsObject, QStringLiteral("tcp_orientation_tol"));
+        ReadDouble(accuracyRequirementsObject, QStringLiteral("tcp_orientation_tol"), model.accuracy_requirements.tcp_orientation_tol);
 
     const QJsonObject reliabilityRequirementsObject =
         jsonObject.value(QStringLiteral("reliability_requirements")).toObject();
     model.reliability_requirements.design_life =
-        ReadDouble(reliabilityRequirementsObject, QStringLiteral("design_life"));
+        ReadDouble(reliabilityRequirementsObject, QStringLiteral("design_life"), model.reliability_requirements.design_life);
     model.reliability_requirements.cycle_count =
-        ReadInt(reliabilityRequirementsObject, QStringLiteral("cycle_count"));
+        ReadInt(reliabilityRequirementsObject, QStringLiteral("cycle_count"), model.reliability_requirements.cycle_count);
     model.reliability_requirements.duty_cycle =
-        ReadDouble(reliabilityRequirementsObject, QStringLiteral("duty_cycle"));
+        ReadDouble(reliabilityRequirementsObject, QStringLiteral("duty_cycle"), model.reliability_requirements.duty_cycle);
     model.reliability_requirements.operating_hours_per_day =
-        ReadDouble(reliabilityRequirementsObject, QStringLiteral("operating_hours_per_day"));
+        ReadDouble(reliabilityRequirementsObject, QStringLiteral("operating_hours_per_day"), model.reliability_requirements.operating_hours_per_day);
     model.reliability_requirements.mtbf_target =
-        ReadDouble(reliabilityRequirementsObject, QStringLiteral("mtbf_target"));
+        ReadDouble(reliabilityRequirementsObject, QStringLiteral("mtbf_target"), model.reliability_requirements.mtbf_target);
 
     const QJsonObject derivedConditionsObject =
         jsonObject.value(QStringLiteral("derived_conditions")).toObject();

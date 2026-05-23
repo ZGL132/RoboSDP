@@ -92,7 +92,6 @@ signals:
 private:
     // ==================== UI 构建与初始化 ====================
     void BuildUi();
-    void RefreshTemplateOptions();
 
     // 分块构建 UI 面板
     QGroupBox* CreateTopologyGroup();
@@ -156,7 +155,6 @@ private:
     bool m_has_unsaved_changes = false;
 
     // ==================== UI 控件指针 ====================
-    QComboBox* m_template_combo = nullptr;
     QLabel* m_operation_label = nullptr;
     QFormLayout* m_topology_form_layout = nullptr;
     QGroupBox* m_installation_group = nullptr;

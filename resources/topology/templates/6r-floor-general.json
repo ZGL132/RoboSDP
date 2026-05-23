@@ -1,7 +1,15 @@
 {
   "template_id": "tpl_6r_floor_general",
   "display_name": "通用落地式 6R 串联",
+  "vendor": "Generic",
+  "model_name": "Generic 6R Floor",
   "description": "适合搬运与装配场景的通用落地安装模板。",
+  "specs": {
+    "rated_payload_kg": 10.0,
+    "max_payload_kg": 12.0,
+    "reach_m": 1.17,
+    "repeatability_mm": 0.05
+  },
   "model": {
     "meta": {
       "topology_id": "template_topology_floor_general",

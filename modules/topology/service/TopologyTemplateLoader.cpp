@@ -109,16 +109,27 @@ RoboSDP::Errors::ErrorCode TopologyTemplateLoader::LoadTemplates(
         QStringList {QStringLiteral("*.json")},
         QDir::Files | QDir::Readable,
         QDir::Name);
+    QFileInfoList allFileInfos = fileInfos;
+    const QFileInfoList childDirInfos = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QFileInfo& childDirInfo : childDirInfos)
+    {
+        const QDir childDir(childDirInfo.absoluteFilePath());
+        allFileInfos.append(
+            childDir.entryInfoList(
+                QStringList {QStringLiteral("*.json")},
+                QDir::Files | QDir::Readable,
+                QDir::Name));
+    }
 
-    if (fileInfos.isEmpty())
+    if (allFileInfos.isEmpty())
     {
         return RoboSDP::Errors::ErrorCode::RepositoryDocumentNotFound;
     }
 
     templates.clear();
-    templates.reserve(static_cast<std::size_t>(fileInfos.size()));
+    templates.reserve(static_cast<std::size_t>(allFileInfos.size()));
 
-    for (const QFileInfo& fileInfo : fileInfos)
+    for (const QFileInfo& fileInfo : allFileInfos)
     {
         QFile file(fileInfo.absoluteFilePath());
         if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -204,6 +215,13 @@ TopologyTemplateRecord TopologyTemplateLoader::ParseTemplateDocument(
     record.summary.template_id = ReadString(jsonObject, QStringLiteral("template_id"));
     record.summary.display_name = ReadString(jsonObject, QStringLiteral("display_name"));
     record.summary.description = ReadString(jsonObject, QStringLiteral("description"));
+    record.summary.vendor = ReadString(jsonObject, QStringLiteral("vendor"));
+    record.summary.model_name = ReadString(jsonObject, QStringLiteral("model_name"), record.summary.display_name);
+    const QJsonObject specsObject = jsonObject.value(QStringLiteral("specs")).toObject();
+    record.summary.rated_payload_kg = ReadDouble(specsObject, QStringLiteral("rated_payload_kg"));
+    record.summary.max_payload_kg = ReadDouble(specsObject, QStringLiteral("max_payload_kg"));
+    record.summary.reach_m = ReadDouble(specsObject, QStringLiteral("reach_m"));
+    record.summary.repeatability_mm = ReadDouble(specsObject, QStringLiteral("repeatability_mm"));
     record.file_path = filePath;
 
     const QJsonObject modelObject = jsonObject.value(QStringLiteral("model")).toObject();
@@ -291,69 +309,81 @@ RoboSDP::Topology::Dto::RobotTopologyModelDto TopologyTemplateLoader::ParseModel
 
     // 下面接着是 axis_relations.clear() 等原本的代码...
 
-    model.axis_relations.clear();
-    const QJsonArray axisRelationsArray = jsonObject.value(QStringLiteral("axis_relations")).toArray();
-    for (const QJsonValue& relationValue : axisRelationsArray)
+    if (jsonObject.contains(QStringLiteral("axis_relations")))
     {
-        const QJsonObject relationObject = relationValue.toObject();
-        const QJsonArray jointPairArray = relationObject.value(QStringLiteral("joint_pair")).toArray();
-        TopologyAxisRelationDto relation;
-        if (jointPairArray.size() > 0)
+        model.axis_relations.clear();
+        const QJsonArray axisRelationsArray = jsonObject.value(QStringLiteral("axis_relations")).toArray();
+        for (const QJsonValue& relationValue : axisRelationsArray)
         {
-            relation.joint_pair[0] = jointPairArray.at(0).toString();
+            const QJsonObject relationObject = relationValue.toObject();
+            const QJsonArray jointPairArray = relationObject.value(QStringLiteral("joint_pair")).toArray();
+            TopologyAxisRelationDto relation;
+            if (jointPairArray.size() > 0)
+            {
+                relation.joint_pair[0] = jointPairArray.at(0).toString();
+            }
+            if (jointPairArray.size() > 1)
+            {
+                relation.joint_pair[1] = jointPairArray.at(1).toString();
+            }
+            relation.relation_type = ReadString(relationObject, QStringLiteral("relation_type"));
+            model.axis_relations.push_back(relation);
         }
-        if (jointPairArray.size() > 1)
-        {
-            relation.joint_pair[1] = jointPairArray.at(1).toString();
-        }
-        relation.relation_type = ReadString(relationObject, QStringLiteral("relation_type"));
-        model.axis_relations.push_back(relation);
     }
 
-    model.joints.clear();
-    const QJsonArray jointsArray = jsonObject.value(QStringLiteral("joints")).toArray();
-    for (const QJsonValue& jointValue : jointsArray)
+    if (jsonObject.contains(QStringLiteral("joints")))
     {
-        const QJsonObject jointObject = jointValue.toObject();
-        TopologyJointDto joint;
-        joint.joint_id = ReadString(jointObject, QStringLiteral("joint_id"));
-        joint.axis_index = ReadInt(jointObject, QStringLiteral("axis_index"));
-        joint.role = ReadString(jointObject, QStringLiteral("role"));
-        joint.joint_type = ReadString(
-            jointObject,
-            QStringLiteral("joint_type"),
-            QStringLiteral("revolute"));
-        joint.parent_link_id = ReadString(jointObject, QStringLiteral("parent_link_id"));
-        joint.child_link_id = ReadString(jointObject, QStringLiteral("child_link_id"));
-        joint.axis_direction = ReadArray3(jointObject.value(QStringLiteral("axis_direction")).toArray());
-        joint.motion_range_deg = ReadArray2(jointObject.value(QStringLiteral("motion_range_deg")).toArray());
-        model.joints.push_back(joint);
+        model.joints.clear();
+        const QJsonArray jointsArray = jsonObject.value(QStringLiteral("joints")).toArray();
+        for (const QJsonValue& jointValue : jointsArray)
+        {
+            const QJsonObject jointObject = jointValue.toObject();
+            TopologyJointDto joint;
+            joint.joint_id = ReadString(jointObject, QStringLiteral("joint_id"));
+            joint.axis_index = ReadInt(jointObject, QStringLiteral("axis_index"));
+            joint.role = ReadString(jointObject, QStringLiteral("role"));
+            joint.joint_type = ReadString(
+                jointObject,
+                QStringLiteral("joint_type"),
+                QStringLiteral("revolute"));
+            joint.parent_link_id = ReadString(jointObject, QStringLiteral("parent_link_id"));
+            joint.child_link_id = ReadString(jointObject, QStringLiteral("child_link_id"));
+            joint.axis_direction = ReadArray3(jointObject.value(QStringLiteral("axis_direction")).toArray());
+            joint.motion_range_deg = ReadArray2(jointObject.value(QStringLiteral("motion_range_deg")).toArray());
+            model.joints.push_back(joint);
+        }
     }
 
-    model.topology_graph.links.clear();
-    model.topology_graph.joints_graph.clear();
     const QJsonObject topologyGraphObject =
         jsonObject.value(QStringLiteral("topology_graph")).toObject();
 
-    const QJsonArray linksArray = topologyGraphObject.value(QStringLiteral("links")).toArray();
-    for (const QJsonValue& linkValue : linksArray)
+    if (topologyGraphObject.contains(QStringLiteral("links")))
     {
-        const QJsonObject linkObject = linkValue.toObject();
-        model.topology_graph.links.push_back({
-            ReadString(linkObject, QStringLiteral("link_id")),
-            ReadString(linkObject, QStringLiteral("parent_joint_id")),
-            ReadString(linkObject, QStringLiteral("name"))});
+        model.topology_graph.links.clear();
+        const QJsonArray linksArray = topologyGraphObject.value(QStringLiteral("links")).toArray();
+        for (const QJsonValue& linkValue : linksArray)
+        {
+            const QJsonObject linkObject = linkValue.toObject();
+            model.topology_graph.links.push_back({
+                ReadString(linkObject, QStringLiteral("link_id")),
+                ReadString(linkObject, QStringLiteral("parent_joint_id")),
+                ReadString(linkObject, QStringLiteral("name"))});
+        }
     }
 
-    const QJsonArray graphJointsArray =
-        topologyGraphObject.value(QStringLiteral("joints_graph")).toArray();
-    for (const QJsonValue& graphJointValue : graphJointsArray)
+    if (topologyGraphObject.contains(QStringLiteral("joints_graph")))
     {
-        const QJsonObject graphJointObject = graphJointValue.toObject();
-        model.topology_graph.joints_graph.push_back({
-            ReadString(graphJointObject, QStringLiteral("joint_id")),
-            ReadString(graphJointObject, QStringLiteral("parent_link_id")),
-            ReadString(graphJointObject, QStringLiteral("child_link_id"))});
+        model.topology_graph.joints_graph.clear();
+        const QJsonArray graphJointsArray =
+            topologyGraphObject.value(QStringLiteral("joints_graph")).toArray();
+        for (const QJsonValue& graphJointValue : graphJointsArray)
+        {
+            const QJsonObject graphJointObject = graphJointValue.toObject();
+            model.topology_graph.joints_graph.push_back({
+                ReadString(graphJointObject, QStringLiteral("joint_id")),
+                ReadString(graphJointObject, QStringLiteral("parent_link_id")),
+                ReadString(graphJointObject, QStringLiteral("child_link_id"))});
+        }
     }
 
     return model;

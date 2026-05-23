@@ -9,7 +9,6 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -29,7 +28,6 @@ namespace RoboSDP::Topology::Ui
 namespace
 {
 
-constexpr auto kAllTemplatesToken = "__all__";
 constexpr auto kFloorGeneralTemplateId = "tpl_6r_floor_general";
 
 /**
@@ -183,13 +181,6 @@ TopologyWidget::TopologyWidget(RoboSDP::Logging::ILogger* logger, QWidget* paren
     BuildUi();
     // 2. 将默认状态/加载的状态填充至表单
     PopulateForm(m_state.current_model);
-    // 3. 加载可用模板下拉框
-    RefreshTemplateOptions();
-    connect(
-        m_template_combo,
-        static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
-        this,
-        [this](int) { UpdateTemplateDrivenUiState(); });
     // 4. 渲染生成的候选和推荐面板
     RenderCandidates();
     RenderRecommendation();
@@ -283,17 +274,9 @@ void TopologyWidget::BuildUi()
     rootLayout->setContentsMargins(8, 8, 8, 8);
     rootLayout->setSpacing(8);
 
-    // 1. 顶部：模板选择区
-    // 操作按钮已迁移至 Ribbon 构型工具页签，此处仅保留模板下拉框
-    auto* templateLayout = new QHBoxLayout();
-    auto* templateLabel = new QLabel(QStringLiteral("构型模板"), this);
-    m_template_combo = new QComboBox(this);
-    templateLayout->addWidget(templateLabel);
-    templateLayout->addWidget(m_template_combo, 1);
-
     // 状态提示条
     m_operation_label = new QLabel(
-        QStringLiteral("就绪：请先保存 Requirement，再生成或编辑 Topology 草稿。"),
+        QStringLiteral("就绪：构型模板在 Requirement 页面选择；请保存 Requirement 后再生成 Topology。"),
         this);
     m_operation_label->setWordWrap(true);
 
@@ -306,7 +289,6 @@ void TopologyWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(CreateValidationGroup()), QStringLiteral("校验结果"));
 
     // 将所有布局添加到主根布局
-    rootLayout->addLayout(templateLayout);
     rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 }
@@ -335,40 +317,6 @@ QWidget* TopologyWidget::CreateScrollableTab(QWidget* contentWidget)
 
     tabLayout->addWidget(scrollArea, 1);
     return tabPage;
-}
-
-void TopologyWidget::RefreshTemplateOptions()
-{
-    // 刷新模板下拉框的内容
-    const QString previousTemplateId = m_template_combo->currentData().toString();
-    m_template_combo->clear();
-    m_template_combo->addItem(QStringLiteral("全部模板（推荐）"), QString::fromLatin1(kAllTemplatesToken));
-
-    const auto templates = m_service.ListTemplates();
-    for (const auto& templateSummary : templates)
-    {
-        m_template_combo->addItem(templateSummary.display_name, templateSummary.template_id);
-        const int index = m_template_combo->count() - 1;
-        // 将模板描述设为 tooltip 方便提示
-        m_template_combo->setItemData(index, templateSummary.description, Qt::ToolTipRole);
-    }
-
-    // 尝试恢复之前选中的模板
-    const int previousIndex = m_template_combo->findData(previousTemplateId);
-    if (previousIndex >= 0)
-    {
-        m_template_combo->setCurrentIndex(previousIndex);
-    }
-    else if (!m_state.current_model.meta.template_id.trimmed().isEmpty())
-    {
-        const int currentModelIndex = m_template_combo->findData(m_state.current_model.meta.template_id.trimmed());
-        if (currentModelIndex >= 0)
-        {
-            m_template_combo->setCurrentIndex(currentModelIndex);
-        }
-    }
-
-    UpdateTemplateDrivenUiState();
 }
 
 QGroupBox* TopologyWidget::CreateTopologyGroup()
@@ -532,14 +480,8 @@ RoboSDP::Topology::Dto::RobotTopologyModelDto TopologyWidget::CollectModelFromFo
 {
     // 将界面上控件里的值抽取出来，赋给内存中的模型 DTO
     RoboSDP::Topology::Dto::RobotTopologyModelDto model = m_state.current_model;
-    const QString selectedTemplateId =
-        m_template_combo != nullptr ? m_template_combo->currentData().toString().trimmed() : QString();
 
     model.meta.name = m_topology_name_edit->text().trimmed();
-    if (!selectedTemplateId.isEmpty() && selectedTemplateId != QString::fromLatin1(kAllTemplatesToken))
-    {
-        model.meta.template_id = selectedTemplateId;
-    }
     
     model.robot_definition.base_mount_type = m_base_mount_combo->currentData().toString();
     model.robot_definition.base_height_m = m_base_height_spin->value();
@@ -607,14 +549,6 @@ void TopologyWidget::PopulateForm(const RoboSDP::Topology::Dto::RobotTopologyMod
 void TopologyWidget::UpdateTemplateDrivenUiState()
 {
     QString activeTemplateId = m_state.current_model.meta.template_id.trimmed();
-    if (m_template_combo != nullptr)
-    {
-        const QString selectedTemplateId = m_template_combo->currentData().toString().trimmed();
-        if (!selectedTemplateId.isEmpty() && selectedTemplateId != QString::fromLatin1(kAllTemplatesToken))
-        {
-            activeTemplateId = selectedTemplateId;
-        }
-    }
 
     const bool isFloorGeneralTemplate = IsFloorGeneralTemplate(activeTemplateId);
     if (m_installation_form_layout == nullptr)
@@ -777,9 +711,8 @@ void TopologyWidget::SetOperationMessage(const QString& message, bool success)
 
 void TopologyWidget::OnRefreshTemplatesClicked()
 {
-    RefreshTemplateOptions();
-    SetOperationMessage(QStringLiteral("构型模板列表已刷新。"), true);
-    emit LogMessageGenerated(QStringLiteral("[Topology] 构型模板列表已刷新。"));
+    SetOperationMessage(QStringLiteral("模板筛选已迁移到 Requirement 页面，请在那里选择负载等级和参考模板。"), true);
+    emit LogMessageGenerated(QStringLiteral("[Topology] 模板筛选已迁移到 Requirement 页面。"));
     emit StatusChanged();
 }
 
@@ -788,9 +721,7 @@ void TopologyWidget::OnGenerateClicked()
     // 调用后台服务，根据上游的 Requirement 生成适合的 Topology 候选方案
     const QString projectRootPath =
         RoboSDP::Infrastructure::ProjectManager::instance().getCurrentProjectPath();
-    const auto generateResult = m_service.GenerateCandidatesFromRequirement(
-        projectRootPath,
-        m_template_combo->currentData().toString());
+    const auto generateResult = m_service.GenerateCandidatesFromRequirement(projectRootPath);
 
     if (generateResult.IsSuccess())
     {
@@ -859,8 +790,7 @@ void TopologyWidget::OnLoadClicked()
 
 bool TopologyWidget::CanGenerate() const
 {
-    // 构型生成需要已选中有效模板
-    return m_template_combo != nullptr && m_template_combo->currentIndex() >= 0;
+    return true;
 }
 
 bool TopologyWidget::CanValidate() const

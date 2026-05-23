@@ -95,6 +95,13 @@ private:
     {
         QString requirement_name;
         QString scenario_type;
+        QString selected_template_id;
+        double rated_payload_kg = 0.0;
+        double max_payload_kg = 0.0;
+        double max_radius_m = 0.0;
+        double max_height_m = 0.0;
+        double min_height_m = 0.0;
+        double repeatability_mm = 0.0;
         QString preferred_base_mount_type;
         bool base_mount_specified = false;
         bool hollow_wrist_required = false;
@@ -111,6 +118,11 @@ private:
 
     RoboSDP::Topology::Dto::TopologyCandidateDto BuildCandidate(
         const RoboSDP::Topology::Service::TopologyTemplateRecord& templateRecord,
+        const RequirementTopologyConstraints& constraints) const;
+
+    void ApplyRequirementDrivenKinematicDimensions(
+        RoboSDP::Topology::Dto::RobotTopologyModelDto& model,
+        const RoboSDP::Topology::Service::TopologyTemplateSummary& templateSummary,
         const RequirementTopologyConstraints& constraints) const;
 
     RoboSDP::Topology::Dto::TopologyRecommendationDto BuildRecommendation(

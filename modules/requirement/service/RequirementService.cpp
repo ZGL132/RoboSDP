@@ -1,5 +1,7 @@
 #include "modules/requirement/service/RequirementService.h"
 
+#include "modules/requirement/service/KukaRequirementTemplateProvider.h"
+
 namespace RoboSDP::Requirement::Service
 {
 
@@ -15,7 +17,13 @@ RequirementService::RequirementService(
 
 RoboSDP::Requirement::Dto::RequirementModelDto RequirementService::CreateDefaultModel() const
 {
-    return RoboSDP::Requirement::Dto::RequirementModelDto::CreateDefault();
+    return KukaRequirementTemplateProvider::BuildDefaultModel(10.0);
+}
+
+RoboSDP::Requirement::Dto::RequirementModelDto RequirementService::CreateTemplateModelByPayload(
+    double ratedPayloadKg) const
+{
+    return KukaRequirementTemplateProvider::BuildDefaultModel(ratedPayloadKg);
 }
 
 RoboSDP::Requirement::Validation::RequirementValidationResult RequirementService::Validate(
