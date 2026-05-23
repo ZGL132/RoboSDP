@@ -274,11 +274,7 @@ void MainWindow::CreatePropertyDock()
     m_schemeWidget = new RoboSDP::Scheme::Ui::SchemeWidget(&m_logger, m_propertyStack);
     m_placeholderPropertyPanel = new QPlainTextEdit(m_propertyStack);
     m_placeholderPropertyPanel->setReadOnly(true);
-    m_placeholderPropertyPanel->setPlainText(
-        QStringLiteral(
-            "当前已接入 Requirement / Topology / Kinematics / Dynamics / Selection / Planning / Scheme 七个模块的最小页面骨架。\n"
-            "请在左侧树选择具体节点继续录入、生成、求解、保存与加载。\n"
-            "其余模块仍保持占位状态。"));
+    m_placeholderPropertyPanel->setPlainText(QString());
 
     m_propertyStack->addWidget(m_emptyProjectWidget);
     m_propertyStack->addWidget(m_requirementWidget);
@@ -628,6 +624,18 @@ void MainWindow::CreateLogDock()
 
     AppendLogLine(QStringLiteral("RoboSDP Desktop 启动完成。"));
     AppendLogLine(QStringLiteral("当前未打开项目，请先新建或打开 RoboSDP 项目。"));
+    AppendPropertyPanelIntroLogs();
+}
+
+void MainWindow::AppendPropertyPanelIntroLogs()
+{
+    AppendLogLine(QStringLiteral("[INFO] [Requirement] 就绪：请录入任务需求基础字段。"));
+    AppendLogLine(QStringLiteral("[INFO] [Topology] 就绪：构型模板在 Requirement 页面选择；请保存 Requirement 后再生成 Topology。"));
+    AppendLogLine(QStringLiteral("[INFO] [Kinematics] 就绪：请先保存 Topology，再生成 KinematicModel。"));
+    AppendLogLine(QStringLiteral("[INFO] [Dynamics] 就绪：请先保存 Kinematics，再生成 Dynamics 草稿。"));
+    AppendLogLine(QStringLiteral("[INFO] [Selection] 就绪：请先新建或打开项目，再选择样例目录后执行驱动选型。"));
+    AppendLogLine(QStringLiteral("[INFO] [Planning] 就绪：请先保存上游草稿，再构建 PlanningScene 并执行验证。"));
+    AppendLogLine(QStringLiteral("[INFO] [Scheme] 就绪：请先新建或打开项目，然后生成或加载 SchemeSnapshot。"));
 }
 
 void MainWindow::ResetProjectTreeItemPointers()

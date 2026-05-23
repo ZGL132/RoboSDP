@@ -141,6 +141,7 @@ void PlanningWidget::BuildUi()
 
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存上游草稿，再构建 PlanningScene 并执行验证。"), this);
     m_operation_label->setWordWrap(true);
+    m_operation_label->hide();
 
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
@@ -202,7 +203,6 @@ void PlanningWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(selfCollisionGroup), QStringLiteral("自碰撞检测"));
     tabs->addTab(CreateScrollableTab(resultGroup), QStringLiteral("验证摘要"));
 
-    rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 
     connect(m_joint_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateJointTableAndHighlight(); });
@@ -224,6 +224,15 @@ QWidget* PlanningWidget::CreateScrollableTab(QWidget* contentWidget)
     contentLayout->setSpacing(8);
     if (contentWidget != nullptr)
     {
+        if (auto* rootGroupBox = qobject_cast<QGroupBox*>(contentWidget))
+        {
+            rootGroupBox->setTitle(QString());
+            rootGroupBox->setFlat(true);
+            rootGroupBox->setObjectName(QStringLiteral("tabRootGroupBox"));
+            rootGroupBox->setStyleSheet(QStringLiteral(
+                "QGroupBox#tabRootGroupBox{border:none;margin-top:0;background:transparent;}"
+                "QGroupBox#tabRootGroupBox::title{height:0px;padding:0px;}"));
+        }
         contentLayout->addWidget(contentWidget);
     }
     contentLayout->addStretch();

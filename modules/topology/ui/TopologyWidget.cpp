@@ -279,6 +279,7 @@ void TopologyWidget::BuildUi()
         QStringLiteral("就绪：构型模板在 Requirement 页面选择；请保存 Requirement 后再生成 Topology。"),
         this);
     m_operation_label->setWordWrap(true);
+    m_operation_label->hide();
 
     // 2. 中部：多页签面板区
     auto* tabs = new QTabWidget(this);
@@ -289,7 +290,6 @@ void TopologyWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(CreateValidationGroup()), QStringLiteral("校验结果"));
 
     // 将所有布局添加到主根布局
-    rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 }
 
@@ -310,6 +310,15 @@ QWidget* TopologyWidget::CreateScrollableTab(QWidget* contentWidget)
     contentLayout->setSpacing(8);
     if (contentWidget != nullptr)
     {
+        if (auto* rootGroupBox = qobject_cast<QGroupBox*>(contentWidget))
+        {
+            rootGroupBox->setTitle(QString());
+            rootGroupBox->setFlat(true);
+            rootGroupBox->setObjectName(QStringLiteral("tabRootGroupBox"));
+            rootGroupBox->setStyleSheet(QStringLiteral(
+                "QGroupBox#tabRootGroupBox{border:none;margin-top:0;background:transparent;}"
+                "QGroupBox#tabRootGroupBox::title{height:0px;padding:0px;}"));
+        }
         contentLayout->addWidget(contentWidget);
     }
     contentLayout->addStretch();

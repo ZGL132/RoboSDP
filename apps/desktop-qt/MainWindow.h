@@ -98,6 +98,7 @@ private:
 
     /// 创建底部日志面板。
     void CreateLogDock();
+    void AppendPropertyPanelIntroLogs();
 
     /// 显示未打开项目时的启动空状态。
     void ShowEmptyProjectState();

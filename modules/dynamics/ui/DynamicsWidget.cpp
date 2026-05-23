@@ -203,6 +203,7 @@ void DynamicsWidget::BuildUi()
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存 Kinematics，再生成 Dynamics 草稿。"), this);
     m_operation_label->setObjectName(QStringLiteral("dynamics_operation_label"));
     m_operation_label->setWordWrap(true);
+    m_operation_label->hide();
 
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
@@ -215,7 +216,6 @@ void DynamicsWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(CreatePlotGroup()), QStringLiteral("结果曲线"));
     tabs->addTab(CreateScrollableTab(CreateResultGroup()), QStringLiteral("结果摘要"));
 
-    rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 
     connect(m_link_table, &QTableWidget::itemChanged, this, [this](QTableWidgetItem*) { ValidateTablesAndHighlight(); });
@@ -239,6 +239,15 @@ QWidget* DynamicsWidget::CreateScrollableTab(QWidget* contentWidget)
     contentLayout->setSpacing(8);
     if (contentWidget != nullptr)
     {
+        if (auto* rootGroupBox = qobject_cast<QGroupBox*>(contentWidget))
+        {
+            rootGroupBox->setTitle(QString());
+            rootGroupBox->setFlat(true);
+            rootGroupBox->setObjectName(QStringLiteral("tabRootGroupBox"));
+            rootGroupBox->setStyleSheet(QStringLiteral(
+                "QGroupBox#tabRootGroupBox{border:none;margin-top:0;background:transparent;}"
+                "QGroupBox#tabRootGroupBox::title{height:0px;padding:0px;}"));
+        }
         contentLayout->addWidget(contentWidget);
     }
     contentLayout->addStretch();

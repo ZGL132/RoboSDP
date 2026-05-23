@@ -230,8 +230,7 @@ void ApplyBadgeStyle(QLabel* label, const QString& text, const QString& tone)
     label->setText(text);
     label->setStyleSheet(QStringLiteral(
         "QLabel#kinematicsBadge{"
-        "background:%1;color:%2;border:1px solid %3;border-radius:11px;"
-        "padding:2px 10px;font-size:12px;font-weight:700;"
+        "color:%2;padding:0 4px;font-weight:600;"
         "}").arg(background, color, border));
 }
 
@@ -251,17 +250,7 @@ void StyleKinematicsTable(QTableWidget* table)
     table->horizontalHeader()->setHighlightSections(false);
     table->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
     table->setShowGrid(true);
-    table->setStyleSheet(QStringLiteral(
-        "QTableWidget{"
-        "background:#ffffff;alternate-background-color:#f8fafc;"
-        "gridline-color:#e5e7eb;border:1px solid #d0d5dd;"
-        "selection-background-color:#dbeafe;selection-color:#0f172a;"
-        "font-size:12px;"
-        "}"
-        "QHeaderView::section{"
-        "background:#f1f5f9;color:#334155;border:0;border-right:1px solid #d0d5dd;"
-        "border-bottom:1px solid #d0d5dd;padding:5px 6px;font-weight:700;"
-        "}"));
+    table->setStyleSheet(QString());
 }
 
 QTableWidgetItem* EnsureItem(QTableWidget* table, int row, int column)
@@ -542,23 +531,7 @@ void KinematicsWidget::BuildUi()
     rootLayout->setSpacing(10);
 
     setObjectName(QStringLiteral("kinematicsWidget"));
-    setStyleSheet(QStringLiteral(
-        "QWidget#kinematicsWidget{background:#f8fafc;}"
-        "QFrame#kinematicsHeaderCard,QFrame#kinematicsModelCard{"
-        "background:#ffffff;border:1px solid #d0d5dd;border-radius:8px;"
-        "}"
-        "QGroupBox{"
-        "font-weight:700;color:#0f172a;border:1px solid #d0d5dd;"
-        "border-radius:8px;margin-top:9px;background:#ffffff;"
-        "}"
-        "QGroupBox::title{subcontrol-origin:margin;left:10px;padding:0 5px;}"
-        "QLineEdit,QComboBox,QDoubleSpinBox,QSpinBox{"
-        "min-height:24px;border:1px solid #cbd5e1;border-radius:4px;"
-        "padding:2px 6px;background:#ffffff;"
-        "}"
-        "QTabWidget::pane{border:1px solid #d0d5dd;background:#ffffff;}"
-        "QTabBar::tab{padding:5px 12px;color:#475467;}"
-        "QTabBar::tab:selected{color:#0f172a;font-weight:700;background:#ffffff;}"));
+    setStyleSheet(QString());
 
     auto* headerCard = CreateKinematicsCard(this, QStringLiteral("kinematicsHeaderCard"));
     auto* headerLayout = new QVBoxLayout(headerCard);
@@ -568,9 +541,7 @@ void KinematicsWidget::BuildUi()
     auto* titleRow = new QHBoxLayout();
     titleRow->setSpacing(8);
     auto* titleLabel = new QLabel(QStringLiteral("运动学建模"), headerCard);
-    titleLabel->setStyleSheet(QStringLiteral("font-size:18px;font-weight:800;color:#0f172a;"));
     auto* subtitleLabel = new QLabel(QStringLiteral("DH/MDH 参数、FK/IK 验证、工作空间与模型诊断"), headerCard);
-    subtitleLabel->setStyleSheet(QStringLiteral("font-size:12px;color:#64748b;"));
     titleRow->addWidget(titleLabel);
     titleRow->addWidget(subtitleLabel);
     titleRow->addStretch(1);
@@ -591,15 +562,13 @@ void KinematicsWidget::BuildUi()
 
     m_operation_label = new QLabel(QStringLiteral("就绪：请先保存 Topology，再生成 KinematicModel。"), headerCard);
     m_operation_label->setWordWrap(true);
-    m_operation_label->setStyleSheet(QStringLiteral("color:#475467;font-size:12px;"));
-    headerLayout->addWidget(m_operation_label);
+    m_operation_label->hide();
 
     m_validation_label = new QLabel(QStringLiteral("模型校验：等待载入运动学草稿。"), headerCard);
     m_validation_label->setWordWrap(true);
     m_validation_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    m_validation_label->setStyleSheet(QStringLiteral(
-        "padding:7px 9px;border-radius:6px;background:#f8fafc;color:#475467;border:1px solid #e5e7eb;"));
     headerLayout->addWidget(m_validation_label);
+    headerCard->hide();
 
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
@@ -608,7 +577,6 @@ void KinematicsWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(CreateAdvancedAnalysisPage()), QStringLiteral("工作空间"));
     tabs->addTab(CreateScrollableTab(CreateDiagnosticsPage()), QStringLiteral("诊断"));
 
-    rootLayout->addWidget(headerCard);
     rootLayout->addWidget(tabs, 1);
 
     // A/B 通道：将涉及"结构变动"的输入项绑定至重量级通道 SyncStructureAndPreview
@@ -692,6 +660,15 @@ QWidget* KinematicsWidget::CreateScrollableTab(QWidget* contentWidget)
     contentLayout->setSpacing(8);
     if (contentWidget != nullptr)
     {
+        if (auto* rootGroupBox = qobject_cast<QGroupBox*>(contentWidget))
+        {
+            rootGroupBox->setTitle(QString());
+            rootGroupBox->setFlat(true);
+            rootGroupBox->setObjectName(QStringLiteral("tabRootGroupBox"));
+            rootGroupBox->setStyleSheet(QStringLiteral(
+                "QGroupBox#tabRootGroupBox{border:none;margin-top:0;background:transparent;}"
+                "QGroupBox#tabRootGroupBox::title{height:0px;padding:0px;}"));
+        }
         contentLayout->addWidget(contentWidget);
     }
     contentLayout->addStretch();
@@ -873,9 +850,6 @@ QGroupBox* KinematicsWidget::CreateDhTableGroup()
 
     m_dh_readonly_banner_label = new QLabel(groupBox);
     m_dh_readonly_banner_label->setWordWrap(true);
-    m_dh_readonly_banner_label->setStyleSheet(QStringLiteral(
-        "color:#b54708;background:#fff7ed;border:1px solid #fdba74;"
-        "border-radius:6px;padding:7px 9px;font-weight:600;"));
     m_dh_readonly_banner_label->hide();
     layout->addWidget(m_dh_readonly_banner_label);
 
@@ -883,7 +857,6 @@ QGroupBox* KinematicsWidget::CreateDhTableGroup()
         QStringLiteral("长度单位统一为 m，角度单位统一为 deg；修改 DH 参数会实时重建中央骨架预览。"),
         groupBox);
     hintLabel->setWordWrap(true);
-    hintLabel->setStyleSheet(QStringLiteral("color:#64748b;font-size:12px;"));
     layout->addWidget(hintLabel);
 
     m_dh_table = new QTableWidget(groupBox);
@@ -901,7 +874,6 @@ QGroupBox* KinematicsWidget::CreateJointLimitGroup()
         QStringLiteral("最小入口保留 soft/hard limit 与速度、加速度上限，joint_id 由模型自动生成。"),
         groupBox);
     hintLabel->setWordWrap(true);
-    hintLabel->setStyleSheet(QStringLiteral("color:#64748b;font-size:12px;"));
     layout->addWidget(hintLabel);
 
     m_joint_limit_table = new QTableWidget(groupBox);
@@ -1066,10 +1038,6 @@ QWidget* KinematicsWidget::CreateInteractivePage()
     connect(fillFromFkButton, &QPushButton::clicked, this, &KinematicsWidget::FillIkTargetFromFkResult);
     auto* runIkButton = new QPushButton(QStringLiteral("执行 IK 求解"), ikGroup);
     runIkButton->setToolTip(QStringLiteral("求解目标位姿对应的关节角。"));
-    runIkButton->setStyleSheet(QStringLiteral(
-        "QPushButton { background:#2563eb; color:white; border:none; border-radius:4px; padding:6px 10px; font-weight:bold; }"
-        "QPushButton:hover { background:#1d4ed8; }"
-        "QPushButton:pressed { background:#1e40af; }"));
     connect(runIkButton, &QPushButton::clicked, this, &KinematicsWidget::OnRunIkClicked);
     ikActionRow->addWidget(fillFromFkButton);
     ikActionRow->addStretch();

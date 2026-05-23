@@ -136,6 +136,7 @@ void SelectionWidget::BuildUi()
 
     m_operation_label = new QLabel(QStringLiteral("就绪：请先通过顶部功能区新建或打开项目，再选择样例目录后执行驱动选型。"), this);
     m_operation_label->setWordWrap(true);
+    m_operation_label->hide();
 
     auto* scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
@@ -160,7 +161,6 @@ void SelectionWidget::BuildUi()
     scrollArea->setWidget(content);
 
     rootLayout->addLayout(catalogLayout);
-    rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
 
     connect(m_browse_catalog_button, &QPushButton::clicked, this, [this]() { OnBrowseCatalogRootClicked(); });

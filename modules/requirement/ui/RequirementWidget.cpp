@@ -404,6 +404,7 @@ void RequirementWidget::BuildUi()
 
     m_operation_label = new QLabel(QStringLiteral("就绪：请录入任务需求基础字段。"), this);
     m_operation_label->setWordWrap(true);
+    m_operation_label->hide();
 
     auto* tabs = new QTabWidget(this);
     tabs->setDocumentMode(true);
@@ -416,7 +417,6 @@ void RequirementWidget::BuildUi()
     tabs->addTab(CreateScrollableTab(CreateReliabilityGroup()), QStringLiteral("可靠性"));
     tabs->addTab(CreateScrollableTab(CreateValidationGroup()), QStringLiteral("校验结果"));
 
-    rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(tabs, 1);
 }
 
@@ -436,6 +436,15 @@ QWidget* RequirementWidget::CreateScrollableTab(QWidget* contentWidget)
     contentLayout->setSpacing(8);
     if (contentWidget != nullptr)
     {
+        if (auto* rootGroupBox = qobject_cast<QGroupBox*>(contentWidget))
+        {
+            rootGroupBox->setTitle(QString());
+            rootGroupBox->setFlat(true);
+            rootGroupBox->setObjectName(QStringLiteral("tabRootGroupBox"));
+            rootGroupBox->setStyleSheet(QStringLiteral(
+                "QGroupBox#tabRootGroupBox{border:none;margin-top:0;background:transparent;}"
+                "QGroupBox#tabRootGroupBox::title{height:0px;padding:0px;}"));
+        }
         contentLayout->addWidget(contentWidget);
     }
     contentLayout->addStretch();

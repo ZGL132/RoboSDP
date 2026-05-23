@@ -125,6 +125,7 @@ void SchemeWidget::BuildUi()
         QStringLiteral("就绪：请先通过顶部功能区新建或打开项目，然后生成或加载 SchemeSnapshot。"),
         this);
     m_operation_label->setWordWrap(true);
+    m_operation_label->hide();
 
     auto* scrollArea = new QScrollArea(this);
     scrollArea->setWidgetResizable(true);
@@ -177,7 +178,6 @@ void SchemeWidget::BuildUi()
     contentLayout->addStretch();
     scrollArea->setWidget(contentWidget);
 
-    rootLayout->addWidget(m_operation_label);
     rootLayout->addWidget(scrollArea, 1);
 }
 
