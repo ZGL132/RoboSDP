@@ -547,6 +547,11 @@ void RobotVtkView::ClearIkPoseComparison()
     m_ikPositionErrorMm = 0.0;
     m_ikOrientationErrorDeg = 0.0;
     ClearIkPoseComparisonActors();
+    // IK 对比清除后恢复 FK 实时 TCP 坐标指示器
+    if (m_tcp_axes_actor != nullptr && !m_currentScene.IsEmpty())
+    {
+        m_tcp_axes_actor->SetVisibility(true);
+    }
     SetAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsIkCompare), false);
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderWindow != nullptr)
@@ -954,7 +959,14 @@ void RobotVtkView::RenderRequirementKeyPoseLayer()
             keyPose.pose[1],
             keyPose.pose[2] + (selected ? 0.08 : 0.06)};
         auto labelActor = CreateBillboardLabel(labelText, labelPosition, red, green, blue, 16, selected ? 18 : 12);
-        m_renderer->AddActor(labelActor);
+        if (m_label_renderer != nullptr)
+        {
+            m_label_renderer->AddActor(labelActor);
+        }
+        else
+        {
+            m_renderer->AddActor(labelActor);
+        }
         m_requirement_key_pose_label_actors.push_back(labelActor);
     }
 
@@ -975,6 +987,12 @@ void RobotVtkView::RenderIkPoseComparisonLayer()
     }
 
     ClearIkPoseComparisonActors();
+
+    // IK 对比层激活时隐藏 FK 实时 TCP 坐标指示器，避免与 IK Target/Actual 坐标轴重叠
+    if (m_tcp_axes_actor != nullptr)
+    {
+        m_tcp_axes_actor->SetVisibility(false);
+    }
 
     m_ik_target_axes_actor = CreateTcpComparisonAxes(0.18);
     m_ik_target_axes_actor->SetUserTransform(BuildPoseTransform(m_ikTargetPose));
@@ -1005,7 +1023,14 @@ void RobotVtkView::RenderIkPoseComparisonLayer()
         1.0,
         18,
         18);
-    m_renderer->AddActor(m_ik_target_label_actor);
+    if (m_label_renderer != nullptr)
+    {
+        m_label_renderer->AddActor(m_ik_target_label_actor);
+    }
+    else
+    {
+        m_renderer->AddActor(m_ik_target_label_actor);
+    }
 
     if (m_hasIkActualPose)
     {
@@ -1031,7 +1056,14 @@ void RobotVtkView::RenderIkPoseComparisonLayer()
             blue,
             18,
             -18);
-        m_renderer->AddActor(m_ik_actual_label_actor);
+        if (m_label_renderer != nullptr)
+        {
+            m_label_renderer->AddActor(m_ik_actual_label_actor);
+        }
+        else
+        {
+            m_renderer->AddActor(m_ik_actual_label_actor);
+        }
 
         vtkNew<vtkLineSource> lineSource;
         lineSource->SetPoint1(
@@ -1061,7 +1093,14 @@ void RobotVtkView::RenderIkPoseComparisonLayer()
                                       .arg(m_ikPositionErrorMm, 0, 'f', 2)
                                       .arg(m_ikOrientationErrorDeg, 0, 'f', 2);
         m_ik_error_label_actor = CreateBillboardLabel(errorText, midPoint, red, green, blue, 18, 0);
-        m_renderer->AddActor(m_ik_error_label_actor);
+        if (m_label_renderer != nullptr)
+        {
+            m_label_renderer->AddActor(m_ik_error_label_actor);
+        }
+        else
+        {
+            m_renderer->AddActor(m_ik_error_label_actor);
+        }
     }
 
     if (m_renderWindow != nullptr)
@@ -1373,6 +1412,11 @@ void RobotVtkView::SetAnalysisLayerVisibleInternal(const QString& layerId, bool 
         else
         {
             ClearIkPoseComparisonActors();
+            // 图层关闭时恢复 FK 实时 TCP 坐标指示器
+            if (m_tcp_axes_actor != nullptr && !m_currentScene.IsEmpty())
+            {
+                m_tcp_axes_actor->SetVisibility(true);
+            }
             if (m_renderWindow != nullptr)
             {
                 m_renderWindow->Render();
@@ -1496,8 +1540,18 @@ void RobotVtkView::BuildVtkView()
     m_renderWindow = renderWindow;
 
     vtkNew<vtkRenderer> renderer;
+    renderer->SetLayer(0);
     renderWindow->AddRenderer(renderer);
     m_renderer = renderer;
+
+    // 创建标签层 Renderer（Layer 1），确保 link/joint 标签永远渲染在最前面不被遮挡
+    vtkNew<vtkRenderer> labelRenderer;
+    labelRenderer->SetLayer(1);
+    labelRenderer->EraseOff(); // 透明背景，让 Layer 0 的几何体透过来
+    labelRenderer->SetActiveCamera(renderer->GetActiveCamera());
+    renderWindow->SetNumberOfLayers(2);
+    renderWindow->AddRenderer(labelRenderer);
+    m_label_renderer = labelRenderer;
 
     BuildCornerAxesWidget();
 
@@ -1802,7 +1856,8 @@ void RobotVtkView::RefreshScene(bool resetCamera)
                 m_currentScene,
                 displayOptions,
                 m_link_actors,
-                m_link_mesh_geometries);
+                m_link_mesh_geometries,
+                m_label_renderer);
 
            // 🔽🔽🔽 【修改这里的判断条件】 🔽🔽🔽
             // 不再判断有没有外壳，而是判断场景数据里有没有携带真实的 URDF 文件路径

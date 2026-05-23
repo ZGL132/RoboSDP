@@ -425,6 +425,19 @@ KinematicsWidget::KinematicsWidget(RoboSDP::Logging::ILogger* logger, QWidget* p
     MarkClean();
 }
 
+void KinematicsWidget::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+
+    // 首次显示运动学面板时，若拓扑草稿已存在但尚未构建，自动从拓扑同步模型，
+    // 避免用户看到与构型设计不一致的默认骨架。
+    if (!m_has_auto_built_from_topology && CanBuildFromTopology())
+    {
+        m_has_auto_built_from_topology = true;
+        OnBuildFromTopologyClicked();
+    }
+}
+
 QString KinematicsWidget::ModuleName() const
 {
     return QStringLiteral("Kinematics");
@@ -963,13 +976,38 @@ QWidget* KinematicsWidget::CreateInteractivePage()
     m_fk_grid->addWidget(new QLabel(QStringLiteral("裕量"), fkGroup), 0, 3);
     fkLayout->addLayout(m_fk_grid);
 
-    auto* fkButtonRow = new QHBoxLayout();
-    fkButtonRow->addStretch();
-    auto* runFkButton = new QPushButton(QStringLiteral("执行 FK 求解"), fkGroup);
-    runFkButton->setToolTip(QStringLiteral("使用当前关节角计算 TCP 位姿，并更新结果诊断。"));
-    connect(runFkButton, &QPushButton::clicked, this, &KinematicsWidget::OnRunFkClicked);
-    fkButtonRow->addWidget(runFkButton);
-    fkLayout->addLayout(fkButtonRow);
+    // ── FK 实时 TCP 位姿读出区 ──────────────────────────
+    {
+        auto* readoutFrame = new QFrame(fkGroup);
+        readoutFrame->setObjectName(QStringLiteral("fkReadoutFrame"));
+        readoutFrame->setStyleSheet(QStringLiteral(
+            "QFrame#fkReadoutFrame{"
+            "background:#f0f4ff;border:1px solid #c7d2fe;"
+            "border-radius:3px;padding:4px;}"));
+        auto* roLayout = new QVBoxLayout(readoutFrame);
+        roLayout->setContentsMargins(8, 4, 8, 4);
+        roLayout->setSpacing(1);
+
+        auto* roTitle = new QLabel(QStringLiteral("FK 计算结果"), readoutFrame);
+        roTitle->setStyleSheet(QStringLiteral(
+            "font-weight:bold;color:#3730a3;font-size:11px;"));
+        roLayout->addWidget(roTitle);
+
+        m_fk_tcp_pos_label = new QLabel(
+            QStringLiteral("P: (  ---- ,  ---- ,  ---- ) m"), readoutFrame);
+        m_fk_tcp_pos_label->setStyleSheet(QStringLiteral(
+            "font-family:monospace;font-size:11px;color:#1e293b;"));
+        roLayout->addWidget(m_fk_tcp_pos_label);
+
+        m_fk_tcp_rpy_label = new QLabel(
+            QStringLiteral("R: (  ---- ,  ---- ,  ---- ) deg"), readoutFrame);
+        m_fk_tcp_rpy_label->setStyleSheet(QStringLiteral(
+            "font-family:monospace;font-size:11px;color:#1e293b;"));
+        roLayout->addWidget(m_fk_tcp_rpy_label);
+
+        fkLayout->addWidget(readoutFrame);
+    }
+
     layout->addWidget(fkGroup);
 
     auto* ikGroup = new QGroupBox(QStringLiteral("逆运动学与目标位姿 (IK)"), page);
@@ -1063,15 +1101,16 @@ QWidget* KinematicsWidget::CreateInteractivePage()
 
     AdjustJointInputCount(6);
 
-    // ── IK 多解浏览器 ─────────────────────────────────────────
-    auto* solutionGroup = new QGroupBox(QStringLiteral("IK 多解浏览器"), ikGroup);
-    auto* solutionLayout = new QVBoxLayout(solutionGroup);
-    m_ik_solution_combo = new QComboBox(solutionGroup);
+    // ── IK 多解浏览器（默认折叠） ──────────────────────────────
+    auto* solutionContent = new QWidget(ikGroup);
+    auto* solutionLayout = new QVBoxLayout(solutionContent);
+    solutionLayout->setContentsMargins(4, 4, 4, 4);
+    m_ik_solution_combo = new QComboBox(solutionContent);
     m_ik_solution_combo->setEnabled(false);
     m_ik_solution_combo->setToolTip(QStringLiteral("选择闭式解析 IK 的不同空间构型解"));
     auto* comboRow = new QHBoxLayout();
     comboRow->addWidget(m_ik_solution_combo, 1);
-    auto* applySolutionBtn = new QPushButton(QStringLiteral("应用至 FK"), solutionGroup);
+    auto* applySolutionBtn = new QPushButton(QStringLiteral("应用至 FK"), solutionContent);
     applySolutionBtn->setToolTip(QStringLiteral("将当前选中解的角度填入 FK 滑块"));
     applySolutionBtn->setEnabled(false);
     connect(applySolutionBtn, &QPushButton::clicked, this, [this]() {
@@ -1084,7 +1123,6 @@ QWidget* KinematicsWidget::CreateInteractivePage()
                 m_fk_joint_spins[i]->setValue(allSol[idx][i]);
         }
     });
-    // combo 启用时也启用按钮
     connect(m_ik_solution_combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, [applySolutionBtn](int) { applySolutionBtn->setEnabled(true); });
     comboRow->addWidget(applySolutionBtn);
@@ -1093,7 +1131,6 @@ QWidget* KinematicsWidget::CreateInteractivePage()
     auto* solutionGrid = new QGridLayout();
     solutionGrid->setColumnStretch(1, 1);
     solutionGrid->setColumnStretch(3, 1);
-    // 预创建 6 个只读关节角 spinbox
     for (int i = 0; i < 6; ++i)
     {
         auto* spin = CreateDoubleSpinBox(-9999.0, 9999.0, 3, 1.0);
@@ -1104,12 +1141,11 @@ QWidget* KinematicsWidget::CreateInteractivePage()
         const int row = i / 2;
         const int labelColumn = (i % 2) * 2;
         const int editorColumn = labelColumn + 1;
-        solutionGrid->addWidget(new QLabel(QStringLiteral("J%1").arg(i + 1), solutionGroup), row, labelColumn);
+        solutionGrid->addWidget(new QLabel(QStringLiteral("J%1").arg(i + 1), solutionContent), row, labelColumn);
         solutionGrid->addWidget(spin, row, editorColumn);
     }
     solutionLayout->addLayout(solutionGrid);
 
-    // 切换解索引 → 更新 spinbox 显示
     connect(m_ik_solution_combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, [this](int index) {
             if (index < 0) return;
@@ -1121,7 +1157,11 @@ QWidget* KinematicsWidget::CreateInteractivePage()
             }
         });
 
-    ikLayout->addWidget(solutionGroup);
+    auto* solutionSection = new CollapsibleSectionWidget(
+        QStringLiteral("IK 多解浏览器"), ikGroup);
+    solutionSection->SetContent(solutionContent);
+    solutionSection->SetCollapsed(true);
+    ikLayout->addWidget(solutionSection);
     layout->addWidget(ikGroup);
 
     layout->addStretch();
@@ -2333,10 +2373,12 @@ void KinematicsWidget::SyncPoseOnly()
             poseMap[QStringLiteral("tcp_frame")] = fkResult.tcp_pose;
             
             emit PreviewPosesUpdated(poseMap);
-            // 成功时可选打印日志，避免拖动时日志刷屏
-            // emit LogMessageGenerated(QStringLiteral("[Kinematics] DH/MDH 姿态刷新成功。"));
+
+            // 同步更新 FK 区域实时 TCP 位姿读出标签
+            m_state.last_fk_result = fkResult;
+            UpdateFkPoseReadout(fkResult.tcp_pose);
         }
-        else 
+        else
         {
             // 【核心修复 2】：绝对不能静默失败！把拦截原因红字打在公屏上！
             emit LogMessageGenerated(QStringLiteral("[Kinematics][Error] DH/MDH 姿态刷新被拦截：%1").arg(fkResult.message));
@@ -2351,11 +2393,39 @@ void KinematicsWidget::SyncPoseOnly()
     if (updateResult.IsSuccess() && !updateResult.link_world_poses.empty())
     {
         emit PreviewPosesUpdated(updateResult.link_world_poses);
+
+        // 从 URDF 预览姿态 map 中提取 TCP 位姿用于实时读出
+        auto it = updateResult.link_world_poses.find(QStringLiteral("tcp_frame"));
+        if (it != updateResult.link_world_poses.end())
+        {
+            UpdateFkPoseReadout(it->second);
+        }
     }
     else 
     {
         // 同样，把 URDF 失败的原因打印出来
         emit LogMessageGenerated(QStringLiteral("[Kinematics][Warning] URDF 姿态刷新被拦截：%1").arg(updateResult.message));
+    }
+}
+
+void KinematicsWidget::UpdateFkPoseReadout(
+    const RoboSDP::Kinematics::Dto::CartesianPoseDto& tcpPose)
+{
+    if (m_fk_tcp_pos_label != nullptr)
+    {
+        m_fk_tcp_pos_label->setText(
+            QStringLiteral("P: (%1, %2, %3) m")
+                .arg(tcpPose.position_m[0], 8, 'f', 4, QLatin1Char(' '))
+                .arg(tcpPose.position_m[1], 8, 'f', 4, QLatin1Char(' '))
+                .arg(tcpPose.position_m[2], 8, 'f', 4, QLatin1Char(' ')));
+    }
+    if (m_fk_tcp_rpy_label != nullptr)
+    {
+        m_fk_tcp_rpy_label->setText(
+            QStringLiteral("R: (%1, %2, %3) deg")
+                .arg(tcpPose.rpy_deg[0], 7, 'f', 2, QLatin1Char(' '))
+                .arg(tcpPose.rpy_deg[1], 7, 'f', 2, QLatin1Char(' '))
+                .arg(tcpPose.rpy_deg[2], 7, 'f', 2, QLatin1Char(' ')));
     }
 }
 
@@ -2768,10 +2838,17 @@ void KinematicsWidget::OnBuildFromTopologyClicked()
         // 3.2 数据流向 UI：将后台生成的全新 D-H 模型数据回填到界面的 QTableWidget 和 SpinBox 中
         // 注意：PopulateForm 内部会设置 m_is_populating_form = true，防止触发连环的 cellChanged 信号
         PopulateForm(m_state.current_model);
-        
+
+        // 腕部关节在零位时 J4/J5/J6 轴线重合，三个连杆在视觉上完全重叠为一根。
+        // 给 J5 默认 5° 偏转，使 6 个连杆从初始视角就能清晰区分。
+        if (m_fk_joint_spins.size() >= 5)
+        {
+            m_fk_joint_spins[4]->setValue(5.0);
+        }
+
         // 3.3 数据流向 3D 引擎：【核心修改 - 调用通道 A】
         // 由于是从拓扑全新生成的模型，机器人的物理尺寸 ($a, \alpha, d, \theta$) 已经发生了根本改变。
-        // 因此必须走“重量级重建”通道：强制底层 Pinocchio 物理引擎销毁旧缓存、重新建树，
+        // 因此必须走”重量级重建”通道：强制底层 Pinocchio 物理引擎销毁旧缓存、重新建树，
         // 并向主窗口发射 PreviewSceneGenerated 信号，让 VTK 重新绘制所有的圆柱体和网格。
         SyncStructureAndPreview(); 
         
@@ -3014,11 +3091,12 @@ void KinematicsWidget::OnRunFkClicked()
     request.joint_positions_deg = CollectJointInputs(m_fk_joint_spins);
     m_state.last_fk_result = m_service.SolveFk(m_state.current_model, request);
     MarkDirty();
-    FillIkTargetFromFkResult();
 
     // 【IK DEBUG】记录 FK 结果的 TCP 位姿，便于与 IK 目标对比
     if (m_state.last_fk_result.success)
     {
+        UpdateFkPoseReadout(m_state.last_fk_result.tcp_pose);
+
         emit LogMessageGenerated(QStringLiteral(
             "[Kinematics][Debug] FK Result TCP: pos=[%1,%2,%3] rpy=[%4,%5,%6]")
             .arg(m_state.last_fk_result.tcp_pose.position_m[0], 0, 'f', 6)

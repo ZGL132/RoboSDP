@@ -884,19 +884,18 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementWidget::CollectModelFr
     }
     model.workspace_requirements.base_constraints = baseConstraints;
 
-    if (model.workspace_requirements.key_poses.empty())
-    {
-        model.workspace_requirements.key_poses.push_back(RequirementKeyPoseDto {});
-    }
     NormalizeWorkingKeyPoseIdsAndNames();
     model.workspace_requirements.key_poses = m_working_model.workspace_requirements.key_poses;
 
-    const int currentIndex = std::clamp(
-        m_current_key_pose_index,
-        0,
-        static_cast<int>(model.workspace_requirements.key_poses.size()) - 1);
-    model.workspace_requirements.key_poses[static_cast<std::size_t>(currentIndex)] =
-        CollectKeyPoseFromEditor();
+    if (!model.workspace_requirements.key_poses.empty())
+    {
+        const int currentIndex = std::clamp(
+            m_current_key_pose_index,
+            0,
+            static_cast<int>(model.workspace_requirements.key_poses.size()) - 1);
+        model.workspace_requirements.key_poses[static_cast<std::size_t>(currentIndex)] =
+            CollectKeyPoseFromEditor();
+    }
     m_working_model.workspace_requirements.key_poses = model.workspace_requirements.key_poses;
     NormalizeWorkingKeyPoseIdsAndNames();
     model.workspace_requirements.key_poses = m_working_model.workspace_requirements.key_poses;
@@ -929,11 +928,6 @@ void RequirementWidget::PopulateForm(const RoboSDP::Requirement::Dto::Requiremen
 {
     m_is_populating_form = true;
     m_working_model = model;
-    if (m_working_model.workspace_requirements.key_poses.empty())
-    {
-        m_working_model.workspace_requirements.key_poses.push_back(
-            RoboSDP::Requirement::Dto::RequirementKeyPoseDto {});
-    }
     NormalizeWorkingKeyPoseIdsAndNames();
 
     SyncProjectNameFromProjectContext();
@@ -1101,7 +1095,7 @@ void RequirementWidget::RefreshKeyPoseList()
         m_key_pose_list->addItem(BuildKeyPoseListLabel(keyPose, static_cast<int>(index)));
     }
 
-    m_remove_key_pose_button->setEnabled(m_working_model.workspace_requirements.key_poses.size() > 1);
+    m_remove_key_pose_button->setEnabled(m_working_model.workspace_requirements.key_poses.size() > 0);
 }
 
 void RequirementWidget::NormalizeWorkingKeyPoseIdsAndNames()
@@ -1367,7 +1361,7 @@ void RequirementWidget::OnAddKeyPoseClicked()
 
 void RequirementWidget::OnRemoveKeyPoseClicked()
 {
-    if (m_working_model.workspace_requirements.key_poses.size() <= 1 ||
+    if (m_working_model.workspace_requirements.key_poses.empty() ||
         m_current_key_pose_index < 0 ||
         m_current_key_pose_index >= static_cast<int>(m_working_model.workspace_requirements.key_poses.size()))
     {

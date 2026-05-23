@@ -71,12 +71,14 @@ public:
         std::map<QString, RoboSDP::Kinematics::Dto::GeometryObjectDto>& linkGeometries);
 
     /// @brief 根据显示选项构建 URDF 预览场景，并复用/填充 Mesh Actor 缓存。
+    /// @param labelRenderer 可选的标签层 Renderer（Layer 1），传入后 link/joint 标签渲染到该层，始终在最前面。
     static void BuildUrdfPreviewScene(
         vtkRenderer* renderer,
         const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& previewScene,
         const UrdfPreviewDisplayOptions& displayOptions,
         std::map<QString, vtkSmartPointer<vtkActor>>& linkActors,
-        std::map<QString, RoboSDP::Kinematics::Dto::GeometryObjectDto>& linkGeometries);
+        std::map<QString, RoboSDP::Kinematics::Dto::GeometryObjectDto>& linkGeometries,
+        vtkRenderer* labelRenderer = nullptr);
 
     /// @brief 高频路径：只根据新的 link 全局位姿更新缓存 Actor 的 UserTransform，不重新读 Mesh 文件。
     static bool UpdateCachedMeshActorTransforms(

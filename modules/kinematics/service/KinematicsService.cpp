@@ -2391,6 +2391,16 @@ PreviewPoseUpdateResult KinematicsService::UpdatePreviewPoses(
                 ToPreviewPose(data.oMf[static_cast<std::size_t>(previewNode.frame_id)]);
         }
 
+        // 兜底补齐 TCP 位姿：有些共享内核预览节点不会显式包含 tcp_frame，
+        // 但三维视图里的 TCP 坐标系需要随滑块实时跟踪末端。
+        const auto tcpFrameId = acquireResult.metadata.tcp_frame_id;
+        if (tcpFrameId >= 0 &&
+            tcpFrameId < static_cast<int>(acquireResult.model->nframes))
+        {
+            result.link_world_poses[QStringLiteral("tcp_frame")] =
+                ToPreviewPose(data.oMf[static_cast<std::size_t>(tcpFrameId)]);
+        }
+
         result.message = QStringLiteral("预览姿态刷新完成：已更新 %1 个 link 全局位姿。")
             .arg(result.link_world_poses.size());
         return result;

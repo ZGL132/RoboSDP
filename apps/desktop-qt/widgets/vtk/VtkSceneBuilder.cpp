@@ -560,34 +560,29 @@ void AddStaticMeshActor(
 void AddNodeLabel(
     vtkRenderer* renderer,
     const QString& linkName,
-    const std::array<double, 3>& position)
+    const std::array<double, 3>& position,
+    vtkRenderer* labelRenderer = nullptr)
 {
     vtkNew<vtkBillboardTextActor3D> labelActor;
     labelActor->SetInput(linkName.toStdString().c_str());
     labelActor->SetPosition(position[0], position[1], position[2]);
     vtkTextProperty* textProp = labelActor->GetTextProperty();
 
-    // 🔽🔽🔽 【新增】：应用中文字体
     const QString fontPath = GetChineseFontPath();
     if (!fontPath.isEmpty()) {
         textProp->SetFontFamily(VTK_FONT_FILE);
         textProp->SetFontFile(fontPath.toStdString().c_str());
     }
-    // 🔼🔼🔼
     labelActor->GetTextProperty()->SetFontSize(13);
     labelActor->GetTextProperty()->SetColor(0.74, 0.84, 0.92);
-    labelActor->GetTextProperty()->SetBold(true); 
+    labelActor->GetTextProperty()->SetBold(true);
     labelActor->GetTextProperty()->SetShadow(true);
     labelActor->GetTextProperty()->SetShadowOffset(1, -1);
 
-    // 🔽🔽🔽 【核心修复：关闭深度测试，文字穿透显示】 🔽🔽🔽
-    // labelActor->GetProperty()->SetDisableDepthTest(true);
-    
-    // 因为 Link 标签通常放在连杆中间，我们让它在屏幕上稍微往右偏移一点，避开中间的蓝线
-    labelActor->SetDisplayOffset(15, 0); // 屏幕 2D 坐标向右偏移 15 像素
-    // 🔼🔼🔼 【修复结束】 🔼🔼🔼
+    labelActor->SetDisplayOffset(15, 0);
 
-    renderer->AddActor(labelActor);
+    vtkRenderer* target = labelRenderer != nullptr ? labelRenderer : renderer;
+    target->AddActor(labelActor);
 }
 
 std::array<double, 3> ComputeLinkLabelPosition(
@@ -629,36 +624,29 @@ std::array<double, 3> ComputeLinkLabelPosition(
 void AddJointLabel(
     vtkRenderer* renderer,
     const QString& text,
-    const std::array<double, 3>& position)
+    const std::array<double, 3>& position,
+    vtkRenderer* labelRenderer = nullptr)
 {
     vtkNew<vtkBillboardTextActor3D> labelActor;
     labelActor->SetInput(text.toStdString().c_str());
     labelActor->SetPosition(position[0], position[1], position[2]);
     vtkTextProperty* textProp = labelActor->GetTextProperty();
 
-    // 🔽🔽🔽 【新增】：应用中文字体
     const QString fontPath = GetChineseFontPath();
     if (!fontPath.isEmpty()) {
         textProp->SetFontFamily(VTK_FONT_FILE);
         textProp->SetFontFile(fontPath.toStdString().c_str());
     }
-    // 🔼🔼🔼
     labelActor->GetTextProperty()->SetFontSize(12);
     labelActor->GetTextProperty()->SetColor(0.84, 0.78, 0.42);
     labelActor->GetTextProperty()->SetBold(false);
     labelActor->GetTextProperty()->SetShadow(true);
     labelActor->GetTextProperty()->SetShadowOffset(1, -1);
-    
-    // 🔽🔽🔽 【核心修复：关闭深度测试，让文字永远显示在最前面】 🔽🔽🔽
-    // 当为 false 时，文字将无视前面的 3D 球体和圆柱体，直接画在屏幕最顶层
-    // labelActor->GetProperty()->SetDisableDepthTest(true);
-    
-    // 稍微给一点垂直向上的偏移，避免文字中心恰好卡在球心
-    // 注意：这里不用动 Z 轴，而是用 VTK 的内部偏移机制
-    labelActor->SetDisplayOffset(0, 15); // 在屏幕 2D 坐标上向上偏移 15 像素
-    // 🔼🔼🔼 【修复结束】 🔼🔼🔼
-    
-    renderer->AddActor(labelActor);
+
+    labelActor->SetDisplayOffset(0, 15);
+
+    vtkRenderer* target = labelRenderer != nullptr ? labelRenderer : renderer;
+    target->AddActor(labelActor);
 }
 
 void AddJointHighlight(
@@ -850,7 +838,8 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
     const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& previewScene,
     const UrdfPreviewDisplayOptions& displayOptions,
     std::map<QString, vtkSmartPointer<vtkActor>>& linkActors,
-    std::map<QString, RoboSDP::Kinematics::Dto::GeometryObjectDto>& linkGeometries)
+    std::map<QString, RoboSDP::Kinematics::Dto::GeometryObjectDto>& linkGeometries,
+    vtkRenderer* labelRenderer)
 {
     if (renderer == nullptr)
     {
@@ -864,6 +853,10 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
     }
 
     renderer->RemoveAllViewProps();
+    if (labelRenderer != nullptr)
+    {
+        labelRenderer->RemoveAllViewProps();
+    }
 
     vtkNew<vtkNamedColors> colors;
     ApplyStableViewportBackground(renderer);
@@ -961,20 +954,22 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
         // 🔼🔼🔼 【新增结束】 🔼🔼🔼
 
         // 中文说明：关节高亮层先画半透明包络球，便于在不引入 mesh 的前提下快速识别关节位置。
+        int jointIndex = 0;
         for (const auto& segment : previewScene.segments)
         {
             AddJointHighlight(renderer, colors, segment, nodeRadius, jointHighlightOpacity);
 
-            if (displayOptions.show_joint_labels && !segment.joint_name.trimmed().isEmpty())
+            if (displayOptions.show_joint_labels)
             {
-                // 🔽🔽🔽 【修改】：使用防重叠逻辑获取位置，并调用新版绘制函数 🔽🔽🔽
+                ++jointIndex;
+                const QString jointLabel = QStringLiteral("J%1").arg(jointIndex);
                 auto shiftedPos = getShiftedPosition(segment.start_position_m, labelOffset * 0.8);
-                AddJointLabel(renderer, segment.joint_name, shiftedPos);
-                // 🔼🔼🔼 【修改结束】 🔼🔼🔼
+                AddJointLabel(renderer, jointLabel, shiftedPos, labelRenderer);
             }
         }
 
         // 中文说明：节点球用于标识每个 link 的参考点，先验证骨架拓扑是否正确。
+        int linkIndex = 0;
         for (const auto& node : previewScene.nodes)
         {
             vtkNew<vtkSphereSource> nodeSphere;
@@ -990,19 +985,18 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
             nodeActor->SetMapper(nodeMapper);
             nodeActor->GetProperty()->SetColor(colors->GetColor3d("Orange").GetData());
             nodeActor->GetProperty()->SetOpacity(skeletonNodeOpacity);
-            // 【新增】：添加金属光泽，提升节点球体的视觉质感
             nodeActor->GetProperty()->SetSpecular(0.6);
             nodeActor->GetProperty()->SetSpecularPower(40.0);
             nodeActor->GetProperty()->SetAmbient(0.1);
             renderer->AddActor(nodeActor);
 
-            if (displayOptions.show_link_labels && !node.link_name.trimmed().isEmpty())
+            ++linkIndex;
+            if (displayOptions.show_link_labels)
             {
-                // 🔽🔽🔽 【修改】：同样为 Link 标签加上防重叠排版逻辑 🔽🔽🔽
+                const QString linkLabel = QStringLiteral("L%1").arg(linkIndex);
                 auto basePos = ComputeLinkLabelPosition(previewScene, node, labelOffset);
                 auto shiftedPos = getShiftedPosition(basePos, labelOffset * 0.8);
-                AddNodeLabel(renderer, node.link_name, shiftedPos);
-                // 🔼🔼🔼 【修改结束】 🔼🔼🔼
+                AddNodeLabel(renderer, linkLabel, shiftedPos, labelRenderer);
             }
         }
 

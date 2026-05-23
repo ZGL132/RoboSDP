@@ -811,21 +811,13 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
         m_propertyStack->setCurrentWidget(m_topologyWidget);
         m_ribbonBar->SwitchToContextTab(QStringLiteral("Topology"));
         statusBar()->showMessage(QStringLiteral("当前页面：Topology"));
-        // 优化逻辑：判断是否是首次进入
+        // 仅在首次进入构型页面时触发一次预览并重置相机；
+        // 后续切换不再强制刷新，避免覆盖运动学模块已设置的关节姿态。
         if (m_isFirstTopologyEntry)
         {
-            // 1. 设置标志位，允许下一次收到的信号重置相机
             m_shouldResetNextPreview = true;
-            
-            // 2. 触发 TopologyWidget 生成初始预览信号
             m_topologyWidget->ForceEmitPreview();
-            
-            // 3. 标记已完成首次进入，后续再切回来将不再重置视角
             m_isFirstTopologyEntry = false;
-        }
-        // --- 新增：切到构型页面时，强制刷新一次三维视图 ---
-        if (m_topologyWidget != nullptr) {
-            m_topologyWidget->ForceEmitPreview();
         }
         return;
     }

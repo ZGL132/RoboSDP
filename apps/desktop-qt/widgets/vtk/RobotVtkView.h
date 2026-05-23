@@ -272,6 +272,7 @@ private:
     QVTKOpenGLNativeWidget* m_vtkWidget = nullptr;
     vtkGenericOpenGLRenderWindow* m_renderWindow = nullptr;
     vtkRenderer* m_renderer = nullptr;
+    vtkSmartPointer<vtkRenderer> m_label_renderer;  ///< Layer 1 标签渲染器，确保标签始终在最前面
     vtkSmartPointer<vtkAxesActor> m_corner_axes_actor;
     vtkSmartPointer<vtkOrientationMarkerWidget> m_corner_axes_widget;
     vtkSmartPointer<vtkTextActor> m_watermark_actor; // <--- 【新增】：保存水印对象

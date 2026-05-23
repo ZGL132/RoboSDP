@@ -349,11 +349,6 @@ RoboSDP::Requirement::Dto::RequirementModelDto RequirementJsonStorage::FromJsonO
         model.workspace_requirements.key_poses.push_back(keyPose);
     }
 
-    if (model.workspace_requirements.key_poses.empty())
-    {
-        model.workspace_requirements.key_poses.push_back(RequirementKeyPoseDto {});
-    }
-
     const QJsonObject motionRequirementsObject =
         jsonObject.value(QStringLiteral("motion_requirements")).toObject();
     model.motion_requirements.max_linear_speed =

@@ -236,7 +236,8 @@ RequirementValidationResult RequirementValidator::Validate(
             result,
             QStringLiteral("workspace_requirements.key_poses"),
             QStringLiteral("REQ_KEY_POSES_EMPTY"),
-            QStringLiteral("关键工位至少需要 1 项。"));
+            QStringLiteral("关键工位至少需要 1 项。"),
+            ValidationSeverity::Warning);
     }
     else
     {

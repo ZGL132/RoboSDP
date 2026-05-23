@@ -2,7 +2,7 @@ param(
     [string]$BuildDir = "",
     [string]$QtRoot = "D:/software/Qt/5.15.2/mingw81_64",
     [string]$MingwRoot = "D:/software/Qt/Tools/mingw810_64",
-    [int]$Parallel = 2
+    [int]$Parallel = 16
 )
 
 $ErrorActionPreference = "Stop"

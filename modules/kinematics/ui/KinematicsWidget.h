@@ -23,6 +23,7 @@ class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
+class QShowEvent;
 class QSlider;
 class QTextEdit;
 class QSpinBox;
@@ -211,6 +212,9 @@ private:
     /// @brief 计算每个 FK 关节距离软限位的归一化裕量，更新裕量标签颜色。
     void UpdateJointLimitMargins();
 
+    /// @brief 更新 FK 区域的实时 TCP 姿态读出标签（位置 + RPY 姿态）。
+    void UpdateFkPoseReadout(const RoboSDP::Kinematics::Dto::CartesianPoseDto& tcpPose);
+
     // =========================================================================
     // 核心生命周期分流 (单向数据流核心)
     // =========================================================================
@@ -220,6 +224,7 @@ private:
     /// @brief 通道 B (轻量级)：当用户仅拖动 FK 关节滑块时调用。
     void SyncPoseOnly();
 
+    void showEvent(QShowEvent* event) override;
     void OnImportUrdfClicked();
     void OnBuildFromTopologyClicked();
     void OnCopyUrdfDraftToDhClicked();
@@ -249,6 +254,7 @@ private:
     
     bool m_has_unsaved_changes = false;
     bool m_is_populating_form = false;
+    bool m_has_auto_built_from_topology = false;
     QString m_preview_source_mode = QStringLiteral("none");
 
     QLabel* m_operation_label = nullptr;
@@ -296,6 +302,8 @@ private:
     std::vector<QSlider*> m_fk_joint_sliders;
     std::vector<QLabel*> m_fk_joint_labels;
     std::vector<QLabel*> m_fk_margin_labels;  // 关节限位裕量百分比标签
+    QLabel* m_fk_tcp_pos_label = nullptr;     // FK 实时 TCP 位置读出
+    QLabel* m_fk_tcp_rpy_label = nullptr;     // FK 实时 TCP 姿态读出
     QGridLayout* m_fk_grid = nullptr;
 
     /// @brief 滚轮灵敏度（度/滚轮格），默认 1.0°；联动控制 3D 视图滚轮步长与 FK 输入框 singleStep。
