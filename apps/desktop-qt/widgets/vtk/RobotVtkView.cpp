@@ -1,15 +1,18 @@
 ﻿#include "apps/desktop-qt/widgets/vtk/RobotVtkView.h"
 #include "apps/desktop-qt/widgets/vtk/VtkSceneBuilder.h"
 
+#include <QCheckBox>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
 #include <QPen>
 #include <QResizeEvent>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 
@@ -49,6 +52,46 @@
 namespace
 {
 
+constexpr auto kLayerRequirementWorkspace = "requirement.workspace";
+constexpr auto kLayerRequirementKeyPoses = "requirement.key_poses";
+constexpr auto kLayerKinematicsWorkspace = "kinematics.workspace";
+constexpr auto kLayerKinematicsSingularity = "kinematics.singularity";
+constexpr auto kLayerKinematicsIkCompare = "kinematics.ik_compare";
+constexpr auto kLayerRequirementWorkspaceName = u8"需求工作空间";
+constexpr auto kLayerRequirementKeyPosesName = u8"关键工位";
+constexpr auto kLayerKinematicsWorkspaceName = u8"运动学工作空间";
+constexpr auto kLayerKinematicsSingularityName = u8"奇异性空间";
+constexpr auto kLayerKinematicsIkCompareName = u8"IK 对比";
+
+struct AnalysisLayerUiSpec
+{
+    const char* id;
+    const char* name;
+    const char* color;
+    bool defaultVisible;
+};
+
+const std::array<AnalysisLayerUiSpec, 5> kAnalysisLayerSpecs {{
+    {kLayerRequirementWorkspace, kLayerRequirementWorkspaceName, "#3b82f6", true},
+    {kLayerRequirementKeyPoses, kLayerRequirementKeyPosesName, "#f59e0b", true},
+    {kLayerKinematicsWorkspace, kLayerKinematicsWorkspaceName, "#22c55e", false},
+    {kLayerKinematicsSingularity, kLayerKinematicsSingularityName, "#ef4444", false},
+    {kLayerKinematicsIkCompare, kLayerKinematicsIkCompareName, "#06b6d4", true}
+}};
+
+const AnalysisLayerUiSpec* FindLayerSpec(const QString& layerId)
+{
+    for (const auto& spec : kAnalysisLayerSpecs)
+    {
+        if (layerId == QString::fromLatin1(spec.id))
+        {
+            return &spec;
+        }
+    }
+    return nullptr;
+}
+
+#if defined(ROBOSDP_HAVE_VTK)
 vtkSmartPointer<vtkTransform> BuildPoseTransform(
     const RoboSDP::Kinematics::Dto::CartesianPoseDto& pose)
 {
@@ -128,6 +171,87 @@ vtkSmartPointer<vtkBillboardTextActor3D> CreateBillboardLabel(
     }
     return label;
 }
+
+vtkSmartPointer<vtkActor> CreatePointCloudActor(
+    const std::vector<std::array<double, 3>>& positions,
+    double red,
+    double green,
+    double blue,
+    double opacity,
+    double pointSize)
+{
+    vtkNew<vtkPoints> points;
+    points->SetNumberOfPoints(static_cast<vtkIdType>(positions.size()));
+    for (vtkIdType i = 0; i < static_cast<vtkIdType>(positions.size()); ++i)
+    {
+        const auto& point = positions[static_cast<std::size_t>(i)];
+        points->SetPoint(i, point[0], point[1], point[2]);
+    }
+
+    vtkNew<vtkPolyData> polyData;
+    polyData->SetPoints(points);
+
+    vtkNew<vtkVertexGlyphFilter> glyphFilter;
+    glyphFilter->SetInputData(polyData);
+    glyphFilter->Update();
+
+    vtkNew<vtkPolyDataMapper> mapper;
+    mapper->SetInputConnection(glyphFilter->GetOutputPort());
+
+    auto actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor(red, green, blue);
+    actor->GetProperty()->SetOpacity(opacity);
+    actor->GetProperty()->SetPointSize(pointSize);
+    actor->GetProperty()->SetLighting(false);
+    return actor;
+}
+
+vtkSmartPointer<vtkActor> CreateClassifiedPointCloudActor(
+    const std::vector<std::array<double, 3>>& positions,
+    const std::vector<bool>& isSingular)
+{
+    vtkNew<vtkPoints> points;
+    points->SetNumberOfPoints(static_cast<vtkIdType>(positions.size()));
+    vtkNew<vtkUnsignedCharArray> colors;
+    colors->SetNumberOfComponents(3);
+    colors->SetName("AnalysisLayerColors");
+
+    for (vtkIdType i = 0; i < static_cast<vtkIdType>(positions.size()); ++i)
+    {
+        const auto& point = positions[static_cast<std::size_t>(i)];
+        points->SetPoint(i, point[0], point[1], point[2]);
+        if (isSingular[static_cast<std::size_t>(i)])
+        {
+            colors->InsertNextTuple3(239, 68, 68);
+        }
+        else
+        {
+            colors->InsertNextTuple3(34, 197, 94);
+        }
+    }
+
+    vtkNew<vtkPolyData> polyData;
+    polyData->SetPoints(points);
+    polyData->GetPointData()->SetScalars(colors);
+
+    vtkNew<vtkVertexGlyphFilter> glyphFilter;
+    glyphFilter->SetInputData(polyData);
+    glyphFilter->Update();
+
+    vtkNew<vtkPolyDataMapper> mapper;
+    mapper->SetInputConnection(glyphFilter->GetOutputPort());
+    mapper->ScalarVisibilityOn();
+    mapper->SetScalarModeToUsePointData();
+
+    auto actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetOpacity(0.78);
+    actor->GetProperty()->SetPointSize(3.5);
+    actor->GetProperty()->SetLighting(false);
+    return actor;
+}
+#endif
 
 // 中文说明：QPainter 绘制的地图风格比例尺覆盖层，白色刻度线与标签，置于三维视图底部。
 class ScaleBarOverlay : public QWidget
@@ -411,6 +535,7 @@ void RobotVtkView::ShowIkPoseComparison(
     m_ikWithinTolerance = withinTolerance;
     m_hasIkPoseComparison = true;
     m_hasIkActualPose = hasActualPose;
+    SetAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsIkCompare), true);
     RenderIkPoseComparisonLayer();
 }
 
@@ -422,6 +547,7 @@ void RobotVtkView::ClearIkPoseComparison()
     m_ikPositionErrorMm = 0.0;
     m_ikOrientationErrorDeg = 0.0;
     ClearIkPoseComparisonActors();
+    SetAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsIkCompare), false);
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderWindow != nullptr)
     {
@@ -526,63 +652,81 @@ void RobotVtkView::UpdatePreviewPoses(
 void RobotVtkView::ShowWorkspacePointCloud(
     const std::vector<std::array<double, 3>>& tcpPositions)
 {
-    m_workspacePointCloudPositions = tcpPositions;
-    RenderWorkspacePointCloud(true);
+    ShowKinematicsWorkspace(tcpPositions);
 }
 
-void RobotVtkView::RenderWorkspacePointCloud(bool renderNow)
+void RobotVtkView::ShowRequirementWorkspace(const std::vector<std::array<double, 3>>& workspacePoints)
+{
+    m_requirementWorkspacePositions = workspacePoints;
+    if (!workspacePoints.empty())
+    {
+        AutoEnableAnalysisLayerIfDefault(QString::fromLatin1(kLayerRequirementWorkspace));
+    }
+    RenderAnalysisLayers(true);
+}
+
+void RobotVtkView::ShowKinematicsWorkspace(const std::vector<std::array<double, 3>>& tcpPositions)
+{
+    m_kinematicsWorkspacePositions = tcpPositions;
+    if (!tcpPositions.empty())
+    {
+        AutoEnableAnalysisLayerIfDefault(QString::fromLatin1(kLayerKinematicsWorkspace));
+    }
+    RenderAnalysisLayers(true);
+}
+
+void RobotVtkView::RenderAnalysisLayers(bool renderNow)
 {
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderer == nullptr) return;
 
-    // 移除旧的点云 Actor（如果存在）
-    if (m_workspace_point_cloud_actor != nullptr)
+    auto removeActor = [this](vtkSmartPointer<vtkActor>& actor) {
+        if (actor != nullptr)
+        {
+            m_renderer->RemoveActor(actor);
+            actor = nullptr;
+        }
+    };
+
+    removeActor(m_requirement_workspace_actor);
+    removeActor(m_kinematics_workspace_actor);
+    removeActor(m_singularity_workspace_actor);
+
+    if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementWorkspace)) &&
+        !m_requirementWorkspacePositions.empty())
     {
-        m_renderer->RemoveActor(m_workspace_point_cloud_actor);
+        m_requirement_workspace_actor = CreatePointCloudActor(
+            m_requirementWorkspacePositions,
+            0.23,
+            0.51,
+            0.96,
+            0.34,
+            2.4);
+        m_renderer->AddActor(m_requirement_workspace_actor);
     }
 
-    if (m_workspacePointCloudPositions.empty())
+    if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsWorkspace)) &&
+        !m_kinematicsWorkspacePositions.empty())
     {
-        m_workspace_point_cloud_actor = nullptr;
-        if (renderNow && m_renderWindow != nullptr) m_renderWindow->Render();
-        return;
+        m_kinematics_workspace_actor = CreatePointCloudActor(
+            m_kinematicsWorkspacePositions,
+            0.13,
+            0.77,
+            0.37,
+            IsAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsSingularity)) ? 0.28 : 0.68,
+            3.0);
+        m_renderer->AddActor(m_kinematics_workspace_actor);
     }
 
-    // 构建点云数据：将 TCP 位置坐标填入 vtkPoints
-    vtkNew<vtkPoints> vtkPointsData;
-    vtkPointsData->SetNumberOfPoints(static_cast<vtkIdType>(m_workspacePointCloudPositions.size()));
-    for (vtkIdType i = 0; i < static_cast<vtkIdType>(m_workspacePointCloudPositions.size()); ++i)
+    if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsSingularity)) &&
+        !m_singularityWorkspacePositions.empty() &&
+        m_singularityWorkspacePositions.size() == m_singularityFlags.size())
     {
-        vtkPointsData->SetPoint(
-            i,
-            m_workspacePointCloudPositions[static_cast<std::size_t>(i)][0],
-            m_workspacePointCloudPositions[static_cast<std::size_t>(i)][1],
-            m_workspacePointCloudPositions[static_cast<std::size_t>(i)][2]);
+        m_singularity_workspace_actor =
+            CreateClassifiedPointCloudActor(m_singularityWorkspacePositions, m_singularityFlags);
+        m_renderer->AddActor(m_singularity_workspace_actor);
     }
 
-    // 构建 PolyData
-    vtkNew<vtkPolyData> polyData;
-    polyData->SetPoints(vtkPointsData);
-
-    // 使用 VertexGlyphFilter 将每个点渲染为一个顶点
-    vtkNew<vtkVertexGlyphFilter> glyphFilter;
-    glyphFilter->SetInputData(polyData);
-    glyphFilter->Update();
-
-    // 映射器
-    vtkNew<vtkPolyDataMapper> mapper;
-    mapper->SetInputConnection(glyphFilter->GetOutputPort());
-
-    // Actor：绿色小圆点
-    m_workspace_point_cloud_actor = vtkSmartPointer<vtkActor>::New();
-    m_workspace_point_cloud_actor->SetMapper(mapper);
-    m_workspace_point_cloud_actor->GetProperty()->SetColor(0.2, 0.8, 0.2); // 绿色
-    m_workspace_point_cloud_actor->GetProperty()->SetPointSize(3);
-    m_workspace_point_cloud_actor->GetProperty()->SetOpacity(0.7); // 半透明
-
-    m_renderer->AddActor(m_workspace_point_cloud_actor);
-
-    // 点云显示后，将点云 Actor 添加到点云可见性列表中，方便后续开关
     if (renderNow && m_renderWindow != nullptr)
     {
         m_renderWindow->Render();
@@ -596,64 +740,20 @@ void RobotVtkView::ShowColoredWorkspacePointCloud(
     const std::vector<std::array<double, 3>>& tcpPositions,
     const std::vector<bool>& isSingular)
 {
-    m_workspacePointCloudPositions = tcpPositions;
-#if defined(ROBOSDP_HAVE_VTK)
-    if (m_renderer == nullptr) return;
+    ShowSingularityWorkspace(tcpPositions, isSingular);
+}
 
-    // 移除旧的点云 Actor
-    if (m_workspace_point_cloud_actor != nullptr)
+void RobotVtkView::ShowSingularityWorkspace(
+    const std::vector<std::array<double, 3>>& tcpPositions,
+    const std::vector<bool>& isSingular)
+{
+    m_singularityWorkspacePositions = tcpPositions;
+    m_singularityFlags = isSingular;
+    if (!tcpPositions.empty())
     {
-        m_renderer->RemoveActor(m_workspace_point_cloud_actor);
+        AutoEnableAnalysisLayerIfDefault(QString::fromLatin1(kLayerKinematicsSingularity));
     }
-
-    if (tcpPositions.empty() || tcpPositions.size() != isSingular.size())
-    {
-        m_workspace_point_cloud_actor = nullptr;
-        if (m_renderWindow != nullptr) m_renderWindow->Render();
-        return;
-    }
-
-    // 构建点云数据
-    vtkNew<vtkPoints> points;
-    points->SetNumberOfPoints(static_cast<vtkIdType>(tcpPositions.size()));
-    vtkNew<vtkUnsignedCharArray> colors;
-    colors->SetNumberOfComponents(3);
-    colors->SetName("Colors");
-
-    for (vtkIdType i = 0; i < static_cast<vtkIdType>(tcpPositions.size()); ++i)
-    {
-        points->SetPoint(i, tcpPositions[i][0], tcpPositions[i][1], tcpPositions[i][2]);
-        if (isSingular[static_cast<std::size_t>(i)])
-            colors->InsertNextTuple3(220, 38, 38);   // 红色 = 奇异
-        else
-            colors->InsertNextTuple3(51, 204, 51);    // 绿色 = 正常
-    }
-
-    vtkNew<vtkPolyData> polyData;
-    polyData->SetPoints(points);
-    polyData->GetPointData()->SetScalars(colors);
-
-    vtkNew<vtkVertexGlyphFilter> glyphFilter;
-    glyphFilter->SetInputData(polyData);
-    glyphFilter->Update();
-
-    vtkNew<vtkPolyDataMapper> mapper;
-    mapper->SetInputConnection(glyphFilter->GetOutputPort());
-    mapper->ScalarVisibilityOn();
-    mapper->SetScalarModeToUsePointData();
-
-    m_workspace_point_cloud_actor = vtkSmartPointer<vtkActor>::New();
-    m_workspace_point_cloud_actor->SetMapper(mapper);
-    m_workspace_point_cloud_actor->GetProperty()->SetPointSize(3);
-    m_workspace_point_cloud_actor->GetProperty()->SetOpacity(0.7);
-
-    m_renderer->AddActor(m_workspace_point_cloud_actor);
-    if (m_renderWindow != nullptr)
-        m_renderWindow->Render();
-#else
-    Q_UNUSED(tcpPositions);
-    Q_UNUSED(isSingular);
-#endif
+    RenderAnalysisLayers(true);
 }
 
 void RobotVtkView::ShowRequirementKeyPoses(
@@ -662,7 +762,31 @@ void RobotVtkView::ShowRequirementKeyPoses(
 {
     m_requirementKeyPoses = keyPoses;
     m_requirementSelectedKeyPoseIndex = selectedIndex;
+    if (!keyPoses.empty())
+    {
+        AutoEnableAnalysisLayerIfDefault(QString::fromLatin1(kLayerRequirementKeyPoses));
+    }
     RenderRequirementKeyPoseLayer();
+}
+
+void RobotVtkView::SetRequirementWorkspaceLayerVisible(bool visible)
+{
+    SetAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementWorkspace), visible);
+}
+
+void RobotVtkView::SetRequirementKeyPoseLayerVisible(bool visible)
+{
+    SetAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementKeyPoses), visible);
+}
+
+bool RobotVtkView::IsRequirementWorkspaceLayerVisible() const
+{
+    return IsAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementWorkspace));
+}
+
+bool RobotVtkView::IsRequirementKeyPoseLayerVisible() const
+{
+    return IsAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementKeyPoses));
 }
 
 void RobotVtkView::ClearCache()
@@ -687,10 +811,9 @@ void RobotVtkView::ClearCache()
     m_link_mesh_geometries.clear();
     m_link_to_joint_index.clear();
     ClearRequirementKeyPoseActors();
-    // 中文说明：不在此处清空 m_workspacePointCloudPositions；
-    // 工作空间点云数据属于 Requirement 模块，切换页面不应丢失，
-    // RefreshScene() 末尾的 RenderWorkspacePointCloud() 会自动从保留数据重建 Actor。
-    m_workspace_point_cloud_actor = nullptr;
+    m_requirement_workspace_actor = nullptr;
+    m_kinematics_workspace_actor = nullptr;
+    m_singularity_workspace_actor = nullptr;
 #endif
 
     // 【修复】模型场景切换时，清除当前选中的连杆名称，避免旧引用残留。
@@ -787,6 +910,14 @@ void RobotVtkView::RenderRequirementKeyPoseLayer()
     }
 
     ClearRequirementKeyPoseActors();
+    if (!IsAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementKeyPoses)))
+    {
+        if (m_renderWindow != nullptr)
+        {
+            m_renderWindow->Render();
+        }
+        return;
+    }
     for (std::size_t index = 0; index < m_requirementKeyPoses.size(); ++index)
     {
         const auto& keyPose = m_requirementKeyPoses[index];
@@ -837,7 +968,8 @@ void RobotVtkView::RenderRequirementKeyPoseLayer()
 void RobotVtkView::RenderIkPoseComparisonLayer()
 {
 #if defined(ROBOSDP_HAVE_VTK)
-    if (m_renderer == nullptr || !m_hasIkPoseComparison)
+    if (m_renderer == nullptr || !m_hasIkPoseComparison ||
+        !IsAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsIkCompare)))
     {
         return;
     }
@@ -1134,6 +1266,193 @@ void RobotVtkView::SetIsometricCameraView()
     ApplyCameraPreset(1.0, -1.0, 1.0, 0.0, 0.0, 1.0);
 }
 
+void RobotVtkView::BuildAnalysisLayerPanel(QWidget* viewportFrame)
+{
+    if (viewportFrame == nullptr)
+    {
+        return;
+    }
+
+    m_analysisLayerPanel = new QFrame(viewportFrame);
+    auto* panel = m_analysisLayerPanel;
+    panel->setObjectName(QStringLiteral("analysisLayerPanel"));
+    panel->setAttribute(Qt::WA_StyledBackground, true);
+    panel->setStyleSheet(QStringLiteral(
+        "QFrame#analysisLayerPanel{"
+        "background:transparent;"
+        "border:none;"
+        "}"
+        "QLabel#analysisLayerTitle{color:#ffffff;font-size:14px;font-weight:700;}"
+        "QCheckBox{color:#f8fafc;font-size:13px;font-weight:600;spacing:7px;background:transparent;}"
+        "QCheckBox::indicator{width:13px;height:13px;}"
+        "QLabel#analysisLayerSwatch{min-width:12px;max-width:12px;min-height:12px;max-height:12px;}"));
+
+    auto* panelLayout = new QVBoxLayout(panel);
+    panelLayout->setContentsMargins(0, 0, 0, 0);
+    panelLayout->setSpacing(6);
+
+    auto* title = new QLabel(QStringLiteral("分析图层"), panel);
+    title->setObjectName(QStringLiteral("analysisLayerTitle"));
+    panelLayout->addWidget(title);
+
+    for (const auto& spec : kAnalysisLayerSpecs)
+    {
+        const QString layerId = QString::fromLatin1(spec.id);
+        m_analysisLayerVisibility[layerId] = spec.defaultVisible;
+
+        auto* row = new QWidget(panel);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(5);
+
+        auto* swatch = new QLabel(row);
+        swatch->setObjectName(QStringLiteral("analysisLayerSwatch"));
+        swatch->setStyleSheet(QStringLiteral("QLabel#analysisLayerSwatch{background:%1;}").arg(QString::fromLatin1(spec.color)));
+
+        auto* check = new QCheckBox(QString::fromUtf8(spec.name), row);
+        check->setChecked(spec.defaultVisible);
+        m_analysisLayerChecks[layerId] = check;
+        connect(check, &QCheckBox::toggled, this, [this, layerId](bool visible) {
+            SetAnalysisLayerVisible(layerId, visible);
+        });
+
+        rowLayout->addWidget(swatch);
+        rowLayout->addWidget(check, 1);
+        panelLayout->addWidget(row);
+    }
+
+    PositionAnalysisLayerPanel();
+    panel->show();
+    RaiseViewOverlays();
+}
+
+void RobotVtkView::RefreshAnalysisLayerPanel()
+{
+    for (const auto& [layerId, check] : m_analysisLayerChecks)
+    {
+        if (check == nullptr)
+        {
+            continue;
+        }
+        const QSignalBlocker blocker(check);
+        check->setChecked(IsAnalysisLayerVisible(layerId));
+    }
+}
+
+void RobotVtkView::SetAnalysisLayerVisible(const QString& layerId, bool visible)
+{
+    SetAnalysisLayerVisibleInternal(layerId, visible, true);
+}
+
+void RobotVtkView::SetAnalysisLayerVisibleInternal(const QString& layerId, bool visible, bool userInitiated)
+{
+    if (FindLayerSpec(layerId) == nullptr)
+    {
+        return;
+    }
+
+    const bool changed = IsAnalysisLayerVisible(layerId) != visible;
+    m_analysisLayerVisibility[layerId] = visible;
+    if (userInitiated)
+    {
+        m_analysisLayerUserOverrides[layerId] = true;
+    }
+    RefreshAnalysisLayerPanel();
+
+#if defined(ROBOSDP_HAVE_VTK)
+    if (layerId == QString::fromLatin1(kLayerRequirementKeyPoses))
+    {
+        RenderRequirementKeyPoseLayer();
+    }
+    else if (layerId == QString::fromLatin1(kLayerKinematicsIkCompare))
+    {
+        if (visible)
+        {
+            RenderIkPoseComparisonLayer();
+        }
+        else
+        {
+            ClearIkPoseComparisonActors();
+            if (m_renderWindow != nullptr)
+            {
+                m_renderWindow->Render();
+            }
+        }
+    }
+    else
+    {
+        RenderAnalysisLayers(true);
+    }
+#endif
+
+    if (changed)
+    {
+        if (layerId == QString::fromLatin1(kLayerRequirementWorkspace))
+        {
+            emit signalRequirementWorkspaceLayerVisibilityChanged(visible);
+        }
+        else if (layerId == QString::fromLatin1(kLayerRequirementKeyPoses))
+        {
+            emit signalRequirementKeyPoseLayerVisibilityChanged(visible);
+        }
+    }
+}
+
+void RobotVtkView::AutoEnableAnalysisLayerIfDefault(const QString& layerId)
+{
+    const auto overrideIt = m_analysisLayerUserOverrides.find(layerId);
+    if (overrideIt != m_analysisLayerUserOverrides.end() && overrideIt->second)
+    {
+        return;
+    }
+
+    if (!IsAnalysisLayerVisible(layerId))
+    {
+        SetAnalysisLayerVisibleInternal(layerId, true, false);
+    }
+}
+
+bool RobotVtkView::IsAnalysisLayerVisible(const QString& layerId) const
+{
+    const auto it = m_analysisLayerVisibility.find(layerId);
+    if (it != m_analysisLayerVisibility.end())
+    {
+        return it->second;
+    }
+
+    if (const AnalysisLayerUiSpec* spec = FindLayerSpec(layerId))
+    {
+        return spec->defaultVisible;
+    }
+    return false;
+}
+
+void RobotVtkView::RaiseViewOverlays()
+{
+    if (m_scaleBarOverlay != nullptr)
+    {
+        m_scaleBarOverlay->raise();
+    }
+    if (m_analysisLayerPanel != nullptr)
+    {
+        m_analysisLayerPanel->raise();
+    }
+}
+
+void RobotVtkView::PositionAnalysisLayerPanel()
+{
+    if (m_analysisLayerPanel == nullptr || m_analysisLayerPanel->parentWidget() == nullptr)
+    {
+        return;
+    }
+
+    auto* parent = m_analysisLayerPanel->parentWidget();
+    m_analysisLayerPanel->adjustSize();
+    const int margin = 14;
+    const int x = std::max(margin, parent->width() - m_analysisLayerPanel->width() - margin);
+    m_analysisLayerPanel->move(x, margin);
+}
+
 void RobotVtkView::BuildLayout()
 {
     m_layout = new QVBoxLayout(this);
@@ -1233,8 +1552,10 @@ void RobotVtkView::BuildVtkView()
     viewportFrame->installEventFilter(this);
     // ── 比例尺初始化结束 ──────────────────────────────────────────
 
+    BuildAnalysisLayerPanel(viewportFrame);
 
     viewportLayout->addWidget(m_vtkWidget, 1);
+    RaiseViewOverlays();
     m_layout->addWidget(viewportFrame, 1);
 
     // 中文说明：绑定自定义拾取交互器，替换默认相机操作风格，支持左键点击高亮。
@@ -1515,7 +1836,7 @@ void RobotVtkView::RefreshScene(bool resetCamera)
         {
             RenderIkPoseComparisonLayer();
         }
-        RenderWorkspacePointCloud(false);
+        RenderAnalysisLayers(false);
         RenderRequirementKeyPoseLayer();
 
         // ── 【逆向驱动】TCP 3D Gizmo 初始化（vtkBoxWidget2）────────────
@@ -1725,8 +2046,10 @@ bool RobotVtkView::eventFilter(QObject* watched, QEvent* event)
         auto* resizeEvent = static_cast<QResizeEvent*>(event);
         int w = resizeEvent->size().width();
         int h = resizeEvent->size().height();
+        Q_UNUSED(w);
         m_scaleBarOverlay->setGeometry(8, h - 32, 260, 28);
-        m_scaleBarOverlay->raise();
+        PositionAnalysisLayerPanel();
+        RaiseViewOverlays();
     }
 #else
     Q_UNUSED(watched);

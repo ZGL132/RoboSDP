@@ -51,6 +51,8 @@ public:
     /// @brief 由 Ribbon 按钮触发校验（职责分离：Widget 不持有 action 按钮）。
     void TriggerValidate() { OnValidateClicked(); }
     void RefreshPreview();
+    void SetWorkspacePreviewVisible(bool visible);
+    void SetKeyPosePreviewVisible(bool visible);
 
 signals:
     /// 将 Requirement 操作消息抛给主窗口底部日志面板。
@@ -59,6 +61,8 @@ signals:
     void KeyPosePreviewUpdated(
         const std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto>& keyPoses,
         int selectedIndex);
+    void WorkspacePreviewVisibilityChanged(bool visible);
+    void KeyPosePreviewVisibilityChanged(bool visible);
 
 private:
     void BuildUi();

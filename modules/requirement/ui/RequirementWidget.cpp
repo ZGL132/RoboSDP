@@ -63,6 +63,32 @@ void RequirementWidget::RefreshPreview()
     EmitRequirementPreview();
 }
 
+void RequirementWidget::SetWorkspacePreviewVisible(bool visible)
+{
+    if (m_show_workspace_preview_check == nullptr ||
+        m_show_workspace_preview_check->isChecked() == visible)
+    {
+        return;
+    }
+
+    const QSignalBlocker blocker(m_show_workspace_preview_check);
+    m_show_workspace_preview_check->setChecked(visible);
+    emit WorkspacePreviewVisibilityChanged(visible);
+}
+
+void RequirementWidget::SetKeyPosePreviewVisible(bool visible)
+{
+    if (m_show_key_pose_preview_check == nullptr ||
+        m_show_key_pose_preview_check->isChecked() == visible)
+    {
+        return;
+    }
+
+    const QSignalBlocker blocker(m_show_key_pose_preview_check);
+    m_show_key_pose_preview_check->setChecked(visible);
+    emit KeyPosePreviewVisibilityChanged(visible);
+}
+
 RoboSDP::Infrastructure::ProjectSaveItemResult RequirementWidget::SaveCurrentDraft()
 {
     const auto model = CollectModelFromForm();
@@ -152,12 +178,6 @@ void RequirementWidget::EmitRequirementPreview()
 
 void RequirementWidget::EmitWorkspacePreview()
 {
-    if (m_show_workspace_preview_check != nullptr && !m_show_workspace_preview_check->isChecked())
-    {
-        emit WorkspacePreviewUpdated({});
-        return;
-    }
-
     emit WorkspacePreviewUpdated(BuildWorkspacePreviewPoints());
 }
 
@@ -171,12 +191,6 @@ void RequirementWidget::EmitKeyPosePreview()
         const QSignalBlocker blocker(m_key_pose_list);
         m_key_pose_list->setCurrentRow(m_current_key_pose_index);
     }
-    if (m_show_key_pose_preview_check != nullptr && !m_show_key_pose_preview_check->isChecked())
-    {
-        emit KeyPosePreviewUpdated({}, -1);
-        return;
-    }
-
     emit KeyPosePreviewUpdated(m_working_model.workspace_requirements.key_poses, m_current_key_pose_index);
 }
 
@@ -1388,7 +1402,17 @@ void RequirementWidget::OnKeyPoseSelectionChanged(int currentRow)
 
 void RequirementWidget::OnPreviewVisibilityChanged()
 {
-    EmitRequirementPreview();
+    auto* senderCheck = qobject_cast<QCheckBox*>(sender());
+    if (senderCheck == m_show_workspace_preview_check)
+    {
+        emit WorkspacePreviewVisibilityChanged(senderCheck->isChecked());
+        return;
+    }
+    if (senderCheck == m_show_key_pose_preview_check)
+    {
+        emit KeyPosePreviewVisibilityChanged(senderCheck->isChecked());
+        return;
+    }
 }
 
 QDoubleSpinBox* RequirementWidget::CreateDoubleSpinBox(

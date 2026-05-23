@@ -313,7 +313,17 @@ void MainWindow::CreatePropertyDock()
         [this](const std::vector<std::array<double, 3>>& workspacePoints) {
             if (m_robotVtkView != nullptr)
             {
-                m_robotVtkView->ShowWorkspacePointCloud(workspacePoints);
+                m_robotVtkView->ShowRequirementWorkspace(workspacePoints);
+            }
+        });
+    connect(
+        m_requirementWidget,
+        &RoboSDP::Requirement::Ui::RequirementWidget::WorkspacePreviewVisibilityChanged,
+        this,
+        [this](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetRequirementWorkspaceLayerVisible(visible);
             }
         });
     connect(
@@ -326,6 +336,26 @@ void MainWindow::CreatePropertyDock()
                 m_robotVtkView->ShowRequirementKeyPoses(keyPoses, selectedIndex);
             }
         });
+    connect(
+        m_requirementWidget,
+        &RoboSDP::Requirement::Ui::RequirementWidget::KeyPosePreviewVisibilityChanged,
+        this,
+        [this](bool visible) {
+            if (m_robotVtkView != nullptr)
+            {
+                m_robotVtkView->SetRequirementKeyPoseLayerVisible(visible);
+            }
+        });
+    connect(
+        m_robotVtkView,
+        &RoboSDP::Desktop::Vtk::RobotVtkView::signalRequirementWorkspaceLayerVisibilityChanged,
+        m_requirementWidget,
+        &RoboSDP::Requirement::Ui::RequirementWidget::SetWorkspacePreviewVisible);
+    connect(
+        m_robotVtkView,
+        &RoboSDP::Desktop::Vtk::RobotVtkView::signalRequirementKeyPoseLayerVisibilityChanged,
+        m_requirementWidget,
+        &RoboSDP::Requirement::Ui::RequirementWidget::SetKeyPosePreviewVisible);
     m_requirementWidget->RefreshPreview();
 
     connect(
@@ -460,7 +490,7 @@ void MainWindow::CreatePropertyDock()
         [this](const std::vector<std::array<double, 3>>& tcpPositions) {
             if (m_robotVtkView != nullptr)
             {
-                m_robotVtkView->ShowWorkspacePointCloud(tcpPositions);
+                m_robotVtkView->ShowKinematicsWorkspace(tcpPositions);
             }
         });
 
@@ -472,7 +502,7 @@ void MainWindow::CreatePropertyDock()
                const std::vector<bool>& isSingular) {
             if (m_robotVtkView != nullptr)
             {
-                m_robotVtkView->ShowColoredWorkspacePointCloud(tcpPositions, isSingular);
+                m_robotVtkView->ShowSingularityWorkspace(tcpPositions, isSingular);
             }
         });
 

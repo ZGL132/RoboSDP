@@ -11,6 +11,7 @@
 #include <vector>
 
 class QLabel;
+class QCheckBox;
 class QVBoxLayout;
 
 // vtkActor / vtkTransform 前置声明放在宏外，因为 HandleActorClicked / EmitTcpDrag
@@ -114,8 +115,19 @@ public:
     /// @param tcpPositions 所有可达采样点的 TCP 位置坐标列表，每个元素为 [x, y, z]。
     void ShowWorkspacePointCloud(const std::vector<std::array<double, 3>>& tcpPositions);
 
+    /// @brief 在 3D 视图中显示 Requirement 需求工作空间图层。
+    void ShowRequirementWorkspace(const std::vector<std::array<double, 3>>& workspacePoints);
+
+    /// @brief 在 3D 视图中显示 Kinematics 可达工作空间图层。
+    void ShowKinematicsWorkspace(const std::vector<std::array<double, 3>>& tcpPositions);
+
     /// @brief 在 3D 视图中显示带奇异分类的点云（绿=正常，红=奇异）。
     void ShowColoredWorkspacePointCloud(
+        const std::vector<std::array<double, 3>>& tcpPositions,
+        const std::vector<bool>& isSingular);
+
+    /// @brief 在 3D 视图中显示奇异性分析图层。
+    void ShowSingularityWorkspace(
         const std::vector<std::array<double, 3>>& tcpPositions,
         const std::vector<bool>& isSingular);
 
@@ -135,6 +147,11 @@ public:
 
     /// @brief 清除 IK 目标/实际 TCP 对比层。
     void ClearIkPoseComparison();
+
+    void SetRequirementWorkspaceLayerVisible(bool visible);
+    void SetRequirementKeyPoseLayerVisible(bool visible);
+    bool IsRequirementWorkspaceLayerVisible() const;
+    bool IsRequirementKeyPoseLayerVisible() const;
 
     /// @brief 设置关节轴诊断层显示状态，供顶部视图页签统一控制。
     void SetJointAxesVisible(bool visible);
@@ -187,6 +204,8 @@ signals:
 
     /// @brief 用户在 3D 视图中拾取到 link，用于属性表格同步选中对应行。
     void signalLinkPicked(const QString& linkName);
+    void signalRequirementWorkspaceLayerVisibilityChanged(bool visible);
+    void signalRequirementKeyPoseLayerVisibilityChanged(bool visible);
 
 private:
     void BuildLayout();
@@ -198,7 +217,15 @@ private:
     void RefreshScene(bool resetCamera = true);
     void RenderIkPoseComparisonLayer();
     void ClearIkPoseComparisonActors();
-    void RenderWorkspacePointCloud(bool renderNow = true);
+    void BuildAnalysisLayerPanel(QWidget* viewportFrame);
+    void RefreshAnalysisLayerPanel();
+    void SetAnalysisLayerVisible(const QString& layerId, bool visible);
+    bool IsAnalysisLayerVisible(const QString& layerId) const;
+    void RenderAnalysisLayers(bool renderNow = true);
+    void SetAnalysisLayerVisibleInternal(const QString& layerId, bool visible, bool userInitiated);
+    void AutoEnableAnalysisLayerIfDefault(const QString& layerId);
+    void RaiseViewOverlays();
+    void PositionAnalysisLayerPanel();
     void RenderRequirementKeyPoseLayer();
     void ClearRequirementKeyPoseActors();
     void ApplyCameraPreset(
@@ -224,6 +251,9 @@ private:
     bool m_showJointLabels = true;
     bool m_showTcpGizmo = false;
     PreviewSceneDto m_currentScene;
+    std::map<QString, bool> m_analysisLayerVisibility;
+    std::map<QString, bool> m_analysisLayerUserOverrides;
+    std::map<QString, QCheckBox*> m_analysisLayerChecks;
     bool m_hasIkPoseComparison = false;
     bool m_hasIkActualPose = false;
     bool m_ikWithinTolerance = false;
@@ -231,9 +261,12 @@ private:
     double m_ikOrientationErrorDeg = 0.0;
     RoboSDP::Kinematics::Dto::CartesianPoseDto m_ikTargetPose;
     RoboSDP::Kinematics::Dto::CartesianPoseDto m_ikActualPose;
+    std::vector<std::array<double, 3>> m_requirementWorkspacePositions;
+    std::vector<std::array<double, 3>> m_kinematicsWorkspacePositions;
+    std::vector<std::array<double, 3>> m_singularityWorkspacePositions;
+    std::vector<bool> m_singularityFlags;
     std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto> m_requirementKeyPoses;
     int m_requirementSelectedKeyPoseIndex = -1;
-    std::vector<std::array<double, 3>> m_workspacePointCloudPositions;
 
 #if defined(ROBOSDP_HAVE_VTK)
     QVTKOpenGLNativeWidget* m_vtkWidget = nullptr;
@@ -259,8 +292,9 @@ private:
     /// @brief TCP 坐标系指示器（vtkAxesActor）：在末端显示红绿蓝三轴，随 FK 结果更新位姿。
     vtkSmartPointer<vtkAxesActor> m_tcp_axes_actor;
 
-    /// @brief 工作空间采样点云 Actor：MC 采样得到的可达 TCP 位置散点图。
-    vtkSmartPointer<vtkActor> m_workspace_point_cloud_actor;
+    vtkSmartPointer<vtkActor> m_requirement_workspace_actor;
+    vtkSmartPointer<vtkActor> m_kinematics_workspace_actor;
+    vtkSmartPointer<vtkActor> m_singularity_workspace_actor;
 
     vtkSmartPointer<vtkAxesActor> m_ik_target_axes_actor;
     vtkSmartPointer<vtkAxesActor> m_ik_actual_axes_actor;
@@ -289,6 +323,8 @@ private:
 
     /// @brief 比例尺半透明覆盖层 QWidget（QPainter 绘制白色刻度线与标签）。
     QWidget* m_scaleBarOverlay = nullptr;
+    /// @brief 分析图层开关覆盖层，统一管理工作空间、关键工位、奇异性等分析结果。
+    QWidget* m_analysisLayerPanel = nullptr;
     /// @brief 当前比例尺代表的世界距离（米）。
     double m_scaleBarNiceDist = 0.5;
     /// @brief 当前比例尺单位字符串（m / cm / mm）。
