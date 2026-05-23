@@ -238,7 +238,7 @@ void TopologyWidget::ConnectDirtyTracking()
     {
         connect(editor, static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged), this, [this](double) {
             MarkDirty();
-            // 【核心特性】：由于 SpinBox 主要控制机器人的物理尺寸（DH参数），
+            if (m_is_populating_form) return;
             // 当尺寸发生任何滑动或改变时，立即触发 UpdateLivePreview() 更新 3D 骨架模型。
             UpdateLivePreview();
         });
@@ -526,6 +526,8 @@ RoboSDP::Topology::Dto::RobotTopologyModelDto TopologyWidget::CollectModelFromFo
 void TopologyWidget::PopulateForm(const RoboSDP::Topology::Dto::RobotTopologyModelDto& model)
 {
     // 将内存模型 DTO 的值，反向填充回 UI 的控件中（主要用于加载草稿或生成候选后）
+    // 开启填充守卫，避免每个 spinbox setValue 独立触发 UpdateLivePreview
+    m_is_populating_form = true;
     m_topology_name_edit->setText(model.meta.name);
 
     const int baseMountIndex = m_base_mount_combo->findData(model.robot_definition.base_mount_type);
@@ -550,8 +552,9 @@ void TopologyWidget::PopulateForm(const RoboSDP::Topology::Dto::RobotTopologyMod
     m_seventh_axis_reserved_check->setChecked(model.layout.seventh_axis_reserved);
     m_hollow_joint_ids_edit->setText(JoinJointIdList(model.layout.hollow_joint_ids));
     UpdateTemplateDrivenUiState();
-    
-    // --- 新增：表单从数据层填充完毕后，立刻发送一次初始的三维预览请求 ---
+    m_is_populating_form = false;
+
+    // 批量填充完成后仅触发一次预览，避免 N 个 spinbox 各自触发 N 次冗余场景生成
     UpdateLivePreview();
 }
 
@@ -813,6 +816,8 @@ bool TopologyWidget::CanValidate() const
 // 在文件末尾实现 UpdateLivePreview() 方法
 void TopologyWidget::UpdateLivePreview()
 {
+    if (m_is_populating_form) return;
+
     // 1. 直接从当前 UI 表单收集最新填写的物理尺寸和配置，生成临时的 Topology 数据结构
     auto currentTopologyModel = CollectModelFromForm();
 

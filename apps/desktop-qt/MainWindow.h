@@ -179,7 +179,6 @@ private:
     QPlainTextEdit* m_logPanel = nullptr;
     RoboSDP::Logging::ConsoleLogger m_logger;
     RoboSDP::Infrastructure::ProjectSaveCoordinator m_projectSaveCoordinator;
-    bool m_isFirstTopologyEntry = true;    // 记录是否是第一次进入构型页面
     bool m_shouldResetNextPreview = false; // 控制下一次预览是否重置相机的临时标志
 };
 

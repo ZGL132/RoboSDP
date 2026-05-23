@@ -153,6 +153,7 @@ private:
     /// @brief 存储 DTO 字段名与对应 UI 控件的映射表（供校验飘红使用）
     QHash<QString, QWidget*> m_field_widgets;
     bool m_has_unsaved_changes = false;
+    bool m_is_populating_form = false;  // 批量填充表单时抑制实时预览信号
 
     // ==================== UI 控件指针 ====================
     QLabel* m_operation_label = nullptr;

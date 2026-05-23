@@ -386,7 +386,7 @@ void MainWindow::CreatePropertyDock()
             }
         });
 
-    // --- 新增：接收 Topology 的实时预览并发送给 VTK 视图 ---
+    // --- 接收 Topology 的实时预览并发送给 VTK 视图 ---
     connect(
         m_topologyWidget,
         &RoboSDP::Topology::Ui::TopologyWidget::TopologyPreviewGenerated,
@@ -394,14 +394,7 @@ void MainWindow::CreatePropertyDock()
         [this](const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& scene) {
             if (m_robotVtkView != nullptr)
             {
-                // 先临时关闭网格模型显示(因为此时只有参数没有3D模型文件)
-                m_robotVtkView->SetVisualMeshVisible(false);
-                m_robotVtkView->SetCollisionMeshVisible(false);
-                
-                // 核心逻辑：只有当 m_shouldResetNextPreview 为 true 时才重置相机
                 m_robotVtkView->ShowPreviewScene(scene, m_shouldResetNextPreview);
-                // 执行完一次重置后，立即将标志位置为 false
-                // 这样后续由滑块(DirtyTracking)触发的预览信号将不会重置相机
                 m_shouldResetNextPreview = false;
                 statusBar()->showMessage(QStringLiteral("中央区域：已实时同步构型尺寸骨架。"));
             }
@@ -447,6 +440,7 @@ void MainWindow::CreatePropertyDock()
             if (m_robotVtkView != nullptr)
             {
                 m_robotVtkView->ShowPreviewScene(scene, m_shouldResetNextPreview);
+                m_shouldResetNextPreview = false;
             }
 
             if (scene.IsEmpty())
@@ -811,14 +805,6 @@ void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
         m_propertyStack->setCurrentWidget(m_topologyWidget);
         m_ribbonBar->SwitchToContextTab(QStringLiteral("Topology"));
         statusBar()->showMessage(QStringLiteral("当前页面：Topology"));
-        // 仅在首次进入构型页面时触发一次预览并重置相机；
-        // 后续切换不再强制刷新，避免覆盖运动学模块已设置的关节姿态。
-        if (m_isFirstTopologyEntry)
-        {
-            m_shouldResetNextPreview = true;
-            m_topologyWidget->ForceEmitPreview();
-            m_isFirstTopologyEntry = false;
-        }
         return;
     }
 

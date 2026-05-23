@@ -254,7 +254,6 @@ private:
     
     bool m_has_unsaved_changes = false;
     bool m_is_populating_form = false;
-    bool m_has_auto_built_from_topology = false;
     QString m_preview_source_mode = QStringLiteral("none");
 
     QLabel* m_operation_label = nullptr;

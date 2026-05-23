@@ -428,14 +428,6 @@ KinematicsWidget::KinematicsWidget(RoboSDP::Logging::ILogger* logger, QWidget* p
 void KinematicsWidget::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
-
-    // 首次显示运动学面板时，若拓扑草稿已存在但尚未构建，自动从拓扑同步模型，
-    // 避免用户看到与构型设计不一致的默认骨架。
-    if (!m_has_auto_built_from_topology && CanBuildFromTopology())
-    {
-        m_has_auto_built_from_topology = true;
-        OnBuildFromTopologyClicked();
-    }
 }
 
 QString KinematicsWidget::ModuleName() const
