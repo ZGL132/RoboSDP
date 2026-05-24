@@ -1,14 +1,17 @@
 #include "apps/desktop-qt/widgets/empty/ProjectWelcomeWidget.h"
 
 #include <QApplication>
+#include <QBoxLayout>
 #include <QCoreApplication>
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSizePolicy>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace
 {
@@ -21,41 +24,92 @@ QLabel* CreateTextLabel(const QString& text, const QString& styleSheet, QWidget*
     return label;
 }
 
-QFrame* CreateRecentProjectPlaceholder(QWidget* parent)
+int ScaledInt(int baseValue, double scale)
+{
+    return std::max(1, static_cast<int>(baseValue * scale + 0.5));
+}
+
+void SetLabelFontSize(QLabel* label, int basePixelSize, double scale)
+{
+    if (label == nullptr)
+    {
+        return;
+    }
+
+    auto font = label->font();
+    font.setPixelSize(ScaledInt(basePixelSize, scale));
+    label->setFont(font);
+}
+
+void SetButtonFontSize(QPushButton* button, int basePixelSize, double scale)
+{
+    if (button == nullptr)
+    {
+        return;
+    }
+
+    auto font = button->font();
+    font.setPixelSize(ScaledInt(basePixelSize, scale));
+    button->setFont(font);
+}
+
+QFrame* CreateRecentProjectPlaceholder(
+    QWidget* parent,
+    QBoxLayout** recentLayout,
+    QLabel** titleLabel,
+    QLabel** bodyLabel,
+    QLabel** emptyLabel)
 {
     auto* card = new QFrame(parent);
     card->setObjectName(QStringLiteral("recentProjectCard"));
     card->setStyleSheet(QStringLiteral(
         "QFrame#recentProjectCard{"
-        "background:rgba(255,255,255,0.82);"
-        "border:1px solid rgba(148,163,184,0.26);"
-        "border-radius:18px;"
+        "background:#f8fafc;"
+        "border:4px solid #64748b;"
+        "border-left:12px solid #0f766e;"
+        "border-radius:0px;"
         "}"));
 
     auto* layout = new QVBoxLayout(card);
-    layout->setContentsMargins(22, 20, 22, 20);
-    layout->setSpacing(8);
 
     auto* title = CreateTextLabel(
         QStringLiteral("最近打开的项目"),
-        QStringLiteral("font-size:17px;font-weight:700;color:#172033;"),
+        QStringLiteral("font-weight:800;color:#172033;"),
         card);
     auto* body = CreateTextLabel(
         QStringLiteral("这里已预留 Recent Projects 区域。后续接入项目历史记录后，可点击项目卡片直接打开。"),
-        QStringLiteral("font-size:13px;line-height:1.45;color:#667085;"),
+        QStringLiteral("line-height:1.45;color:#475467;"),
         card);
     auto* empty = CreateTextLabel(
         QStringLiteral("暂无最近项目"),
         QStringLiteral(
-            "margin-top:8px;padding:18px;border-radius:12px;"
-            "background:rgba(226,232,240,0.55);"
-            "color:#64748b;font-size:13px;"),
+            "border-radius:0px;"
+            "background:#e2e8f0;border:2px solid #94a3b8;"
+            "color:#475569;font-weight:700;"),
         card);
     empty->setAlignment(Qt::AlignCenter);
 
     layout->addWidget(title);
     layout->addWidget(body);
     layout->addWidget(empty);
+
+    if (recentLayout != nullptr)
+    {
+        *recentLayout = layout;
+    }
+    if (titleLabel != nullptr)
+    {
+        *titleLabel = title;
+    }
+    if (bodyLabel != nullptr)
+    {
+        *bodyLabel = body;
+    }
+    if (emptyLabel != nullptr)
+    {
+        *emptyLabel = empty;
+    }
+
     return card;
 }
 
@@ -72,146 +126,219 @@ ProjectWelcomeWidget::ProjectWelcomeWidget(QWidget* parent)
     setStyleSheet(QStringLiteral(
         "QWidget#projectWelcomeWidget{"
         "background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-        "stop:0 #eef7ff,stop:0.42 #f8fbff,stop:1 #fff6e7);"
-        "}"
-        "QPushButton#welcomePrimaryButton{"
-        "background:#0f766e;color:white;border:none;border-radius:14px;"
-        "padding:13px 24px;font-size:16px;font-weight:700;"
-        "}"
-        "QPushButton#welcomePrimaryButton:hover{background:#115e59;}"
-        "QPushButton#welcomeSecondaryButton{"
-        "background:rgba(255,255,255,0.9);color:#0f172a;"
-        "border:1px solid rgba(15,23,42,0.14);border-radius:14px;"
-        "padding:13px 24px;font-size:16px;font-weight:700;"
-        "}"
-        "QPushButton#welcomeSecondaryButton:hover{"
-        "background:white;border-color:rgba(15,118,110,0.45);"
+        "stop:0 #e5e7eb,stop:0.55 #f8fafc,stop:1 #d7dee8);"
         "}"));
 
-    auto* rootLayout = new QVBoxLayout(this);
-    rootLayout->setContentsMargins(64, 44, 64, 44);
-    rootLayout->setSpacing(0);
+    m_root_layout = new QVBoxLayout(this);
+    m_root_layout->setSpacing(0);
 
-    auto* centerRow = new QHBoxLayout();
-    centerRow->setSpacing(36);
-    centerRow->addStretch(1);
+    m_center_row = new QHBoxLayout();
+    m_center_row->addStretch(1);
 
-    auto* heroCard = new QFrame(this);
-    heroCard->setObjectName(QStringLiteral("welcomeHeroCard"));
-    heroCard->setMaximumWidth(760);
-    heroCard->setMinimumWidth(560);
-    heroCard->setStyleSheet(QStringLiteral(
+    m_hero_card = new QFrame(this);
+    m_hero_card->setObjectName(QStringLiteral("welcomeHeroCard"));
+    m_hero_card->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    m_hero_card->setStyleSheet(QStringLiteral(
         "QFrame#welcomeHeroCard{"
-        "background:rgba(255,255,255,0.78);"
-        "border:1px solid rgba(148,163,184,0.30);"
-        "border-radius:28px;"
+        "background:#f8fafc;"
+        "border:4px solid #475569;"
+        "border-top:16px solid #334155;"
+        "border-radius:0px;"
         "}"));
 
-    auto* shadow = new QGraphicsDropShadowEffect(heroCard);
-    shadow->setBlurRadius(34);
-    shadow->setOffset(0, 18);
-    shadow->setColor(QColor(15, 23, 42, 34));
-    heroCard->setGraphicsEffect(shadow);
+    auto* shadow = new QGraphicsDropShadowEffect(m_hero_card);
+    shadow->setBlurRadius(32);
+    shadow->setOffset(16, 20);
+    shadow->setColor(QColor(15, 23, 42, 42));
+    m_hero_card->setGraphicsEffect(shadow);
 
-    auto* heroLayout = new QVBoxLayout(heroCard);
-    heroLayout->setContentsMargins(52, 46, 52, 46);
-    heroLayout->setSpacing(18);
+    m_hero_layout = new QVBoxLayout(m_hero_card);
 
-    auto* logoLabel = new QLabel(heroCard);
-    logoLabel->setPixmap(QPixmap(QStringLiteral(":/app/robosdp_256.png")).scaled(
-        104,
-        104,
-        Qt::KeepAspectRatio,
-        Qt::SmoothTransformation));
-    logoLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_logo_label = new QLabel(m_hero_card);
+    m_logo_label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     const QString version = QCoreApplication::applicationVersion().trimmed().isEmpty()
         ? QStringLiteral("0.1.0")
         : QCoreApplication::applicationVersion().trimmed();
 
-    auto* titleLabel = CreateTextLabel(
+    m_title_label = CreateTextLabel(
         QStringLiteral("RoboSDP Desktop"),
-        QStringLiteral("font-size:42px;font-weight:800;letter-spacing:-1px;color:#0f172a;"),
-        heroCard);
-    auto* versionLabel = CreateTextLabel(
+        QStringLiteral("font-weight:900;letter-spacing:0px;color:#0f172a;"),
+        m_hero_card);
+    m_version_label = CreateTextLabel(
         QStringLiteral("Version %1").arg(version),
-        QStringLiteral("font-size:14px;font-weight:700;color:#0f766e;"),
-        heroCard);
-    auto* subtitleLabel = CreateTextLabel(
+        QStringLiteral("font-weight:800;color:#0f766e;"),
+        m_hero_card);
+    m_subtitle_label = CreateTextLabel(
         QStringLiteral("从需求定义到构型、运动学、动力学、选型、规划与方案导出的一体化机器人设计工作台。"),
-        QStringLiteral("font-size:17px;line-height:1.55;color:#475467;"),
-        heroCard);
+        QStringLiteral("line-height:1.55;color:#334155;"),
+        m_hero_card);
 
-    auto* actionsLayout = new QHBoxLayout();
-    actionsLayout->setSpacing(14);
-    auto* newProjectButton = new QPushButton(QStringLiteral("新建项目"), heroCard);
-    newProjectButton->setObjectName(QStringLiteral("welcomePrimaryButton"));
-    newProjectButton->setCursor(Qt::PointingHandCursor);
-    newProjectButton->setMinimumHeight(48);
+    m_actions_layout = new QHBoxLayout();
+    m_new_project_button = new QPushButton(QStringLiteral("新建项目"), m_hero_card);
+    m_new_project_button->setObjectName(QStringLiteral("welcomePrimaryButton"));
+    m_new_project_button->setCursor(Qt::PointingHandCursor);
 
-    auto* openProjectButton = new QPushButton(QStringLiteral("打开项目"), heroCard);
-    openProjectButton->setObjectName(QStringLiteral("welcomeSecondaryButton"));
-    openProjectButton->setCursor(Qt::PointingHandCursor);
-    openProjectButton->setMinimumHeight(48);
+    m_open_project_button = new QPushButton(QStringLiteral("打开项目"), m_hero_card);
+    m_open_project_button->setObjectName(QStringLiteral("welcomeSecondaryButton"));
+    m_open_project_button->setCursor(Qt::PointingHandCursor);
 
-    actionsLayout->addWidget(newProjectButton);
-    actionsLayout->addWidget(openProjectButton);
-    actionsLayout->addStretch(1);
+    m_actions_layout->addWidget(m_new_project_button);
+    m_actions_layout->addWidget(m_open_project_button);
+    m_actions_layout->addStretch(1);
 
-    auto* hintLabel = CreateTextLabel(
+    m_hint_label = CreateTextLabel(
         QStringLiteral("也可以继续使用顶部功能区的“文件”页签完成同样操作。"),
-        QStringLiteral("font-size:13px;color:#667085;"),
-        heroCard);
+        QStringLiteral("color:#475569;"),
+        m_hero_card);
 
-    heroLayout->addWidget(logoLabel);
-    heroLayout->addWidget(titleLabel);
-    heroLayout->addWidget(versionLabel);
-    heroLayout->addSpacing(4);
-    heroLayout->addWidget(subtitleLabel);
-    heroLayout->addSpacing(12);
-    heroLayout->addLayout(actionsLayout);
-    heroLayout->addWidget(hintLabel);
+    m_hero_layout->addWidget(m_logo_label);
+    m_hero_layout->addWidget(m_title_label);
+    m_hero_layout->addWidget(m_version_label);
+    m_hero_layout->addSpacing(8);
+    m_hero_layout->addWidget(m_subtitle_label);
+    m_hero_layout->addSpacing(24);
+    m_hero_layout->addLayout(m_actions_layout);
+    m_hero_layout->addWidget(m_hint_label);
 
-    auto* sidePanel = new QWidget(this);
-    sidePanel->setMaximumWidth(360);
-    sidePanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    auto* sideLayout = new QVBoxLayout(sidePanel);
-    sideLayout->setContentsMargins(0, 0, 0, 0);
-    sideLayout->setSpacing(16);
+    m_side_panel = new QWidget(this);
+    m_side_panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+    m_side_layout = new QVBoxLayout(m_side_panel);
+    m_side_layout->setContentsMargins(0, 0, 0, 0);
 
-    auto* workflowCard = new QFrame(sidePanel);
-    workflowCard->setObjectName(QStringLiteral("workflowCard"));
-    workflowCard->setStyleSheet(QStringLiteral(
+    m_workflow_card = new QFrame(m_side_panel);
+    m_workflow_card->setObjectName(QStringLiteral("workflowCard"));
+    m_workflow_card->setStyleSheet(QStringLiteral(
         "QFrame#workflowCard{"
-        "background:rgba(15,118,110,0.10);"
-        "border:1px solid rgba(15,118,110,0.18);"
-        "border-radius:18px;"
+        "background:#ecfeff;"
+        "border:4px solid #0f766e;"
+        "border-left:12px solid #f97316;"
+        "border-radius:0px;"
         "}"));
-    auto* workflowLayout = new QVBoxLayout(workflowCard);
-    workflowLayout->setContentsMargins(22, 20, 22, 20);
-    workflowLayout->setSpacing(10);
-    workflowLayout->addWidget(CreateTextLabel(
+    m_workflow_layout = new QVBoxLayout(m_workflow_card);
+    m_workflow_title_label = CreateTextLabel(
         QStringLiteral("建议工作流"),
-        QStringLiteral("font-size:17px;font-weight:700;color:#134e4a;"),
-        workflowCard));
-    workflowLayout->addWidget(CreateTextLabel(
+        QStringLiteral("font-weight:800;color:#134e4a;"),
+        m_workflow_card);
+    m_workflow_body_label = CreateTextLabel(
         QStringLiteral("1. 新建或打开项目\n2. 填写任务需求\n3. 生成构型并进入运动学分析\n4. 保存阶段成果并导出方案"),
-        QStringLiteral("font-size:13px;line-height:1.65;color:#335c67;"),
-        workflowCard));
+        QStringLiteral("line-height:1.75;color:#164e63;"),
+        m_workflow_card);
+    m_workflow_layout->addWidget(m_workflow_title_label);
+    m_workflow_layout->addWidget(m_workflow_body_label);
 
-    sideLayout->addWidget(workflowCard);
-    sideLayout->addWidget(CreateRecentProjectPlaceholder(sidePanel));
+    m_recent_card = CreateRecentProjectPlaceholder(
+        m_side_panel,
+        &m_recent_layout,
+        &m_recent_title_label,
+        &m_recent_body_label,
+        &m_recent_empty_label);
 
-    centerRow->addWidget(heroCard, 0, Qt::AlignVCenter);
-    centerRow->addWidget(sidePanel, 0, Qt::AlignVCenter);
-    centerRow->addStretch(1);
+    m_side_layout->addWidget(m_workflow_card);
+    m_side_layout->addWidget(m_recent_card);
 
-    rootLayout->addStretch(1);
-    rootLayout->addLayout(centerRow);
-    rootLayout->addStretch(1);
+    m_center_row->addWidget(m_hero_card, 0, Qt::AlignVCenter);
+    m_center_row->addWidget(m_side_panel, 0, Qt::AlignVCenter);
+    m_center_row->addStretch(1);
 
-    connect(newProjectButton, &QPushButton::clicked, this, &ProjectWelcomeWidget::CreateNewProjectRequested);
-    connect(openProjectButton, &QPushButton::clicked, this, &ProjectWelcomeWidget::OpenProjectRequested);
+    m_root_layout->addStretch(1);
+    m_root_layout->addLayout(m_center_row);
+    m_root_layout->addStretch(1);
+
+    UpdateResponsiveScale();
+
+    connect(m_new_project_button, &QPushButton::clicked, this, &ProjectWelcomeWidget::CreateNewProjectRequested);
+    connect(m_open_project_button, &QPushButton::clicked, this, &ProjectWelcomeWidget::OpenProjectRequested);
+}
+
+void ProjectWelcomeWidget::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    UpdateResponsiveScale();
+}
+
+void ProjectWelcomeWidget::UpdateResponsiveScale()
+{
+    const double baseWidth = 112.0 * 2.0 + 1280.0 + 64.0 + 780.0;
+    const double baseHeight = 88.0 * 2.0 + 1080.0;
+    const double availableWidth = std::max(1, width());
+    const double availableHeight = std::max(1, height());
+    const double scale = std::clamp(
+        std::min(availableWidth / baseWidth, availableHeight / baseHeight),
+        0.42,
+        1.0);
+
+    m_root_layout->setContentsMargins(
+        ScaledInt(112, scale),
+        ScaledInt(88, scale),
+        ScaledInt(112, scale),
+        ScaledInt(88, scale));
+    m_center_row->setSpacing(ScaledInt(64, scale));
+    m_hero_layout->setContentsMargins(
+        ScaledInt(128, scale),
+        ScaledInt(112, scale),
+        ScaledInt(128, scale),
+        ScaledInt(112, scale));
+    m_hero_layout->setSpacing(ScaledInt(40, scale));
+    m_actions_layout->setSpacing(ScaledInt(32, scale));
+    m_side_layout->setSpacing(ScaledInt(44, scale));
+    m_workflow_layout->setContentsMargins(
+        ScaledInt(56, scale),
+        ScaledInt(48, scale),
+        ScaledInt(56, scale),
+        ScaledInt(48, scale));
+    m_workflow_layout->setSpacing(ScaledInt(28, scale));
+    m_recent_layout->setContentsMargins(
+        ScaledInt(56, scale),
+        ScaledInt(48, scale),
+        ScaledInt(56, scale),
+        ScaledInt(48, scale));
+    m_recent_layout->setSpacing(ScaledInt(24, scale));
+
+    m_hero_card->setMinimumSize(ScaledInt(1280, scale), ScaledInt(1080, scale));
+    m_hero_card->setMaximumWidth(ScaledInt(1760, scale));
+    m_side_panel->setMinimumWidth(ScaledInt(780, scale));
+    m_side_panel->setMaximumWidth(ScaledInt(880, scale));
+    m_workflow_card->setMinimumHeight(ScaledInt(440, scale));
+    m_recent_card->setMinimumHeight(ScaledInt(472, scale));
+    m_new_project_button->setMinimumHeight(ScaledInt(112, scale));
+    m_open_project_button->setMinimumHeight(ScaledInt(112, scale));
+
+    const int logoSize = ScaledInt(240, scale);
+    m_logo_label->setPixmap(QPixmap(QStringLiteral(":/app/robosdp_256.png")).scaled(
+        logoSize,
+        logoSize,
+        Qt::KeepAspectRatio,
+        Qt::SmoothTransformation));
+
+    SetLabelFontSize(m_title_label, 92, scale);
+    SetLabelFontSize(m_version_label, 30, scale);
+    SetLabelFontSize(m_subtitle_label, 38, scale);
+    SetLabelFontSize(m_hint_label, 28, scale);
+    SetLabelFontSize(m_workflow_title_label, 38, scale);
+    SetLabelFontSize(m_workflow_body_label, 30, scale);
+    SetLabelFontSize(m_recent_title_label, 38, scale);
+    SetLabelFontSize(m_recent_body_label, 30, scale);
+    SetLabelFontSize(m_recent_empty_label, 30, scale);
+    SetButtonFontSize(m_new_project_button, 34, scale);
+    SetButtonFontSize(m_open_project_button, 34, scale);
+
+    m_new_project_button->setStyleSheet(QStringLiteral(
+        "QPushButton#welcomePrimaryButton{"
+        "background:#0f766e;color:white;border:%1px solid #0b4f4a;border-radius:0px;"
+        "padding:%2px %3px;font-weight:800;"
+        "}"
+        "QPushButton#welcomePrimaryButton:hover{background:#115e59;border-color:#0f766e;}").arg(
+        ScaledInt(4, scale)).arg(ScaledInt(30, scale)).arg(ScaledInt(60, scale)));
+    m_open_project_button->setStyleSheet(QStringLiteral(
+        "QPushButton#welcomeSecondaryButton{"
+        "background:#f8fafc;color:#0f172a;"
+        "border:%1px solid #64748b;border-radius:0px;"
+        "padding:%2px %3px;font-weight:800;"
+        "}"
+        "QPushButton#welcomeSecondaryButton:hover{"
+        "background:white;border-color:#0f766e;"
+        "}").arg(ScaledInt(4, scale)).arg(ScaledInt(30, scale)).arg(ScaledInt(60, scale)));
 }
 
 } // namespace RoboSDP::Desktop::Widgets

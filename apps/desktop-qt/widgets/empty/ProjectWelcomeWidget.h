@@ -1,6 +1,12 @@
 #pragma once
 
+#include <QLabel>
+#include <QPushButton>
+#include <QFrame>
 #include <QWidget>
+
+class QBoxLayout;
+class QResizeEvent;
 
 namespace RoboSDP::Desktop::Widgets
 {
@@ -18,9 +24,40 @@ class ProjectWelcomeWidget : public QWidget
 public:
     explicit ProjectWelcomeWidget(QWidget* parent = nullptr);
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 signals:
     void CreateNewProjectRequested();
     void OpenProjectRequested();
+
+private:
+    void UpdateResponsiveScale();
+
+    QBoxLayout* m_root_layout = nullptr;
+    QBoxLayout* m_center_row = nullptr;
+    QBoxLayout* m_hero_layout = nullptr;
+    QBoxLayout* m_actions_layout = nullptr;
+    QBoxLayout* m_side_layout = nullptr;
+    QBoxLayout* m_workflow_layout = nullptr;
+    QBoxLayout* m_recent_layout = nullptr;
+
+    QFrame* m_hero_card = nullptr;
+    QFrame* m_workflow_card = nullptr;
+    QFrame* m_recent_card = nullptr;
+    QLabel* m_logo_label = nullptr;
+    QLabel* m_title_label = nullptr;
+    QLabel* m_version_label = nullptr;
+    QLabel* m_subtitle_label = nullptr;
+    QLabel* m_hint_label = nullptr;
+    QLabel* m_workflow_title_label = nullptr;
+    QLabel* m_workflow_body_label = nullptr;
+    QLabel* m_recent_title_label = nullptr;
+    QLabel* m_recent_body_label = nullptr;
+    QLabel* m_recent_empty_label = nullptr;
+    QPushButton* m_new_project_button = nullptr;
+    QPushButton* m_open_project_button = nullptr;
+    QWidget* m_side_panel = nullptr;
 };
 
 } // namespace RoboSDP::Desktop::Widgets
