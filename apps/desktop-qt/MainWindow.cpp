@@ -204,6 +204,8 @@ void MainWindow::CreateRibbonBar()
     bindCamera(&Ribbon::RibbonBarWidget::signalApplyDiagnosticViewPreset, &Vtk::RobotVtkView::ApplyDiagnosticViewPreset, QStringLiteral("用户请求应用诊断显示预设"));
 
     bindCamera(&Ribbon::RibbonBarWidget::signalResetCameraRequested, &Vtk::RobotVtkView::ResetCameraToCurrentScene, QStringLiteral("用户请求重置三维相机"));
+    bindCamera(&Ribbon::RibbonBarWidget::signalCameraZoomInRequested, &Vtk::RobotVtkView::ZoomInCamera, QStringLiteral("用户请求放大三维视图"));
+    bindCamera(&Ribbon::RibbonBarWidget::signalCameraZoomOutRequested, &Vtk::RobotVtkView::ZoomOutCamera, QStringLiteral("用户请求缩小三维视图"));
     bindCamera(&Ribbon::RibbonBarWidget::signalCameraFrontViewRequested, &Vtk::RobotVtkView::SetFrontCameraView, QStringLiteral("用户请求切换至正视图"));
     bindCamera(&Ribbon::RibbonBarWidget::signalCameraSideViewRequested, &Vtk::RobotVtkView::SetSideCameraView, QStringLiteral("用户请求切换至侧视图"));
     bindCamera(&Ribbon::RibbonBarWidget::signalCameraTopViewRequested, &Vtk::RobotVtkView::SetTopCameraView, QStringLiteral("用户请求切换至俯视图"));

@@ -44,7 +44,11 @@ class VtkSceneBuilder
 public:
 #if defined(ROBOSDP_HAVE_VTK)
     /// @brief 构建中央视图的最小测试场景。
-    static void BuildMinimalTestScene(vtkRenderer* renderer, bool showAxes = true, bool showGroundGrid = true);
+    static void BuildMinimalTestScene(
+        vtkRenderer* renderer,
+        bool showAxes = true,
+        bool showGroundGrid = true,
+        bool resetCamera = true);
 
     /// @brief 根据 URDF 骨架预览 DTO 构建中央三维场景。
     static void BuildUrdfPreviewScene(

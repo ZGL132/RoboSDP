@@ -1368,6 +1368,16 @@ void RobotVtkView::SetIsometricCameraView()
     ApplyCameraPreset(1.0, -1.0, 1.0, 0.0, 0.0, 1.0);
 }
 
+void RobotVtkView::ZoomInCamera()
+{
+    ZoomCamera(0.82);
+}
+
+void RobotVtkView::ZoomOutCamera()
+{
+    ZoomCamera(1.22);
+}
+
 void RobotVtkView::BuildAnalysisLayerPanel(QWidget* viewportFrame)
 {
     if (viewportFrame == nullptr)
@@ -2041,7 +2051,8 @@ void RobotVtkView::RefreshScene(bool resetCamera)
             VtkSceneBuilder::BuildMinimalTestScene(
                 m_renderer,
                 displayOptions.show_axes,
-                displayOptions.show_ground_grid);
+                displayOptions.show_ground_grid,
+                displayOptions.reset_camera);
                 m_watermark_actor->SetInput("View: Minimal Test Scene");
                 m_watermark_actor->GetTextProperty()->SetColor(0.6, 0.6, 0.6); 
         }

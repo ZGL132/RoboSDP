@@ -195,6 +195,12 @@ public:
     /// @brief 将相机切换到等轴测视图，从 (1, -1, 1) 方向观察。
     void SetIsometricCameraView();
 
+    /// @brief 放大当前三维相机视图。
+    void ZoomInCamera();
+
+    /// @brief 缩小当前三维相机视图。
+    void ZoomOutCamera();
+
 signals:
     /// @brief 3D 视图中点击连杆后鼠标滚轮滚动 → 发出关节角度变更信号。
     void signalJointAngleScrolled(int jointIndex, double deltaDeg);

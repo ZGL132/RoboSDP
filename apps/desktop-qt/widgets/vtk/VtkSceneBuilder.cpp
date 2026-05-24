@@ -757,7 +757,11 @@ void AddJointAxisArrow(
 
 } // namespace
 
-void VtkSceneBuilder::BuildMinimalTestScene(vtkRenderer* renderer, bool showAxes, bool showGroundGrid)
+void VtkSceneBuilder::BuildMinimalTestScene(
+    vtkRenderer* renderer,
+    bool showAxes,
+    bool showGroundGrid,
+    bool resetCamera)
 {
     if (renderer == nullptr)
     {
@@ -781,7 +785,10 @@ void VtkSceneBuilder::BuildMinimalTestScene(vtkRenderer* renderer, bool showAxes
         AddAxes(renderer, 1.5);
     }
 
-    renderer->ResetCamera();
+    if (resetCamera)
+    {
+        renderer->ResetCamera();
+    }
 }
 
 void VtkSceneBuilder::BuildUrdfPreviewScene(
@@ -848,7 +855,11 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
 
     if (previewScene.IsEmpty())
     {
-        BuildMinimalTestScene(renderer, displayOptions.show_axes, displayOptions.show_ground_grid);
+        BuildMinimalTestScene(
+            renderer,
+            displayOptions.show_axes,
+            displayOptions.show_ground_grid,
+            displayOptions.reset_camera);
         return;
     }
 

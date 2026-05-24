@@ -514,7 +514,6 @@ QWidget* RibbonBarWidget::CreateViewTab()
             m_viewCornerAxesToggleBtn,
             m_viewLinkLabelsToggleBtn,
             m_viewJointLabelsToggleBtn,
-            CreateResetCameraButton(),
         }));
 
     auto* designPresetBtn = CreateActionButton(
@@ -548,6 +547,15 @@ QWidget* RibbonBarWidget::CreateViewTab()
     layout->addWidget(CreateButtonGroup(
         QStringLiteral("相机视角"),
         {
+            CreateCameraZoomButton(
+                QStringLiteral("放大"),
+                QStringLiteral("放大中央三维视图。"),
+                &RibbonBarWidget::signalCameraZoomInRequested),
+            CreateCameraZoomButton(
+                QStringLiteral("缩小"),
+                QStringLiteral("缩小中央三维视图。"),
+                &RibbonBarWidget::signalCameraZoomOutRequested),
+            CreateResetCameraButton(),
             CreateCameraPresetButton(
                 QStringLiteral("正视图"),
                 QStringLiteral("沿 -Y 方向观察模型，Z 轴向上。"),
@@ -694,6 +702,18 @@ QToolButton* RibbonBarWidget::CreateResetCameraButton()
     connect(button, &QToolButton::clicked, this, [this]() {
         // 中文说明：相机操作属于全局视图命令，由 MainWindow 转交中央三维视图执行。
         emit signalResetCameraRequested();
+    });
+    return button;
+}
+
+QToolButton* RibbonBarWidget::CreateCameraZoomButton(
+    const QString& text,
+    const QString& tooltip,
+    void (RibbonBarWidget::*cameraSignal)())
+{
+    auto* button = CreateActionButton(text, tooltip);
+    connect(button, &QToolButton::clicked, this, [this, cameraSignal]() {
+        (this->*cameraSignal)();
     });
     return button;
 }

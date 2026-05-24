@@ -169,6 +169,10 @@ signals:
     /// @brief 请求重置中央三维视图相机。
     void signalResetCameraRequested();
 
+    void signalCameraZoomInRequested();
+
+    void signalCameraZoomOutRequested();
+
     /// @brief 请求切换中央三维视图到正视图。
     void signalCameraFrontViewRequested();
 
@@ -213,6 +217,10 @@ private:
     QToolButton* CreateOpenProjectButton();
     QToolButton* CreateGlobalSaveButton();
     QToolButton* CreateResetCameraButton();
+    QToolButton* CreateCameraZoomButton(
+        const QString& text,
+        const QString& tooltip,
+        void (RibbonBarWidget::*cameraSignal)());
     QToolButton* CreateCameraPresetButton(
         const QString& text,
         const QString& tooltip,
