@@ -267,7 +267,7 @@ public:
         setAttribute(Qt::WA_TranslucentBackground);
         setAttribute(Qt::WA_NoSystemBackground);
         setStyleSheet(QStringLiteral("background:transparent;"));
-        setFixedHeight(28);
+        setFixedHeight(40);
     }
 
     void setScale(double niceDistMeters, const QString& unit, double barRatio)
@@ -289,10 +289,10 @@ protected:
 
         const int w = width();
         const int h = height();
-        const int barY = h - 6;        // 主刻度线 y 坐标（底部）
-        const int tickTop = barY - 7;  // 短刻度顶部
-        const int tickMid = barY - 5;  // 中刻度顶部
-        const int textY = 0;           // 文字顶部 y（贴顶，避免与刻度线重叠）
+        const int barY = h - 8;        // 主刻度线 y 坐标（底部）
+        const int tickTop = barY - 8;  // 短刻度顶部
+        const int tickMid = barY - 6;  // 中刻度顶部
+        const int textY = 1;           // 文字顶部 y（靠上绘制，避免与刻度线重叠）
 
         const int margin = 4;
         const int barWidth = w - 2 * margin;
@@ -364,7 +364,7 @@ protected:
 
         // ── 文字标签 ──
         painter.setPen(QPen(QColor(220, 222, 228), 1.0));
-        QFont font(QStringLiteral("Consolas"), 9);
+        QFont font(QStringLiteral("Consolas"), 5);
         font.setStyleHint(QFont::Monospace);
         painter.setFont(font);
 
@@ -2053,28 +2053,8 @@ void RobotVtkView::UpdateScaleBar()
     else
         niceDist = 10.0 * pow10;
 
-    // 根据距离选择合适单位
-    QString unit;
-    if (niceDist >= 1.0)
-    {
-        unit = QStringLiteral("m");
-    }
-    else if (niceDist >= 0.01)
-    {
-        niceDist *= 100.0;
-        unit = QStringLiteral("cm");
-    }
-    else
-    {
-        niceDist *= 1000.0;
-        unit = QStringLiteral("mm");
-    }
-
-    double barRatio = niceDist / refWorldDist;
-    if (unit == QStringLiteral("cm"))
-        barRatio = (niceDist / 100.0) / refWorldDist;
-    else if (unit == QStringLiteral("mm"))
-        barRatio = (niceDist / 1000.0) / refWorldDist;
+    const QString unit = QStringLiteral("m");
+    const double barRatio = niceDist / refWorldDist;
 
     m_scaleBarNiceDist = niceDist;
     m_scaleBarUnit = unit;
@@ -2105,7 +2085,7 @@ bool RobotVtkView::eventFilter(QObject* watched, QEvent* event)
         int w = resizeEvent->size().width();
         int h = resizeEvent->size().height();
         Q_UNUSED(w);
-        m_scaleBarOverlay->setGeometry(8, h - 32, 260, 28);
+        m_scaleBarOverlay->setGeometry(8, h - 44, 260, 40);
         PositionAnalysisLayerPanel();
         RaiseViewOverlays();
     }
