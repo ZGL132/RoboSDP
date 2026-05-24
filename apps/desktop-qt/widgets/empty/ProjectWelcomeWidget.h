@@ -58,6 +58,8 @@ private:
     QPushButton* m_new_project_button = nullptr;
     QPushButton* m_open_project_button = nullptr;
     QWidget* m_side_panel = nullptr;
+    double m_current_scale = -1.0;
+    int m_current_logo_size = 0;
 };
 
 } // namespace RoboSDP::Desktop::Widgets
