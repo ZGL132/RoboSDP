@@ -213,7 +213,10 @@ private:
     void BuildVtkView();
     void BuildFallbackView();
     void BuildCornerAxesWidget();
+    void BuildCameraToolbar(QWidget* viewportFrame);
     void RefreshCornerAxesVisibility();
+    void ZoomCamera(double factor);
+    void UpdateCameraToolbarVisibility(const QPoint& viewportPos);
     void RefreshScene(bool resetCamera = true);
     void RenderIkPoseComparisonLayer();
     void ClearIkPoseComparisonActors();
@@ -225,6 +228,7 @@ private:
     void SetAnalysisLayerVisibleInternal(const QString& layerId, bool visible, bool userInitiated);
     void AutoEnableAnalysisLayerIfDefault(const QString& layerId);
     void RaiseViewOverlays();
+    void PositionCameraToolbar();
     void PositionAnalysisLayerPanel();
     void RenderRequirementKeyPoseLayer();
     void ClearRequirementKeyPoseActors();
@@ -326,6 +330,8 @@ private:
     QWidget* m_scaleBarOverlay = nullptr;
     /// @brief 分析图层开关覆盖层，统一管理工作空间、关键工位、奇异性等分析结果。
     QWidget* m_analysisLayerPanel = nullptr;
+    /// @brief 三维视图顶部居中的透明相机快捷工具条。
+    QWidget* m_cameraToolbar = nullptr;
     /// @brief 当前比例尺代表的世界距离（米）。
     double m_scaleBarNiceDist = 0.5;
     /// @brief 当前比例尺单位字符串（m / cm / mm）。

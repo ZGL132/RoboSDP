@@ -2,14 +2,19 @@
 #include "apps/desktop-qt/widgets/vtk/VtkSceneBuilder.h"
 
 #include <QCheckBox>
+#include <QCursor>
 #include <QFrame>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPen>
+#include <QPixmap>
 #include <QResizeEvent>
 #include <QSignalBlocker>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -92,6 +97,69 @@ const AnalysisLayerUiSpec* FindLayerSpec(const QString& layerId)
         }
     }
     return nullptr;
+}
+
+QIcon MakeCameraToolbarIcon(const QString& kind)
+{
+    QPixmap pixmap(48, 48);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(QColor(248, 250, 252, 220), 3.6);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+
+    if (kind == QStringLiteral("zoom_in") || kind == QStringLiteral("zoom_out"))
+    {
+        painter.drawEllipse(QPointF(19.0, 19.0), 10.0, 10.0);
+        painter.drawLine(QPointF(26.4, 26.4), QPointF(36.0, 36.0));
+        painter.drawLine(QPointF(14.0, 19.0), QPointF(24.0, 19.0));
+        if (kind == QStringLiteral("zoom_in"))
+        {
+            painter.drawLine(QPointF(19.0, 14.0), QPointF(19.0, 24.0));
+        }
+    }
+    else if (kind == QStringLiteral("reset"))
+    {
+        painter.drawArc(QRectF(10.0, 10.0, 28.0, 28.0), 35 * 16, 280 * 16);
+        painter.drawLine(QPointF(12.4, 12.0), QPointF(10.0, 22.0));
+        painter.drawLine(QPointF(12.4, 12.0), QPointF(22.0, 12.4));
+    }
+    else if (kind == QStringLiteral("front"))
+    {
+        painter.drawRect(QRectF(12.0, 12.0, 24.0, 24.0));
+        painter.drawLine(QPointF(18.0, 12.0), QPointF(18.0, 36.0));
+        painter.drawLine(QPointF(30.0, 12.0), QPointF(30.0, 36.0));
+    }
+    else if (kind == QStringLiteral("side"))
+    {
+        painter.drawRect(QRectF(16.0, 10.0, 16.0, 28.0));
+        painter.drawLine(QPointF(16.0, 16.0), QPointF(32.0, 16.0));
+        painter.drawLine(QPointF(16.0, 32.0), QPointF(32.0, 32.0));
+    }
+    else if (kind == QStringLiteral("top"))
+    {
+        painter.drawEllipse(QPointF(24.0, 24.0), 13.0, 13.0);
+        painter.drawLine(QPointF(24.0, 11.0), QPointF(24.0, 37.0));
+        painter.drawLine(QPointF(11.0, 24.0), QPointF(37.0, 24.0));
+    }
+    else if (kind == QStringLiteral("iso"))
+    {
+        QPolygonF top;
+        top << QPointF(24.0, 9.0) << QPointF(36.0, 16.0) << QPointF(24.0, 23.0) << QPointF(12.0, 16.0);
+        QPolygonF left;
+        left << QPointF(12.0, 16.0) << QPointF(24.0, 23.0) << QPointF(24.0, 38.0) << QPointF(12.0, 31.0);
+        QPolygonF right;
+        right << QPointF(36.0, 16.0) << QPointF(24.0, 23.0) << QPointF(24.0, 38.0) << QPointF(36.0, 31.0);
+        painter.drawPolygon(top);
+        painter.drawPolygon(left);
+        painter.drawPolygon(right);
+    }
+
+    return QIcon(pixmap);
 }
 
 #if defined(ROBOSDP_HAVE_VTK)
@@ -1472,10 +1540,28 @@ void RobotVtkView::RaiseViewOverlays()
     {
         m_scaleBarOverlay->raise();
     }
+    if (m_cameraToolbar != nullptr)
+    {
+        m_cameraToolbar->raise();
+    }
     if (m_analysisLayerPanel != nullptr)
     {
         m_analysisLayerPanel->raise();
     }
+}
+
+void RobotVtkView::PositionCameraToolbar()
+{
+    if (m_cameraToolbar == nullptr || m_cameraToolbar->parentWidget() == nullptr)
+    {
+        return;
+    }
+
+    auto* parent = m_cameraToolbar->parentWidget();
+    m_cameraToolbar->adjustSize();
+    const int topMargin = 20;
+    const int x = std::max(8, (parent->width() - m_cameraToolbar->width()) / 2);
+    m_cameraToolbar->move(x, topMargin);
 }
 
 void RobotVtkView::PositionAnalysisLayerPanel()
@@ -1515,18 +1601,132 @@ void RobotVtkView::BuildControlBar()
 {
 }
 
+void RobotVtkView::BuildCameraToolbar(QWidget* viewportFrame)
+{
+    if (viewportFrame == nullptr)
+    {
+        return;
+    }
+
+    auto* toolbar = new QWidget(viewportFrame);
+    m_cameraToolbar = toolbar;
+    toolbar->setObjectName(QStringLiteral("cameraToolbar"));
+    toolbar->setAttribute(Qt::WA_StyledBackground, true);
+    toolbar->setMouseTracking(true);
+    toolbar->setStyleSheet(QStringLiteral(
+        "QWidget#cameraToolbar{background:transparent;border:none;}"
+        "QToolButton{"
+        "background:transparent;"
+        "border:2px solid rgba(248,250,252,145);"
+        "border-radius:8px;"
+        "color:rgba(248,250,252,210);"
+        "min-width:56px;"
+        "max-width:56px;"
+        "min-height:52px;"
+        "max-height:52px;"
+        "padding:0;"
+        "}"
+        "QToolButton:hover{background:rgba(255,255,255,45);border-color:rgba(255,255,255,210);}"
+        "QToolButton:pressed{background:rgba(255,255,255,70);}"));
+
+    auto* layout = new QHBoxLayout(toolbar);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(12);
+
+    auto addButton = [this, toolbar, layout](const QString& iconKind, const QString& tooltip, const auto& handler) {
+        auto* button = new QToolButton(toolbar);
+        button->setIcon(MakeCameraToolbarIcon(iconKind));
+        button->setIconSize(QSize(44, 44));
+        button->setToolTip(tooltip);
+        button->setCursor(Qt::PointingHandCursor);
+        button->setFocusPolicy(Qt::NoFocus);
+        button->setMouseTracking(true);
+        button->installEventFilter(this);
+        layout->addWidget(button);
+        connect(button, &QToolButton::clicked, this, handler);
+    };
+
+    addButton(QStringLiteral("zoom_in"), QStringLiteral("放大视图"), [this]() { ZoomCamera(0.82); });
+    addButton(QStringLiteral("zoom_out"), QStringLiteral("缩小视图"), [this]() { ZoomCamera(1.22); });
+    addButton(QStringLiteral("reset"), QStringLiteral("重置相机"), [this]() { ResetCameraToCurrentScene(); });
+    addButton(QStringLiteral("front"), QStringLiteral("正视图"), [this]() { SetFrontCameraView(); });
+    addButton(QStringLiteral("side"), QStringLiteral("侧视图"), [this]() { SetSideCameraView(); });
+    addButton(QStringLiteral("top"), QStringLiteral("俯视图"), [this]() { SetTopCameraView(); });
+    addButton(QStringLiteral("iso"), QStringLiteral("轴测图"), [this]() { SetIsometricCameraView(); });
+
+    PositionCameraToolbar();
+    toolbar->installEventFilter(this);
+    toolbar->hide();
+}
+
+void RobotVtkView::ZoomCamera(double factor)
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr || factor <= 0.0)
+    {
+        return;
+    }
+
+    vtkCamera* camera = m_renderer->GetActiveCamera();
+    if (camera == nullptr)
+    {
+        return;
+    }
+
+    camera->Dolly(1.0 / factor);
+    m_renderer->ResetCameraClippingRange();
+    UpdateScaleBar();
+    if (m_renderWindow != nullptr)
+    {
+        m_renderWindow->Render();
+    }
+#else
+    Q_UNUSED(factor);
+#endif
+}
+
+void RobotVtkView::UpdateCameraToolbarVisibility(const QPoint& viewportPos)
+{
+    if (m_cameraToolbar == nullptr || m_cameraToolbar->parentWidget() == nullptr)
+    {
+        return;
+    }
+
+    auto* parent = m_cameraToolbar->parentWidget();
+    const QRect toolbarRect = m_cameraToolbar->geometry().adjusted(-12, -12, 12, 16);
+    const int hotZoneWidth = std::max(m_cameraToolbar->width() + 96, parent->width() / 3);
+    const int hotZoneHeight = std::max(m_cameraToolbar->height() + 34, 88);
+    const QRect hotZone(
+        std::max(0, (parent->width() - hotZoneWidth) / 2),
+        0,
+        std::min(hotZoneWidth, parent->width()),
+        hotZoneHeight);
+
+    const bool shouldShow = hotZone.contains(viewportPos) || toolbarRect.contains(viewportPos);
+    if (m_cameraToolbar->isVisible() != shouldShow)
+    {
+        m_cameraToolbar->setVisible(shouldShow);
+        if (shouldShow)
+        {
+            m_cameraToolbar->raise();
+        }
+    }
+}
+
 void RobotVtkView::BuildVtkView()
 {
 #if defined(ROBOSDP_HAVE_VTK)
     // 中文说明：中央三维区使用原生 QVTK 控件承载骨架预览，而不是直接在 QWidget 里写渲染逻辑。
     auto* viewportFrame = new QFrame(this);
     viewportFrame->setObjectName(QStringLiteral("renderViewportFrame"));
+    viewportFrame->setMouseTracking(true);
     auto* viewportLayout = new QVBoxLayout(viewportFrame);
     viewportLayout->setContentsMargins(0, 0, 0, 0);
     viewportLayout->setSpacing(0);
 
     m_vtkWidget = new QVTKOpenGLNativeWidget(viewportFrame);
     m_vtkWidget->setMinimumSize(640, 480);
+    m_vtkWidget->setMouseTracking(true);
 
     vtkNew<vtkGenericOpenGLRenderWindow> renderWindow;
     // 中文说明：开启 8x MSAA 多重采样抗锯齿，平滑 3D 骨架边缘棱角，提升渲染画质。
@@ -1601,6 +1801,7 @@ void RobotVtkView::BuildVtkView()
     viewportFrame->installEventFilter(this);
     // ── 比例尺初始化结束 ──────────────────────────────────────────
 
+    BuildCameraToolbar(viewportFrame);
     BuildAnalysisLayerPanel(viewportFrame);
 
     viewportLayout->addWidget(m_vtkWidget, 1);
@@ -2062,6 +2263,28 @@ void RobotVtkView::UpdateScaleBar()
 bool RobotVtkView::eventFilter(QObject* watched, QEvent* event)
 {
 #if defined(ROBOSDP_HAVE_VTK)
+    if (m_cameraToolbar != nullptr && m_cameraToolbar->parentWidget() != nullptr)
+    {
+        auto* viewportFrame = m_cameraToolbar->parentWidget();
+        if (event->type() == QEvent::MouseMove)
+        {
+            if (auto* mouseEvent = dynamic_cast<QMouseEvent*>(event))
+            {
+                QWidget* sourceWidget = qobject_cast<QWidget*>(watched);
+                if (sourceWidget != nullptr)
+                {
+                    const QPoint viewportPos = sourceWidget->mapTo(viewportFrame, mouseEvent->pos());
+                    UpdateCameraToolbarVisibility(viewportPos);
+                }
+            }
+        }
+        else if (event->type() == QEvent::Leave && watched == m_vtkWidget)
+        {
+            const QPoint viewportPos = viewportFrame->mapFromGlobal(QCursor::pos());
+            UpdateCameraToolbarVisibility(viewportPos);
+        }
+    }
+
     if (watched == m_vtkWidget
         && (event->type() == QEvent::MouseButtonRelease
             || event->type() == QEvent::Wheel))
@@ -2078,6 +2301,10 @@ bool RobotVtkView::eventFilter(QObject* watched, QEvent* event)
         int h = resizeEvent->size().height();
         Q_UNUSED(w);
         m_scaleBarOverlay->setGeometry(8, h - 44, 260, 40);
+        PositionCameraToolbar();
+        UpdateCameraToolbarVisibility(resizeEvent->size().isValid()
+                                          ? m_scaleBarOverlay->parentWidget()->mapFromGlobal(QCursor::pos())
+                                          : QPoint(-1, -1));
         PositionAnalysisLayerPanel();
         RaiseViewOverlays();
     }
