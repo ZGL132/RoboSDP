@@ -73,8 +73,8 @@ struct AnalysisLayerUiSpec
 };
 
 const std::array<AnalysisLayerUiSpec, 5> kAnalysisLayerSpecs {{
-    {kLayerRequirementWorkspace, kLayerRequirementWorkspaceName, "#3b82f6", true},
-    {kLayerRequirementKeyPoses, kLayerRequirementKeyPosesName, "#f59e0b", true},
+    {kLayerRequirementWorkspace, kLayerRequirementWorkspaceName, "#3b82f6", false},
+    {kLayerRequirementKeyPoses, kLayerRequirementKeyPosesName, "#f59e0b", false},
     {kLayerKinematicsWorkspace, kLayerKinematicsWorkspaceName, "#22c55e", false},
     {kLayerKinematicsSingularity, kLayerKinematicsSingularityName, "#ef4444", false},
     {kLayerKinematicsIkCompare, kLayerKinematicsIkCompareName, "#06b6d4", true}
@@ -666,10 +666,6 @@ void RobotVtkView::ShowWorkspacePointCloud(
 void RobotVtkView::ShowRequirementWorkspace(const std::vector<std::array<double, 3>>& workspacePoints)
 {
     m_requirementWorkspacePositions = workspacePoints;
-    if (!workspacePoints.empty())
-    {
-        AutoEnableAnalysisLayerIfDefault(QString::fromLatin1(kLayerRequirementWorkspace));
-    }
     RenderAnalysisLayers(true);
 }
 
@@ -770,10 +766,6 @@ void RobotVtkView::ShowRequirementKeyPoses(
 {
     m_requirementKeyPoses = keyPoses;
     m_requirementSelectedKeyPoseIndex = selectedIndex;
-    if (!keyPoses.empty())
-    {
-        AutoEnableAnalysisLayerIfDefault(QString::fromLatin1(kLayerRequirementKeyPoses));
-    }
     RenderRequirementKeyPoseLayer();
 }
 

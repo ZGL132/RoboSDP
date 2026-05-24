@@ -575,10 +575,10 @@ QGroupBox* RequirementWidget::CreateWorkspaceGroup()
     m_hollow_wrist_requirement_combo = new QComboBox(workspaceGroup);
     m_reserved_channel_diameter_spin = CreateDoubleSpinBox(0.0, 1.0e6, 2, 1.0);
     m_show_workspace_preview_check = new QCheckBox(QStringLiteral("显示工作空间"), workspaceGroup);
-    m_show_workspace_preview_check->setChecked(true);
+    m_show_workspace_preview_check->setChecked(false);
     m_show_workspace_preview_check->setToolTip(QStringLiteral("控制三维视图中的工作空间边界显示，不影响保存内容。"));
     m_show_key_pose_preview_check = new QCheckBox(QStringLiteral("显示关键工位"), keyPoseGroup);
-    m_show_key_pose_preview_check->setChecked(true);
+    m_show_key_pose_preview_check->setChecked(false);
     m_show_key_pose_preview_check->setToolTip(QStringLiteral("控制三维视图中的关键工位标记显示，不影响保存内容。"));
     m_key_pose_list = new QListWidget(keyPoseGroup);
     m_key_pose_list->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -995,7 +995,7 @@ void RequirementWidget::PopulateForm(const RoboSDP::Requirement::Dto::Requiremen
     RefreshTemplateOptions();
 
     RefreshKeyPoseList();
-    m_current_key_pose_index = 0;
+    m_current_key_pose_index = m_working_model.workspace_requirements.key_poses.empty() ? -1 : 0;
     {
         const QSignalBlocker blocker(m_key_pose_list);
         m_key_pose_list->setCurrentRow(m_current_key_pose_index);

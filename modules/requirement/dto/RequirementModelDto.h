@@ -129,7 +129,6 @@ struct RequirementModelDto
     static RequirementModelDto CreateDefault()
     {
         RequirementModelDto dto;
-        dto.workspace_requirements.key_poses.push_back(RequirementKeyPoseDto {});
         dto.project_meta.description = QStringLiteral("参考 KUKA KR 10 R1100-2 级别 6R 工业机器人任务需求默认值");
         dto.workspace_requirements.base_constraints.insert(QStringLiteral("base_mount_type"), QStringLiteral("floor"));
         dto.workspace_requirements.base_constraints.insert(QStringLiteral("hollow_wrist_required"), false);

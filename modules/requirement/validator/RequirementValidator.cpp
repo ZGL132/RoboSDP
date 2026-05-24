@@ -230,16 +230,7 @@ RequirementValidationResult RequirementValidator::Validate(
             QStringLiteral("预留通道直径必须大于或等于 0。"));
     }
 
-    if (model.workspace_requirements.key_poses.empty())
-    {
-        AddIssue(
-            result,
-            QStringLiteral("workspace_requirements.key_poses"),
-            QStringLiteral("REQ_KEY_POSES_EMPTY"),
-            QStringLiteral("关键工位至少需要 1 项。"),
-            ValidationSeverity::Warning);
-    }
-    else
+    if (!model.workspace_requirements.key_poses.empty())
     {
         QSet<QString> poseIds;
         for (std::size_t index = 0; index < model.workspace_requirements.key_poses.size(); ++index)
