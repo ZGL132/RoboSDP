@@ -3,6 +3,7 @@
 
 #include <QCheckBox>
 #include <QFrame>
+#include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
@@ -78,6 +79,8 @@ const std::array<AnalysisLayerUiSpec, 5> kAnalysisLayerSpecs {{
     {kLayerKinematicsSingularity, kLayerKinematicsSingularityName, "#ef4444", false},
     {kLayerKinematicsIkCompare, kLayerKinematicsIkCompareName, "#06b6d4", true}
 }};
+
+constexpr double kAnalysisLayerOverlayOpacity = 0.6;
 
 const AnalysisLayerUiSpec* FindLayerSpec(const QString& layerId)
 {
@@ -1321,18 +1324,18 @@ void RobotVtkView::BuildAnalysisLayerPanel(QWidget* viewportFrame)
         "background:transparent;"
         "border:none;"
         "}"
-        "QLabel#analysisLayerTitle{color:#ffffff;font-size:14px;font-weight:700;}"
-        "QCheckBox{color:#f8fafc;font-size:13px;font-weight:600;spacing:7px;background:transparent;}"
-        "QCheckBox::indicator{width:13px;height:13px;}"
-        "QLabel#analysisLayerSwatch{min-width:12px;max-width:12px;min-height:12px;max-height:12px;}"));
+        "QLabel#analysisLayerTitle{color:#ffffff;font-size:28px;font-weight:700;}"
+        "QCheckBox{color:#f8fafc;font-size:26px;font-weight:600;spacing:14px;background:transparent;}"
+        "QCheckBox::indicator{width:26px;height:26px;}"
+        "QLabel#analysisLayerSwatch{min-width:24px;max-width:24px;min-height:24px;max-height:24px;}"));
+
+    auto* opacityEffect = new QGraphicsOpacityEffect(panel);
+    opacityEffect->setOpacity(kAnalysisLayerOverlayOpacity);
+    panel->setGraphicsEffect(opacityEffect);
 
     auto* panelLayout = new QVBoxLayout(panel);
     panelLayout->setContentsMargins(0, 0, 0, 0);
-    panelLayout->setSpacing(6);
-
-    auto* title = new QLabel(QStringLiteral("分析图层"), panel);
-    title->setObjectName(QStringLiteral("analysisLayerTitle"));
-    panelLayout->addWidget(title);
+    panelLayout->setSpacing(12);
 
     for (const auto& spec : kAnalysisLayerSpecs)
     {
@@ -1342,7 +1345,7 @@ void RobotVtkView::BuildAnalysisLayerPanel(QWidget* viewportFrame)
         auto* row = new QWidget(panel);
         auto* rowLayout = new QHBoxLayout(row);
         rowLayout->setContentsMargins(0, 0, 0, 0);
-        rowLayout->setSpacing(5);
+        rowLayout->setSpacing(10);
 
         auto* swatch = new QLabel(row);
         swatch->setObjectName(QStringLiteral("analysisLayerSwatch"));
@@ -1492,7 +1495,7 @@ void RobotVtkView::PositionAnalysisLayerPanel()
 
     auto* parent = m_analysisLayerPanel->parentWidget();
     m_analysisLayerPanel->adjustSize();
-    const int margin = 14;
+    const int margin = 28;
     const int x = std::max(margin, parent->width() - m_analysisLayerPanel->width() - margin);
     m_analysisLayerPanel->move(x, margin);
 }
