@@ -181,6 +181,9 @@ private:
 
     RoboSDP::Kinematics::Dto::KinematicModelDto CollectModelFromForm() const;
     void PopulateForm(const RoboSDP::Kinematics::Dto::KinematicModelDto& model);
+    void LoadSelectedFrameEditor();
+    void StoreSelectedFrameEditor();
+    void SetFrameEditorEnabled(bool enabled);
     void RefreshBackendDiagnostics();
     void RenderResults();
     void RefreshEditingState();
@@ -277,6 +280,10 @@ private:
     QLabel* m_dh_draft_level_label = nullptr;
     QLabel* m_dh_draft_status_label = nullptr;
     QLabel* m_dh_readonly_banner_label = nullptr;
+    QComboBox* m_frame_selector_combo = nullptr;
+    QCheckBox* m_frame_enabled_check = nullptr;
+    std::array<QDoubleSpinBox*, 6> m_frame_editor_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    int m_selected_frame_editor_index = 0;
     std::array<QDoubleSpinBox*, 6> m_base_frame_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     std::array<QDoubleSpinBox*, 6> m_flange_frame_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     QCheckBox* m_tool_frame_enabled_check = nullptr;

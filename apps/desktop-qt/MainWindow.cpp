@@ -259,6 +259,7 @@ void MainWindow::CreateProjectTreeDock()
 
     m_projectTree = new QTreeWidget(m_projectTreeDock);
     m_projectTree->setHeaderLabel(QStringLiteral("项目树"));
+    m_projectTree->setHeaderHidden(true);
     m_projectTree->setMinimumWidth(80);
     m_projectTree->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
 

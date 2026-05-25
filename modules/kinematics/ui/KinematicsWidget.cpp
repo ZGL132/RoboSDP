@@ -604,9 +604,7 @@ void KinematicsWidget::BuildUi()
             });
         }
     };
-    connectPreviewEditors(m_base_frame_spins);
-    connectPreviewEditors(m_flange_frame_spins);
-    connectPreviewEditors(m_tcp_frame_spins);
+    connectPreviewEditors(m_frame_editor_spins);
 }
 
 QWidget* KinematicsWidget::CreateDesignInputPage()
@@ -764,30 +762,46 @@ QWidget* KinematicsWidget::CreateModelGroup()
 
     // 3. Physical frames
     auto* framesWidget = new QWidget(pageWidget);
-    auto* framesLayout = new QGridLayout(framesWidget);
+    auto* framesLayout = new QVBoxLayout(framesWidget);
+    framesLayout->setContentsMargins(8, 8, 8, 8);
     framesLayout->setSpacing(8);
+
+    auto* selectorLayout = new QHBoxLayout();
+    selectorLayout->setSpacing(8);
+    m_frame_selector_combo = new QComboBox(framesWidget);
+    m_frame_selector_combo->addItem(QStringLiteral("Base Frame (基座)"), 0);
+    m_frame_selector_combo->addItem(QStringLiteral("Flange Frame (法兰)"), 1);
+    m_frame_selector_combo->addItem(QStringLiteral("Tool Frame (工具)"), 2);
+    m_frame_selector_combo->addItem(QStringLiteral("Workpiece Frame (工件)"), 3);
+    m_frame_selector_combo->addItem(QStringLiteral("TCP Frame (工具中心点)"), 4);
+    m_frame_enabled_check = new QCheckBox(QStringLiteral("启用当前坐标系"), framesWidget);
+    m_frame_enabled_check->setVisible(false);
+    selectorLayout->addWidget(new QLabel(QStringLiteral("当前坐标系"), framesWidget));
+    selectorLayout->addWidget(m_frame_selector_combo, 1);
+    selectorLayout->addWidget(m_frame_enabled_check);
+    framesLayout->addLayout(selectorLayout);
 
     const QStringList poseLabels {
         QStringLiteral("X [m]"), QStringLiteral("Y [m]"), QStringLiteral("Z [m]"),
         QStringLiteral("RX [deg]"), QStringLiteral("RY [deg]"), QStringLiteral("RZ [deg]")};
+    auto* grid = new QGridLayout();
+    grid->setHorizontalSpacing(10);
+    grid->setVerticalSpacing(6);
+    for (int index = 0; index < 6; ++index)
+    {
+        const bool isTranslation = index < 3;
+        auto* spinBox = CreateDoubleSpinBox(
+            isTranslation ? -10.0 : -360.0,
+            isTranslation ? 10.0 : 360.0,
+            isTranslation ? 4 : 3,
+            isTranslation ? 0.01 : 1.0);
+        m_frame_editor_spins[static_cast<std::size_t>(index)] = spinBox;
+        grid->addWidget(new QLabel(poseLabels.at(index), framesWidget), index / 3, (index % 3) * 2);
+        grid->addWidget(spinBox, index / 3, (index % 3) * 2 + 1);
+    }
+    framesLayout->addLayout(grid);
 
-    auto createFrameEditor = [this, &poseLabels](
-                                 const QString& title,
-                                 std::array<QDoubleSpinBox*, 6>& editors,
-                                 const QString& tip,
-                                 QCheckBox** enabledCheckBox = nullptr) -> QGroupBox* {
-        auto* frameGroup = new QGroupBox(title);
-        frameGroup->setToolTip(tip);
-        auto* frameLayout = new QVBoxLayout(frameGroup);
-
-        if (enabledCheckBox != nullptr)
-        {
-            *enabledCheckBox = new QCheckBox(QStringLiteral("启用"), frameGroup);
-            (*enabledCheckBox)->setChecked(false);
-            frameLayout->addWidget(*enabledCheckBox);
-        }
-
-        auto* grid = new QGridLayout();
+    auto createHiddenFrameEditors = [this, pageWidget](std::array<QDoubleSpinBox*, 6>& editors) {
         for (int index = 0; index < 6; ++index)
         {
             const bool isTranslation = index < 3;
@@ -796,26 +810,16 @@ QWidget* KinematicsWidget::CreateModelGroup()
                 isTranslation ? 10.0 : 360.0,
                 isTranslation ? 4 : 3,
                 isTranslation ? 0.01 : 1.0);
+            spinBox->setParent(pageWidget);
+            spinBox->hide();
             editors[static_cast<std::size_t>(index)] = spinBox;
-            grid->addWidget(new QLabel(poseLabels.at(index), frameGroup), index, 0);
-            grid->addWidget(spinBox, index, 1);
         }
-
-        frameLayout->addLayout(grid);
-        return frameGroup;
     };
-
-    auto* baseGroup = createFrameEditor(QStringLiteral("Base Frame (基座)"), m_base_frame_spins, QStringLiteral("机器人的全局基座坐标系"));
-    auto* flangeGroup = createFrameEditor(QStringLiteral("Flange Frame (法兰)"), m_flange_frame_spins, QStringLiteral("机器人末端法兰盘坐标系"));
-    auto* toolGroup = createFrameEditor(QStringLiteral("Tool Frame (工具)"), m_tool_frame_spins, QStringLiteral("安装在法兰上的工具坐标系"), &m_tool_frame_enabled_check);
-    auto* workpieceGroup = createFrameEditor(QStringLiteral("Workpiece Frame (工件)"), m_workpiece_frame_spins, QStringLiteral("环境中的工件参考坐标系"), &m_workpiece_frame_enabled_check);
-    auto* tcpGroup = createFrameEditor(QStringLiteral("TCP Frame (工具中心点)"), m_tcp_frame_spins, QStringLiteral("控制的最终工具中心点坐标系"));
-
-    framesLayout->addWidget(baseGroup, 0, 0);
-    framesLayout->addWidget(flangeGroup, 0, 1);
-    framesLayout->addWidget(workpieceGroup, 1, 0);
-    framesLayout->addWidget(toolGroup, 1, 1);
-    framesLayout->addWidget(tcpGroup, 2, 1);
+    createHiddenFrameEditors(m_base_frame_spins);
+    createHiddenFrameEditors(m_flange_frame_spins);
+    createHiddenFrameEditors(m_tool_frame_spins);
+    createHiddenFrameEditors(m_workpiece_frame_spins);
+    createHiddenFrameEditors(m_tcp_frame_spins);
 
     auto* framesSection = new CollapsibleSectionWidget(QStringLiteral("物理坐标系设置"), pageWidget);
     framesSection->SetContent(framesWidget);
@@ -825,23 +829,49 @@ QWidget* KinematicsWidget::CreateModelGroup()
 
     pageLayout->addStretch();
 
-    if (m_tool_frame_enabled_check != nullptr)
+    if (m_frame_selector_combo != nullptr)
     {
-        connect(m_tool_frame_enabled_check, &QCheckBox::toggled, this, [this](bool checked) {
-            for(auto* spin : m_tool_frame_spins) {
-                if(spin) spin->setEnabled(checked);
+        connect(
+            m_frame_selector_combo,
+            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            this,
+            [this](int index) {
+                if (m_is_populating_form)
+                {
+                    m_selected_frame_editor_index = index;
+                    LoadSelectedFrameEditor();
+                    return;
+                }
+                StoreSelectedFrameEditor();
+                m_selected_frame_editor_index = index;
+                LoadSelectedFrameEditor();
+            });
+    }
+
+    if (m_frame_enabled_check != nullptr)
+    {
+        connect(m_frame_enabled_check, &QCheckBox::toggled, this, [this](bool checked) {
+            if (m_is_populating_form)
+            {
+                return;
             }
+            if (m_selected_frame_editor_index == 2 && m_tool_frame_enabled_check != nullptr)
+            {
+                m_tool_frame_enabled_check->setChecked(checked);
+            }
+            else if (m_selected_frame_editor_index == 3 && m_workpiece_frame_enabled_check != nullptr)
+            {
+                m_workpiece_frame_enabled_check->setChecked(checked);
+            }
+            SetFrameEditorEnabled(m_state.current_model.dh_editable);
+            SyncStructureAndPreview();
         });
     }
 
-    if (m_workpiece_frame_enabled_check != nullptr)
-    {
-        connect(m_workpiece_frame_enabled_check, &QCheckBox::toggled, this, [this](bool checked) {
-            for(auto* spin : m_workpiece_frame_spins) {
-                if(spin) spin->setEnabled(checked);
-            }
-        });
-    }
+    m_tool_frame_enabled_check = new QCheckBox(pageWidget);
+    m_tool_frame_enabled_check->hide();
+    m_workpiece_frame_enabled_check = new QCheckBox(pageWidget);
+    m_workpiece_frame_enabled_check->hide();
 
     return pageWidget;
 }
@@ -1425,6 +1455,8 @@ void KinematicsWidget::SetupJointLimitTableColumns()
 
 RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsWidget::CollectModelFromForm() const
 {
+    const_cast<KinematicsWidget*>(this)->StoreSelectedFrameEditor();
+
     RoboSDP::Kinematics::Dto::KinematicModelDto model = m_state.current_model;
     if (model.master_model_type.trimmed().isEmpty())
     {
@@ -1506,6 +1538,10 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
     PopulateOptionalPoseEditors(m_tool_frame_enabled_check, m_tool_frame_spins, model.tool_frame);
     PopulateOptionalPoseEditors(m_workpiece_frame_enabled_check, m_workpiece_frame_spins, model.workpiece_frame);
     PopulateTcpEditors(m_tcp_frame_spins, model.tcp_frame);
+    m_selected_frame_editor_index = m_frame_selector_combo != nullptr
+        ? m_frame_selector_combo->currentIndex()
+        : 0;
+    LoadSelectedFrameEditor();
 
     m_dh_table->setRowCount(static_cast<int>(model.links.size()));
     for (int row = 0; row < static_cast<int>(model.links.size()); ++row)
@@ -1566,6 +1602,112 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
     RefreshValidationState();
 }
 
+void KinematicsWidget::StoreSelectedFrameEditor()
+{
+    if (m_frame_editor_spins[0] == nullptr)
+    {
+        return;
+    }
+
+    const bool wasPopulating = m_is_populating_form;
+    m_is_populating_form = true;
+    switch (m_selected_frame_editor_index)
+    {
+    case 0:
+        PopulatePoseEditors(m_base_frame_spins, ReadPoseEditors(m_frame_editor_spins));
+        break;
+    case 1:
+        PopulatePoseEditors(m_flange_frame_spins, ReadPoseEditors(m_frame_editor_spins));
+        break;
+    case 2:
+        PopulatePoseEditors(m_tool_frame_spins, ReadPoseEditors(m_frame_editor_spins));
+        break;
+    case 3:
+        PopulatePoseEditors(m_workpiece_frame_spins, ReadPoseEditors(m_frame_editor_spins));
+        break;
+    case 4:
+        PopulateTcpEditors(m_tcp_frame_spins, ReadTcpEditors(m_frame_editor_spins));
+        break;
+    default:
+        break;
+    }
+    m_is_populating_form = wasPopulating;
+}
+
+void KinematicsWidget::LoadSelectedFrameEditor()
+{
+    if (m_frame_editor_spins[0] == nullptr)
+    {
+        return;
+    }
+
+    const bool wasPopulating = m_is_populating_form;
+    m_is_populating_form = true;
+    switch (m_selected_frame_editor_index)
+    {
+    case 0:
+        PopulatePoseEditors(m_frame_editor_spins, ReadPoseEditors(m_base_frame_spins));
+        break;
+    case 1:
+        PopulatePoseEditors(m_frame_editor_spins, ReadPoseEditors(m_flange_frame_spins));
+        break;
+    case 2:
+        PopulatePoseEditors(m_frame_editor_spins, ReadPoseEditors(m_tool_frame_spins));
+        if (m_frame_enabled_check != nullptr && m_tool_frame_enabled_check != nullptr)
+        {
+            m_frame_enabled_check->setChecked(m_tool_frame_enabled_check->isChecked());
+        }
+        break;
+    case 3:
+        PopulatePoseEditors(m_frame_editor_spins, ReadPoseEditors(m_workpiece_frame_spins));
+        if (m_frame_enabled_check != nullptr && m_workpiece_frame_enabled_check != nullptr)
+        {
+            m_frame_enabled_check->setChecked(m_workpiece_frame_enabled_check->isChecked());
+        }
+        break;
+    case 4:
+        PopulateTcpEditors(m_frame_editor_spins, ReadTcpEditors(m_tcp_frame_spins));
+        break;
+    default:
+        break;
+    }
+    if (m_frame_enabled_check != nullptr)
+    {
+        const bool optionalFrame =
+            m_selected_frame_editor_index == 2 || m_selected_frame_editor_index == 3;
+        m_frame_enabled_check->setVisible(optionalFrame);
+        if (!optionalFrame)
+        {
+            m_frame_enabled_check->setChecked(true);
+        }
+    }
+    m_is_populating_form = wasPopulating;
+    SetFrameEditorEnabled(m_state.current_model.dh_editable);
+}
+
+void KinematicsWidget::SetFrameEditorEnabled(bool enabled)
+{
+    bool currentEnabled = enabled;
+    if (m_selected_frame_editor_index == 2 && m_tool_frame_enabled_check != nullptr)
+    {
+        currentEnabled = enabled && m_tool_frame_enabled_check->isChecked();
+    }
+    else if (m_selected_frame_editor_index == 3 && m_workpiece_frame_enabled_check != nullptr)
+    {
+        currentEnabled = enabled && m_workpiece_frame_enabled_check->isChecked();
+    }
+
+    SetEditorsEnabled(m_frame_editor_spins, currentEnabled);
+    if (m_frame_selector_combo != nullptr)
+    {
+        m_frame_selector_combo->setEnabled(enabled);
+    }
+    if (m_frame_enabled_check != nullptr)
+    {
+        m_frame_enabled_check->setEnabled(enabled);
+    }
+}
+
 void KinematicsWidget::RefreshEditingState()
 {
     const bool dhEditable = m_state.current_model.dh_editable;
@@ -1613,6 +1755,7 @@ void KinematicsWidget::RefreshEditingState()
         m_workpiece_frame_enabled_check->setEnabled(dhEditable);
         SetEditorsEnabled(m_workpiece_frame_spins, dhEditable && m_workpiece_frame_enabled_check->isChecked());
     }
+    SetFrameEditorEnabled(dhEditable);
 
 
     if (m_dh_readonly_banner_label != nullptr)
