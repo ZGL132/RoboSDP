@@ -919,16 +919,28 @@ void RobotVtkView::ClearIkPoseComparisonActors()
     if (m_ik_target_label_actor != nullptr)
     {
         m_renderer->RemoveActor(m_ik_target_label_actor);
+        if (m_label_renderer != nullptr)
+        {
+            m_label_renderer->RemoveActor(m_ik_target_label_actor);
+        }
         m_ik_target_label_actor = nullptr;
     }
     if (m_ik_actual_label_actor != nullptr)
     {
         m_renderer->RemoveActor(m_ik_actual_label_actor);
+        if (m_label_renderer != nullptr)
+        {
+            m_label_renderer->RemoveActor(m_ik_actual_label_actor);
+        }
         m_ik_actual_label_actor = nullptr;
     }
     if (m_ik_error_label_actor != nullptr)
     {
         m_renderer->RemoveActor(m_ik_error_label_actor);
+        if (m_label_renderer != nullptr)
+        {
+            m_label_renderer->RemoveActor(m_ik_error_label_actor);
+        }
         m_ik_error_label_actor = nullptr;
     }
 #endif
@@ -961,6 +973,10 @@ void RobotVtkView::ClearRequirementKeyPoseActors()
         if (actor != nullptr)
         {
             m_renderer->RemoveActor(actor);
+            if (m_label_renderer != nullptr)
+            {
+                m_label_renderer->RemoveActor(actor);
+            }
         }
     }
     m_requirement_key_pose_marker_actors.clear();
