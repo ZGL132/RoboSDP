@@ -2352,15 +2352,34 @@ void KinematicsWidget::RenderResults()
         if (m_state.last_ik_result.success)
         {
             lines.push_back(QStringLiteral("状态：成功"));
-            lines.push_back(QStringLiteral("求解器：%1").arg(m_state.last_ik_result.solver_id.isEmpty()
-                ? QStringLiteral("默认") : m_state.last_ik_result.solver_id));
+            if (m_state.last_ik_result.used_fallback)
+            {
+                lines.push_back(QStringLiteral("请求求解器：%1").arg(
+                    m_state.last_ik_result.requested_solver_id.isEmpty()
+                        ? QStringLiteral("默认")
+                        : m_state.last_ik_result.requested_solver_id));
+                lines.push_back(QStringLiteral("实际求解器：%1").arg(
+                    m_state.last_ik_result.solver_id.isEmpty()
+                        ? QStringLiteral("默认")
+                        : m_state.last_ik_result.solver_id));
+                if (!m_state.last_ik_result.fallback_reason.trimmed().isEmpty())
+                {
+                    lines.push_back(QStringLiteral("回退原因：%1")
+                        .arg(m_state.last_ik_result.fallback_reason.trimmed()));
+                }
+            }
+            else
+            {
+                lines.push_back(QStringLiteral("求解器：%1").arg(m_state.last_ik_result.solver_id.isEmpty()
+                    ? QStringLiteral("默认") : m_state.last_ik_result.solver_id));
+            }
             lines.push_back(QStringLiteral("解 = %1").arg(FormatJointVector(m_state.last_ik_result.joint_positions_deg)));
             lines.push_back(
                 QStringLiteral("位置误差 = %1 mm，姿态误差 = %2 deg，迭代次数 = %3")
                     .arg(m_state.last_ik_result.position_error_mm, 0, 'f', 3)
                     .arg(m_state.last_ik_result.orientation_error_deg, 0, 'f', 3)
                     .arg(m_state.last_ik_result.iteration_count));
-            if (m_state.last_ik_result.total_solutions_found > 1)
+            if (m_state.last_ik_result.total_solutions_found > 0)
             {
                 lines.push_back(QStringLiteral("过滤前总解数 = %1，有效解数 = %2")
                     .arg(m_state.last_ik_result.total_solutions_found)
@@ -2383,7 +2402,7 @@ void KinematicsWidget::RenderResults()
         {
             const auto& allSol = m_state.last_ik_result.all_solutions_deg;
             const bool hasMultiple = (allSol.size() > 1);
-            m_ik_solution_combo->setEnabled(hasMultiple);
+            m_ik_solution_combo->setEnabled(!allSol.empty());
             m_ik_solution_combo->blockSignals(true);
             m_ik_solution_combo->clear();
 
@@ -2402,8 +2421,17 @@ void KinematicsWidget::RenderResults()
             }
             else
             {
+                m_ik_solution_combo->addItem(
+                    m_state.last_ik_result.used_fallback
+                        ? QStringLiteral("数值 IK 无多解")
+                        : QStringLiteral("无解析多解"));
+                m_ik_solution_combo->setEnabled(false);
                 for (auto* sp : m_ik_solution_spins)
                     sp->setValue(0.0);
+            }
+            if (!hasMultiple)
+            {
+                m_ik_solution_combo->setEnabled(false);
             }
             m_ik_solution_combo->blockSignals(false);
         }

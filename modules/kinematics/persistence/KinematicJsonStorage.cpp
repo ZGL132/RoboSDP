@@ -366,6 +366,12 @@ QJsonObject ToIkResultObject(const RoboSDP::Kinematics::Dto::IkResultDto& result
     object.insert(QStringLiteral("position_error_mm"), result.position_error_mm);
     object.insert(QStringLiteral("orientation_error_deg"), result.orientation_error_deg);
     object.insert(QStringLiteral("iteration_count"), result.iteration_count);
+    object.insert(QStringLiteral("solver_id"), result.solver_id);
+    object.insert(QStringLiteral("requested_solver_id"), result.requested_solver_id);
+    object.insert(QStringLiteral("used_fallback"), result.used_fallback);
+    object.insert(QStringLiteral("fallback_reason"), result.fallback_reason);
+    object.insert(QStringLiteral("total_solutions_found"), result.total_solutions_found);
+    object.insert(QStringLiteral("valid_solution_count"), result.valid_solution_count);
     return object;
 }
 
@@ -378,6 +384,12 @@ RoboSDP::Kinematics::Dto::IkResultDto FromIkResultObject(const QJsonObject& obje
     result.position_error_mm = ReadDouble(object, QStringLiteral("position_error_mm"));
     result.orientation_error_deg = ReadDouble(object, QStringLiteral("orientation_error_deg"));
     result.iteration_count = ReadInt(object, QStringLiteral("iteration_count"));
+    result.solver_id = ReadString(object, QStringLiteral("solver_id"));
+    result.requested_solver_id = ReadString(object, QStringLiteral("requested_solver_id"));
+    result.used_fallback = ReadBool(object, QStringLiteral("used_fallback"));
+    result.fallback_reason = ReadString(object, QStringLiteral("fallback_reason"));
+    result.total_solutions_found = ReadInt(object, QStringLiteral("total_solutions_found"));
+    result.valid_solution_count = ReadInt(object, QStringLiteral("valid_solution_count"));
     return result;
 }
 

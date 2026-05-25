@@ -1739,6 +1739,7 @@ RoboSDP::Kinematics::Dto::IkResultDto KinematicsService::SolveIk(
     // 根据求解器类型分发：解析 IK 走闭式求解链路，其余走默认 IK 适配器
     if (model.ik_solver_config.solver_type == QStringLiteral("analytical_closed_form"))
     {
+        const QString requestedSolverId = QStringLiteral("analytical_closed_form_ik");
         if (!m_analytical_ik_solver_adapter)
         {
             m_analytical_ik_solver_adapter =
@@ -1747,11 +1748,25 @@ RoboSDP::Kinematics::Dto::IkResultDto KinematicsService::SolveIk(
 
         auto result = m_analytical_ik_solver_adapter->SolveIk(model, request);
         result.solver_id = m_analytical_ik_solver_adapter->SolverId();
+        result.requested_solver_id = requestedSolverId;
 
-        // Pieper 不满足时自动回退数值 IK
-        if (!result.success && result.total_solutions_found == 0)
+        // 解析 IK 未产出有效解时自动回退数值 IK，但保留诊断，避免界面误以为解析链路成功。
+        if (!result.success || result.valid_solution_count == 0)
         {
-            result = m_ik_solver_adapter->SolveIk(model, request);
+            const QString fallbackReason = result.message.trimmed().isEmpty()
+                ? QStringLiteral("闭式解析 IK 未产出有效解。")
+                : result.message.trimmed();
+            auto fallbackResult = m_ik_solver_adapter->SolveIk(model, request);
+            fallbackResult.requested_solver_id = requestedSolverId;
+            fallbackResult.used_fallback = true;
+            fallbackResult.fallback_reason = fallbackReason;
+            fallbackResult.solver_id = m_ik_solver_adapter->SolverId();
+            fallbackResult.message = QStringLiteral("%1（请求闭式解析 IK 已回退到 Pinocchio 数值 IK；回退原因：%2）")
+                .arg(fallbackResult.message.trimmed().isEmpty()
+                    ? QStringLiteral("IK 求解完成。")
+                    : fallbackResult.message.trimmed())
+                .arg(fallbackReason);
+            result = fallbackResult;
         }
         return result;
     }
@@ -1759,6 +1774,7 @@ RoboSDP::Kinematics::Dto::IkResultDto KinematicsService::SolveIk(
     // 默认：数值 IK（Pinocchio 雅可比转置等）
     auto result = m_ik_solver_adapter->SolveIk(model, request);
     result.solver_id = m_ik_solver_adapter->SolverId();
+    result.requested_solver_id = result.solver_id;
     return result;
 }
 

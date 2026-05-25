@@ -195,103 +195,57 @@ std::vector<std::array<double, 3>> AnalyticalIkSolverAdapter::SolveArm(
     const Eigen::Vector3d& wristCenter,
     const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links)
 {
-    // 使用 standard DH 参数
-    // d1 = links[0].d  (base to shoulder offset)
-    // a2 = links[1].a  (upper arm length)
-    // a3 = links[2].a  (forearm length)
-    // d4 = links[3].d  (wrist offset along Z3)
-
     const double d1 = links[0].d;
+    const double a1 = links[0].a;
     const double a2 = links[1].a;
     const double a3 = links[2].a;
     const double d4 = links[3].d;
+    const double forearmLength = std::hypot(a3, d4);
+    if (a2 <= kSingularTolerance || forearmLength <= kSingularTolerance)
+        return {};
 
     const double Px = wristCenter.x();
     const double Py = wristCenter.y();
     const double Pz = wristCenter.z();
+    const double rho = std::hypot(Px, Py);
+    const double baseAngle = std::atan2(Px, -Py);
+    const double planarY = d1 - Pz;
+    const double forearmPhase = std::atan2(a3, d4);
 
     std::vector<std::array<double, 3>> solutions;
-
-    // ── θ1: 肩部 (shoulder left/right) ──
-    const double r_xy = std::sqrt(Px * Px + Py * Py);
-    if (r_xy < std::abs(d4) - kSingularTolerance)
-        return solutions; // 超出肩部可达范围
-
-    const double phi = std::atan2(Py, Px);
-    const double r_safe = std::max(r_xy, kSingularTolerance);
-    double delta = std::asin(d4 / r_safe);
-    // 防止数值越界导致的 NaN
-    if (!std::isfinite(delta))
-        delta = 0.0;
-
-    const double th1_candidates[2] = {
-        NormalizeAngleDeg(RadToDeg(phi + delta)),
-        NormalizeAngleDeg(RadToDeg(phi + kPi - delta))
-    };
-
-    for (int i = 0; i < 2; ++i)
+    for (const double shoulderSign : {1.0, -1.0})
     {
-        const double th1_deg = th1_candidates[i];
-        const double c1 = std::cos(DegToRad(th1_deg));
-        const double s1 = std::sin(DegToRad(th1_deg));
+        const double th1Deg = NormalizeAngleDeg(
+            RadToDeg(baseAngle + (shoulderSign < 0.0 ? kPi : 0.0)));
+        const double planarX = shoulderSign * rho - a1;
 
-        // r_proj = Px * cos(θ1) + Py * sin(θ1) - d4 * (sin² + cos²) ...
-        // Formula: r_proj = (Px - d4*sin(th1)) / cos(th1) or alternate
-        double r_proj;
-        if (std::abs(c1) > kSingularTolerance)
+        const double cosIncluded =
+            (planarX * planarX + planarY * planarY - a2 * a2 - forearmLength * forearmLength) /
+            (2.0 * a2 * forearmLength);
+        if (cosIncluded < -1.0 - kSingularTolerance ||
+            cosIncluded > 1.0 + kSingularTolerance)
         {
-            r_proj = (Px - d4 * s1) / c1;
-        }
-        else if (std::abs(s1) > kSingularTolerance)
-        {
-            r_proj = (Py + d4 * c1) / s1;
-        }
-        else
-        {
-            continue; // 奇异
+            continue;
         }
 
-        // B = Pz - d1
-        const double B = Pz - d1;
-
-        // ── θ3: 肘部 (elbow up/down) ──
-        const double a2sq = a2 * a2;
-        const double a3sq = a3 * a3;
-        const double cos_th3 = (r_proj * r_proj + B * B - a2sq - a3sq) / (2.0 * a2 * a3 + kSingularTolerance);
-
-        if (cos_th3 < -1.0 - kSingularTolerance || cos_th3 > 1.0 + kSingularTolerance)
-            continue; // 肘部不可达
-
-        const double th3_rad = SafeAcos(cos_th3);
-        const double th3_candidates[2] = {
-            NormalizeAngleDeg(RadToDeg(th3_rad)),    // elbow up
-            NormalizeAngleDeg(RadToDeg(-th3_rad))     // elbow down
-        };
-
-        for (int j = 0; j < 2; ++j)
+        const double included = SafeAcos(cosIncluded);
+        for (const double includedSigned : {included, -included})
         {
-            const double th3_deg = th3_candidates[j];
-            const double c3 = std::cos(DegToRad(th3_deg));
-            const double s3 = std::sin(DegToRad(th3_deg));
-
-            // ── θ2 ──
-            const double C = a2 + a3 * c3;
-            const double D = a3 * s3;
-            const double denom = C * C + D * D;
-            if (denom < kSingularTolerance)
-                continue;
-
-            const double c2 = (C * r_proj + D * B) / denom;
-            const double s2 = (C * B - D * r_proj) / denom;
-            const double th2_deg = NormalizeAngleDeg(RadToDeg(std::atan2(s2, c2)));
-
-            solutions.push_back({th1_deg, th2_deg, th3_deg});
+            const double beta = std::atan2(
+                forearmLength * std::sin(includedSigned),
+                a2 + forearmLength * std::cos(includedSigned));
+            const double theta2 = std::atan2(planarY, planarX) - beta;
+            const double theta3 = includedSigned - forearmPhase;
+            solutions.push_back({
+                th1Deg,
+                NormalizeAngleDeg(RadToDeg(theta2)),
+                NormalizeAngleDeg(RadToDeg(theta3))
+            });
         }
     }
 
     return solutions;
 }
-
 // =========================================================================
 // 腕部求解 (θ4, θ5, θ6)
 // =========================================================================
@@ -347,8 +301,8 @@ std::vector<AnalyticalIkSolverAdapter::JointSolution> AnalyticalIkSolverAdapter:
         for (int sign : {+1, -1})
         {
             const double th5_rad = std::atan2(sign * s5, r33);
-            const double th4_rad = std::atan2(-sign * r23, -sign * r13);
-            const double th6_rad = std::atan2(-sign * r32, sign * r31);
+            const double th4_rad = std::atan2(sign * r23, sign * r13);
+            const double th6_rad = std::atan2(sign * r32, -sign * r31);
 
             JointSolution sol;
             sol.values_deg = {
@@ -574,10 +528,23 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     // 6. 限位过滤 + 排序
     auto validSolutions = FilterAndSortSolutions(
         std::move(allSolutions), model.joint_limits, request.seed_joint_positions_deg);
+    const int limitValidCount = static_cast<int>(validSolutions.size());
+    validSolutions.erase(
+        std::remove_if(validSolutions.begin(), validSolutions.end(),
+            [&model, &T_flange_target](const JointSolution& solution) {
+                const double positionErrorM = ComputePositionErrorM(
+                    solution.values_deg, T_flange_target, model.links, model.parameter_convention);
+                const double orientationErrorRad = ComputeOrientationErrorRad(
+                    solution.values_deg, T_flange_target, model.links, model.parameter_convention);
+                return positionErrorM > 0.005 || orientationErrorRad > DegToRad(5.0);
+            }),
+        validSolutions.end());
 
     if (validSolutions.empty())
     {
-        return failWithReason(QStringLiteral("找到 %1 组原始解，但均被关节限位过滤。").arg(totalFound));
+        return failWithReason(QStringLiteral("解析 IK 生成 %1 组原始候选，限位过滤后 %2 组，FK 反验后 0 组有效。")
+            .arg(totalFound)
+            .arg(limitValidCount));
     }
 
     // 7. 取最佳解，计算误差

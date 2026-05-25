@@ -63,6 +63,12 @@ struct IkResultDto
     int valid_solution_count = 0;
     /// @brief 产生此结果的求解器标识。
     QString solver_id;
+    /// @brief 用户请求的求解器标识；发生回退时与 solver_id 不同。
+    QString requested_solver_id;
+    /// @brief 是否从请求求解器回退到了其他求解器。
+    bool used_fallback = false;
+    /// @brief 回退原因或解析求解未采用的诊断信息。
+    QString fallback_reason;
 };
 
 /// @brief 工作空间采样请求 DTO，仅描述采样规模，不承载具体后端状态。
