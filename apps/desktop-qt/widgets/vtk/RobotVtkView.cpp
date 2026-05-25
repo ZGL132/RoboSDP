@@ -197,6 +197,7 @@ void TuneAxesCaption(vtkCaptionActor2D* captionActor, double red, double green, 
     captionActor->LeaderOff();
     captionActor->GetCaptionTextProperty()->SetFontSize(12);
     captionActor->GetCaptionTextProperty()->SetBold(true);
+    captionActor->GetCaptionTextProperty()->SetShadow(false);
     captionActor->GetCaptionTextProperty()->SetColor(red, green, blue);
 }
 
@@ -237,8 +238,7 @@ vtkSmartPointer<vtkBillboardTextActor3D> CreateBillboardLabel(
         textProp->SetFontSize(12);
         textProp->SetColor(red, green, blue);
         textProp->SetBold(true);
-        textProp->SetShadow(true);
-        textProp->SetShadowOffset(1, -1);
+        textProp->SetShadow(false);
     }
     return label;
 }
@@ -1802,6 +1802,7 @@ void RobotVtkView::BuildVtkView()
             captionActor->LeaderOff();
             captionActor->GetCaptionTextProperty()->SetFontSize(12);
             captionActor->GetCaptionTextProperty()->SetBold(false);
+            captionActor->GetCaptionTextProperty()->SetShadow(false);
             captionActor->GetCaptionTextProperty()->SetColor(0.90, 0.92, 0.95);
         };
         tuneCaption(m_tcp_axes_actor->GetXAxisCaptionActor2D());
@@ -2004,6 +2005,7 @@ void RobotVtkView::BuildCornerAxesWidget()
         // 🔼🔼🔼 【修复结束】 🔼🔼🔼
         captionActor->GetCaptionTextProperty()->SetFontSize(12);
         captionActor->GetCaptionTextProperty()->SetBold(true);
+        captionActor->GetCaptionTextProperty()->SetShadow(false);
         captionActor->GetCaptionTextProperty()->SetColor(red, green, blue);
     };
     tuneCaption(axesActor->GetXAxisCaptionActor2D(), 1.0, 0.0, 0.0);

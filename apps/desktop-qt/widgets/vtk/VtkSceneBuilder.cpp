@@ -290,6 +290,7 @@ void AddAxes(vtkRenderer* renderer, double axisLength)
         captionActor->GetCaptionTextProperty()->SetFontSize(14);
         captionActor->GetCaptionTextProperty()->SetBold(true);
         captionActor->GetCaptionTextProperty()->SetItalic(false);
+        captionActor->GetCaptionTextProperty()->SetShadow(false);
         captionActor->GetCaptionTextProperty()->SetColor(red, green, blue);
     };
     tuneCaption(axesActor->GetXAxisCaptionActor2D(), 1.0, 0.0, 0.0);
@@ -651,8 +652,7 @@ void AddNodeLabel(
     labelActor->GetTextProperty()->SetFontSize(13);
     labelActor->GetTextProperty()->SetColor(0.74, 0.84, 0.92);
     labelActor->GetTextProperty()->SetBold(true);
-    labelActor->GetTextProperty()->SetShadow(true);
-    labelActor->GetTextProperty()->SetShadowOffset(1, -1);
+    labelActor->GetTextProperty()->SetShadow(false);
 
     labelActor->SetDisplayOffset(displayOffset.x(), displayOffset.y());
 
@@ -716,8 +716,7 @@ void AddJointLabel(
     labelActor->GetTextProperty()->SetFontSize(12);
     labelActor->GetTextProperty()->SetColor(0.84, 0.78, 0.42);
     labelActor->GetTextProperty()->SetBold(false);
-    labelActor->GetTextProperty()->SetShadow(true);
-    labelActor->GetTextProperty()->SetShadowOffset(1, -1);
+    labelActor->GetTextProperty()->SetShadow(false);
 
     labelActor->SetDisplayOffset(displayOffset.x(), displayOffset.y());
 
