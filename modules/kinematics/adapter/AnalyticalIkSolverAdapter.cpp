@@ -93,9 +93,10 @@ bool AnalyticalIkSolverAdapter::CheckPieperCriterion(
     if (model.joint_limits.size() != 6)
         return false;
 
-    // 3. 球形腕条件：a4 ≈ 0 且 a5 ≈ 0（最后三关节轴线交于一点）
+    // 3. 球形腕条件：a4 ≈ 0、a5 ≈ 0 且 d5 ≈ 0（最后三关节轴线交于一点）
     if (std::abs(model.links[3].a) > tolerance ||
-        std::abs(model.links[4].a) > tolerance)
+        std::abs(model.links[4].a) > tolerance ||
+        std::abs(model.links[4].d) > tolerance)
         return false;
 
     return true;
@@ -542,7 +543,7 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     // 1. Pieper 条件检测
     if (!CheckPieperCriterion(model))
     {
-        return failWithReason(QStringLiteral("不满足 Pieper 准则（需要 6R 且 a4=a5=0）。"));
+        return failWithReason(QStringLiteral("不满足 Pieper 准则（需要 6R 且 a4=a5=d5=0）。"));
     }
 
     // 2. 计算目标法兰位姿
@@ -551,10 +552,9 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     const Eigen::Matrix3d R_06 = ExtractRotation(T_flange_target);
     const Eigen::Vector3d z_06 = R_06 * Eigen::Vector3d::UnitZ();
 
-    // 3. 腕心位置 (使用近似公式 P_wc = P_06 - (d5+d6) * R_06 * [0,0,1]^T)
-    const double d5 = model.links[4].d;
+    // 3. 腕心位置：标准球形腕要求 d5=0，因此只沿法兰末端 Z 轴扣除 d6。
     const double d6 = model.links[5].d;
-    const Eigen::Vector3d wristCenter = P_06 - (d5 + d6) * z_06;
+    const Eigen::Vector3d wristCenter = P_06 - d6 * z_06;
 
     // 4. 求解臂部 (θ1, θ2, θ3)
     const auto armSolutions = SolveArm(wristCenter, model.links);
