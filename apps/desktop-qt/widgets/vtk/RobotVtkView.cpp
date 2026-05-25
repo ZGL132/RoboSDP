@@ -234,7 +234,7 @@ vtkSmartPointer<vtkBillboardTextActor3D> CreateBillboardLabel(
     vtkTextProperty* textProp = label->GetTextProperty();
     if (textProp != nullptr)
     {
-        textProp->SetFontSize(13);
+        textProp->SetFontSize(12);
         textProp->SetColor(red, green, blue);
         textProp->SetBold(true);
         textProp->SetShadow(true);
@@ -537,6 +537,10 @@ public:
             return; // 不传递给基类，避免视角缩放干扰
         }
         vtkInteractorStyleTrackballCamera::OnMouseWheelForward();
+        if (parentView != nullptr)
+        {
+            parentView->RefreshLabelVisibilityForCamera();
+        }
     }
 
     /// @brief 滚轮向后滚动：如果已选中连杆，则发射关节反转信号。
@@ -549,6 +553,10 @@ public:
             return;
         }
         vtkInteractorStyleTrackballCamera::OnMouseWheelBackward();
+        if (parentView != nullptr)
+        {
+            parentView->RefreshLabelVisibilityForCamera();
+        }
     }
 };
 
@@ -1100,8 +1108,8 @@ void RobotVtkView::RenderIkPoseComparisonLayer()
         0.32,
         0.90,
         1.0,
-        18,
-        18);
+        34,
+        34);
     if (m_label_renderer != nullptr)
     {
         m_label_renderer->AddActor(m_ik_target_label_actor);
@@ -1133,8 +1141,8 @@ void RobotVtkView::RenderIkPoseComparisonLayer()
             red,
             green,
             blue,
-            18,
-            -18);
+            -42,
+            -34);
         if (m_label_renderer != nullptr)
         {
             m_label_renderer->AddActor(m_ik_actual_label_actor);
@@ -1171,7 +1179,7 @@ void RobotVtkView::RenderIkPoseComparisonLayer()
                                       .arg(stateText)
                                       .arg(m_ikPositionErrorMm, 0, 'f', 2)
                                       .arg(m_ikOrientationErrorDeg, 0, 'f', 2);
-        m_ik_error_label_actor = CreateBillboardLabel(errorText, midPoint, red, green, blue, 18, 0);
+        m_ik_error_label_actor = CreateBillboardLabel(errorText, midPoint, red, green, blue, 26, -4);
         if (m_label_renderer != nullptr)
         {
             m_label_renderer->AddActor(m_ik_error_label_actor);
@@ -1802,25 +1810,20 @@ void RobotVtkView::BuildVtkView()
     }
     m_renderer->AddActor(m_tcp_axes_actor);
 
-    // 🔽🔽🔽 【新增水印初始化代码】 🔽🔽🔽
     m_watermark_actor = vtkSmartPointer<vtkTextActor>::New();
-    m_watermark_actor->SetInput("No Preview Model"); // 默认文本
-    // 设置文字属性
+    m_watermark_actor->SetInput("Mode: No Preview Model");
     vtkTextProperty* textProp = m_watermark_actor->GetTextProperty();
-    textProp->SetFontSize(16);          // 字体大小
-    textProp->SetColor(0.8, 0.8, 0.8);  // 浅灰色
-    textProp->SetOpacity(0.6);          // 半透明效果，不喧宾夺主
-    textProp->SetBold(true);
-    textProp->SetShadow(true);          // 开启阴影让文字在任何背景下都清晰
+    textProp->SetFontSize(13);
+    textProp->SetColor(0.72, 0.76, 0.82);
+    textProp->SetOpacity(0.72);
+    textProp->SetBold(false);
+    textProp->SetShadow(true);
     textProp->SetShadowOffset(1, -1);
-    
-    // 设置水印位置：屏幕右上角 (以屏幕像素系为基准)
-    // VTK 的 SetPosition2 是用 Normalized Viewport (0~1) 坐标的，这里我们直接给具体像素位置或者比例
-    m_watermark_actor->GetPositionCoordinate()->SetCoordinateSystemToNormalizedViewport();
-    m_watermark_actor->SetPosition(0.02, 0.95); // 0.02(左) 0.95(上)，即左上角
 
-    m_renderer->AddActor2D(m_watermark_actor); // 加入渲染器 (2D 覆盖层)
-    // 🔼🔼🔼 【新增结束】 🔼🔼🔼
+    m_watermark_actor->GetPositionCoordinate()->SetCoordinateSystemToNormalizedViewport();
+    m_watermark_actor->SetPosition(0.018, 0.955);
+
+    m_renderer->AddActor2D(m_watermark_actor);
 
     // ── 比例尺初始化（QWidget 覆盖层，QPainter 绘制白色刻度线）────────
     m_scaleBarOverlay = new ScaleBarOverlay(viewportFrame);
@@ -2063,6 +2066,7 @@ void RobotVtkView::RefreshScene(bool resetCamera)
         displayOptions.show_link_labels = m_showLinkLabels;
         displayOptions.show_joint_labels = m_showJointLabels;
         displayOptions.reset_camera = resetCamera;
+        displayOptions.compact_dense_labels = ShouldCompactDenseLabels();
         if (m_currentScene.IsEmpty())
         {
             VtkSceneBuilder::BuildMinimalTestScene(
@@ -2070,7 +2074,7 @@ void RobotVtkView::RefreshScene(bool resetCamera)
                 displayOptions.show_axes,
                 displayOptions.show_ground_grid,
                 displayOptions.reset_camera);
-                m_watermark_actor->SetInput("View: Minimal Test Scene");
+                m_watermark_actor->SetInput("Mode: Minimal Test Scene");
                 m_watermark_actor->GetTextProperty()->SetColor(0.6, 0.6, 0.6); 
         }
         else
@@ -2087,12 +2091,12 @@ void RobotVtkView::RefreshScene(bool resetCamera)
             // 不再判断有没有外壳，而是判断场景数据里有没有携带真实的 URDF 文件路径
             if (!m_currentScene.urdf_file_path.trimmed().isEmpty()) {
                 // 如果有路径，说明它是从一个真实的 URDF 文件里读出来的
-                m_watermark_actor->SetInput("[ Driven by: URDF Physical Model ]");
-                m_watermark_actor->GetTextProperty()->SetColor(0.4, 0.8, 1.0); // 科技蓝
+                m_watermark_actor->SetInput("Mode: Engineering URDF Reference");
+                m_watermark_actor->GetTextProperty()->SetColor(0.35, 0.72, 1.0); // 科技蓝
             } else {
                 // 如果没有路径，说明它是我们在内存里用 DH 参数硬算出来的骨架
-                m_watermark_actor->SetInput("[ Driven by: DH/MDH Kinematic Skeleton ]");
-                m_watermark_actor->GetTextProperty()->SetColor(1.0, 0.6, 0.2); // 警示橙色
+                m_watermark_actor->SetInput("Mode: DH/MDH Parametric Design");
+                m_watermark_actor->GetTextProperty()->SetColor(0.95, 0.62, 0.24); // 温和橙色
             }
             // 🔼🔼🔼 【修改结束】 🔼🔼🔼
 
@@ -2208,6 +2212,63 @@ void RobotVtkView::RefreshScene(bool resetCamera)
     {
         m_renderWindow->Render();
         UpdateScaleBar();
+    }
+#endif
+}
+
+bool RobotVtkView::ShouldCompactDenseLabels() const
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer == nullptr || m_renderer->GetActiveCamera() == nullptr || m_currentScene.nodes.empty())
+    {
+        return false;
+    }
+
+    std::array<double, 3> minBounds {
+        std::numeric_limits<double>::max(),
+        std::numeric_limits<double>::max(),
+        std::numeric_limits<double>::max()};
+    std::array<double, 3> maxBounds {
+        std::numeric_limits<double>::lowest(),
+        std::numeric_limits<double>::lowest(),
+        std::numeric_limits<double>::lowest()};
+    for (const auto& node : m_currentScene.nodes)
+    {
+        for (std::size_t index = 0; index < 3; ++index)
+        {
+            minBounds[index] = std::min(minBounds[index], node.position_m[index]);
+            maxBounds[index] = std::max(maxBounds[index], node.position_m[index]);
+        }
+    }
+
+    const std::array<double, 3> center {
+        (minBounds[0] + maxBounds[0]) * 0.5,
+        (minBounds[1] + maxBounds[1]) * 0.5,
+        (minBounds[2] + maxBounds[2]) * 0.5};
+    const double span = std::max({
+        maxBounds[0] - minBounds[0],
+        maxBounds[1] - minBounds[1],
+        maxBounds[2] - minBounds[2],
+        0.2});
+
+    double cameraPosition[3] = {0.0, 0.0, 0.0};
+    m_renderer->GetActiveCamera()->GetPosition(cameraPosition);
+    const double dx = cameraPosition[0] - center[0];
+    const double dy = cameraPosition[1] - center[1];
+    const double dz = cameraPosition[2] - center[2];
+    const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    return distance > span * 2.4;
+#else
+    return false;
+#endif
+}
+
+void RobotVtkView::RefreshLabelVisibilityForCamera()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (!m_currentScene.IsEmpty())
+    {
+        RefreshScene(false);
     }
 #endif
 }

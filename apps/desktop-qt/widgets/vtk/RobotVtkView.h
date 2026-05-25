@@ -77,6 +77,9 @@ public:
     /// @brief 将相机重新对准当前预览/测试场景，便于同步后快速找回模型。
     void ResetCameraToCurrentScene();
 
+    /// @brief 相机缩放后按当前视距刷新标签密度，供 VTK 交互器回调。
+    void RefreshLabelVisibilityForCamera();
+
     /// @brief 设置骨架层显示状态，供顶部视图页签统一控制。
     void SetSkeletonVisible(bool visible);
 
@@ -245,6 +248,7 @@ private:
         double upX,
         double upY,
         double upZ);
+    bool ShouldCompactDenseLabels() const;
     QString BuildStatusText() const;
 
 private:

@@ -30,6 +30,7 @@ struct UrdfPreviewDisplayOptions
     bool show_axes = true;
     bool show_ground_grid = true;
     bool reset_camera = true;
+    bool compact_dense_labels = false;
 };
 
 /**

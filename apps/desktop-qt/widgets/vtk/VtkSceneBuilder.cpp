@@ -2,11 +2,13 @@
 
 #include <QDebug>
 #include <QFileInfo>
+#include <QPoint>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <string>
 
 #if defined(ROBOSDP_HAVE_VTK)
@@ -154,6 +156,78 @@ double ComputeNodeRadius(const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& pr
 double ComputeLabelOffset(double nodeRadius)
 {
     return std::max(nodeRadius * 1.8, 0.03);
+}
+
+std::optional<int> ParseIndexedLabel(const QString& label, const QChar prefix)
+{
+    if (!label.startsWith(prefix))
+    {
+        return std::nullopt;
+    }
+
+    bool ok = false;
+    const int index = label.mid(1).toInt(&ok);
+    if (!ok || index < 1)
+    {
+        return std::nullopt;
+    }
+
+    return index;
+}
+
+QPoint LabelDisplayOffset(const QString& text, bool isJointLabel, bool compactDenseLabels)
+{
+    const auto index = ParseIndexedLabel(text, QLatin1Char(isJointLabel ? 'J' : 'L'));
+    if (!index.has_value())
+    {
+        return isJointLabel ? QPoint(0, 15) : QPoint(15, 0);
+    }
+
+    if (compactDenseLabels && *index >= 5)
+    {
+        return QPoint(0, 0);
+    }
+
+    if (isJointLabel)
+    {
+        switch ((*index - 1) % 4)
+        {
+        case 0: return QPoint(-26, 18);
+        case 1: return QPoint(24, 18);
+        case 2: return QPoint(-30, -18);
+        default: return QPoint(28, -18);
+        }
+    }
+
+    switch ((*index - 1) % 4)
+    {
+    case 0: return QPoint(22, 8);
+    case 1: return QPoint(-28, 10);
+    case 2: return QPoint(20, -24);
+    default: return QPoint(-30, -22);
+    }
+}
+
+bool ShouldShowDenseLabel(const QString& text, bool compactDenseLabels, int alwaysShowFromEnd)
+{
+    if (!compactDenseLabels)
+    {
+        return true;
+    }
+
+    const auto linkIndex = ParseIndexedLabel(text, QLatin1Char('L'));
+    if (linkIndex.has_value())
+    {
+        return *linkIndex <= alwaysShowFromEnd;
+    }
+
+    const auto jointIndex = ParseIndexedLabel(text, QLatin1Char('J'));
+    if (jointIndex.has_value())
+    {
+        return *jointIndex <= 4;
+    }
+
+    return true;
 }
 
 double ComputeSceneMaxSpan(const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& previewScene)
@@ -561,6 +635,7 @@ void AddNodeLabel(
     vtkRenderer* renderer,
     const QString& linkName,
     const std::array<double, 3>& position,
+    const QPoint& displayOffset,
     vtkRenderer* labelRenderer = nullptr)
 {
     vtkNew<vtkBillboardTextActor3D> labelActor;
@@ -579,7 +654,7 @@ void AddNodeLabel(
     labelActor->GetTextProperty()->SetShadow(true);
     labelActor->GetTextProperty()->SetShadowOffset(1, -1);
 
-    labelActor->SetDisplayOffset(15, 0);
+    labelActor->SetDisplayOffset(displayOffset.x(), displayOffset.y());
 
     vtkRenderer* target = labelRenderer != nullptr ? labelRenderer : renderer;
     target->AddActor(labelActor);
@@ -625,6 +700,7 @@ void AddJointLabel(
     vtkRenderer* renderer,
     const QString& text,
     const std::array<double, 3>& position,
+    const QPoint& displayOffset,
     vtkRenderer* labelRenderer = nullptr)
 {
     vtkNew<vtkBillboardTextActor3D> labelActor;
@@ -643,7 +719,7 @@ void AddJointLabel(
     labelActor->GetTextProperty()->SetShadow(true);
     labelActor->GetTextProperty()->SetShadowOffset(1, -1);
 
-    labelActor->SetDisplayOffset(0, 15);
+    labelActor->SetDisplayOffset(displayOffset.x(), displayOffset.y());
 
     vtkRenderer* target = labelRenderer != nullptr ? labelRenderer : renderer;
     target->AddActor(labelActor);
@@ -970,12 +1046,20 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
         {
             AddJointHighlight(renderer, colors, segment, nodeRadius, jointHighlightOpacity);
 
-            if (displayOptions.show_joint_labels)
+            if (displayOptions.show_joint_labels && segment.joint_type != QStringLiteral("fixed"))
             {
                 ++jointIndex;
                 const QString jointLabel = QStringLiteral("J%1").arg(jointIndex);
-                auto shiftedPos = getShiftedPosition(segment.start_position_m, labelOffset * 0.8);
-                AddJointLabel(renderer, jointLabel, shiftedPos, labelRenderer);
+                if (ShouldShowDenseLabel(jointLabel, displayOptions.compact_dense_labels, 5))
+                {
+                    auto shiftedPos = getShiftedPosition(segment.start_position_m, labelOffset * 0.8);
+                    AddJointLabel(
+                        renderer,
+                        jointLabel,
+                        shiftedPos,
+                        LabelDisplayOffset(jointLabel, true, displayOptions.compact_dense_labels),
+                        labelRenderer);
+                }
             }
         }
 
@@ -1004,10 +1088,20 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
             ++linkIndex;
             if (displayOptions.show_link_labels)
             {
-                const QString linkLabel = QStringLiteral("L%1").arg(linkIndex);
-                auto basePos = ComputeLinkLabelPosition(previewScene, node, labelOffset);
-                auto shiftedPos = getShiftedPosition(basePos, labelOffset * 0.8);
-                AddNodeLabel(renderer, linkLabel, shiftedPos, labelRenderer);
+                const QString linkLabel = node.link_name.trimmed().isEmpty()
+                    ? QStringLiteral("L%1").arg(linkIndex)
+                    : node.link_name.trimmed();
+                if (ShouldShowDenseLabel(linkLabel, displayOptions.compact_dense_labels, 5))
+                {
+                    auto basePos = ComputeLinkLabelPosition(previewScene, node, labelOffset);
+                    auto shiftedPos = getShiftedPosition(basePos, labelOffset * 0.8);
+                    AddNodeLabel(
+                        renderer,
+                        linkLabel,
+                        shiftedPos,
+                        LabelDisplayOffset(linkLabel, false, displayOptions.compact_dense_labels),
+                        labelRenderer);
+                }
             }
         }
 
