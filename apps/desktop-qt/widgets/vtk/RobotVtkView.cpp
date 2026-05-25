@@ -1735,7 +1735,8 @@ void RobotVtkView::BuildVtkView()
     viewportLayout->setSpacing(0);
 
     m_vtkWidget = new QVTKOpenGLNativeWidget(viewportFrame);
-    m_vtkWidget->setMinimumSize(640, 480);
+    m_vtkWidget->setMinimumSize(0, 0);
+    m_vtkWidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     m_vtkWidget->setMouseTracking(true);
 
     vtkNew<vtkGenericOpenGLRenderWindow> renderWindow;

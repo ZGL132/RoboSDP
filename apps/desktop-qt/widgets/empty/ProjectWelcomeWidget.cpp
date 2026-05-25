@@ -345,12 +345,16 @@ void ProjectWelcomeWidget::UpdateResponsiveScale()
         ScaledInt(48, scale));
     m_recent_layout->setSpacing(ScaledInt(24, scale));
 
-    m_hero_card->setMinimumSize(ScaledInt(1280, scale), ScaledInt(1080, scale));
+    m_hero_card->setMinimumSize(0, 0);
+    m_hero_card->resize(ScaledInt(1280, scale), ScaledInt(1080, scale));
     m_hero_card->setMaximumWidth(ScaledInt(1760, scale));
-    m_side_panel->setMinimumWidth(ScaledInt(780, scale));
+    m_side_panel->setMinimumWidth(0);
+    m_side_panel->resize(ScaledInt(780, scale), m_side_panel->height());
     m_side_panel->setMaximumWidth(ScaledInt(880, scale));
-    m_workflow_card->setMinimumHeight(ScaledInt(440, scale));
-    m_recent_card->setMinimumHeight(ScaledInt(472, scale));
+    m_workflow_card->setMinimumHeight(0);
+    m_workflow_card->resize(m_workflow_card->width(), ScaledInt(440, scale));
+    m_recent_card->setMinimumHeight(0);
+    m_recent_card->resize(m_recent_card->width(), ScaledInt(472, scale));
     m_new_project_button->setMinimumHeight(ScaledInt(112, scale));
     m_open_project_button->setMinimumHeight(ScaledInt(112, scale));
 

@@ -98,6 +98,10 @@ private:
 
     /// 创建底部日志面板。
     void CreateLogDock();
+
+    /// 配置左右 Dock 的拖拽范围与初始宽度，避免内部页面最小尺寸卡住分隔条。
+    void ConfigureResizableDocks();
+
     void AppendPropertyPanelIntroLogs();
 
     /// 显示未打开项目时的启动空状态。

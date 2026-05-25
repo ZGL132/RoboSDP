@@ -28,6 +28,7 @@
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QToolBar>
@@ -56,6 +57,7 @@ void MainWindow::BuildUi()
     CreateProjectTreeDock();
     CreatePropertyDock();
     CreateLogDock();
+    ConfigureResizableDocks();
 
     connect(
         &RoboSDP::Infrastructure::ProjectManager::instance(),
@@ -219,8 +221,14 @@ void MainWindow::CreateRibbonBar()
 void MainWindow::CreateCentralView()
 {
     m_centralStack = new QStackedWidget(this);
+    m_centralStack->setMinimumSize(0, 0);
+    m_centralStack->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     m_projectWelcomeWidget = new RoboSDP::Desktop::Widgets::ProjectWelcomeWidget(m_centralStack);
     m_robotVtkView = new RoboSDP::Desktop::Vtk::RobotVtkView(m_centralStack);
+    m_projectWelcomeWidget->setMinimumSize(0, 0);
+    m_projectWelcomeWidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    m_robotVtkView->setMinimumSize(0, 0);
+    m_robotVtkView->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
 
     m_centralStack->addWidget(m_projectWelcomeWidget);
     m_centralStack->addWidget(m_robotVtkView);
@@ -242,9 +250,17 @@ void MainWindow::CreateProjectTreeDock()
 {
     m_projectTreeDock = new QDockWidget(QStringLiteral("项目树"), this);
     m_projectTreeDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_projectTreeDock->setFeatures(
+        QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetFloatable |
+        QDockWidget::DockWidgetClosable);
+    m_projectTreeDock->setMinimumWidth(120);
+    m_projectTreeDock->setMaximumWidth(520);
 
     m_projectTree = new QTreeWidget(m_projectTreeDock);
     m_projectTree->setHeaderLabel(QStringLiteral("项目树"));
+    m_projectTree->setMinimumWidth(80);
+    m_projectTree->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
 
     m_projectTreeDock->setWidget(m_projectTree);
     addDockWidget(Qt::LeftDockWidgetArea, m_projectTreeDock);
@@ -263,8 +279,16 @@ void MainWindow::CreatePropertyDock()
 {
     m_propertyDock = new QDockWidget(QStringLiteral("属性面板"), this);
     m_propertyDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    m_propertyDock->setFeatures(
+        QDockWidget::DockWidgetMovable |
+        QDockWidget::DockWidgetFloatable |
+        QDockWidget::DockWidgetClosable);
+    m_propertyDock->setMinimumWidth(220);
+    m_propertyDock->setMaximumWidth(760);
 
     m_propertyStack = new QStackedWidget(m_propertyDock);
+    m_propertyStack->setMinimumWidth(160);
+    m_propertyStack->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
 
     m_emptyProjectWidget = new RoboSDP::Desktop::Widgets::ProjectEmptyStateWidget(m_propertyStack);
     m_requirementWidget = new RoboSDP::Requirement::Ui::RequirementWidget(&m_logger, m_propertyStack);
@@ -605,6 +629,21 @@ void MainWindow::CreatePropertyDock()
         &RoboSDP::Scheme::Ui::SchemeWidget::LogMessageGenerated,
         this,
         [this](const QString& message) { AppendLogLine(message); });
+}
+
+void MainWindow::ConfigureResizableDocks()
+{
+    if (m_projectTreeDock != nullptr)
+    {
+        m_projectTreeDock->resize(240, m_projectTreeDock->height());
+        resizeDocks({m_projectTreeDock}, {240}, Qt::Horizontal);
+    }
+
+    if (m_propertyDock != nullptr)
+    {
+        m_propertyDock->resize(420, m_propertyDock->height());
+        resizeDocks({m_propertyDock}, {420}, Qt::Horizontal);
+    }
 }
 
 void MainWindow::CreateLogDock()
