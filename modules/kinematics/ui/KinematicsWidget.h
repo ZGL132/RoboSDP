@@ -79,6 +79,8 @@ public:
     void TriggerRunIk() { OnRunIkClicked(); }
     /// @brief Ribbon 接口：采样工作空间。
     void TriggerSampleWorkspace() { OnSampleWorkspaceClicked(); }
+    /// @brief Ribbon 接口：执行奇异区分析。
+    void TriggerSingularityAnalysis() { OnSingularityAnalysisClicked(); }
     /// @brief Ribbon 接口：保存运动学草稿。
     void TriggerSaveDraft() { OnSaveDraftClicked(); }
 
@@ -327,6 +329,8 @@ private:
     std::array<QDoubleSpinBox*, 6> m_reach_target_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     QSpinBox* m_reach_seed_count_spin = nullptr;
     QLabel* m_reach_result_label = nullptr;
+    bool m_workspace_point_cloud_visible = false;
+    bool m_singularity_point_cloud_visible = false;
 
     QPlainTextEdit* m_result_summary_edit = nullptr;
 

@@ -3238,6 +3238,16 @@ void KinematicsWidget::OnRunIkClicked()
 
 void KinematicsWidget::OnSampleWorkspaceClicked()
 {
+    if (m_workspace_point_cloud_visible)
+    {
+        emit WorkspacePointCloudGenerated({});
+        m_workspace_point_cloud_visible = false;
+        SetOperationMessage(QStringLiteral("工作空间点云已隐藏。"), true, false);
+        emit LogMessageGenerated(QStringLiteral("[Kinematics] 工作空间点云已隐藏。"));
+        emit StatusChanged();
+        return;
+    }
+
     m_state.current_model = CollectModelFromForm();
     RefreshBackendDiagnostics();
 
@@ -3256,6 +3266,11 @@ void KinematicsWidget::OnSampleWorkspaceClicked()
             tcpPositions.push_back(pt.tcp_pose.position_m);
         }
         emit WorkspacePointCloudGenerated(tcpPositions);
+        m_workspace_point_cloud_visible = !tcpPositions.empty();
+    }
+    else
+    {
+        m_workspace_point_cloud_visible = false;
     }
 
     RenderResults();
@@ -3319,6 +3334,16 @@ void KinematicsWidget::OnCheckReachabilityClicked()
 /// @brief 奇异区分析：带 Jacobian 条件数计算的 MC 工作空间采样。
 void KinematicsWidget::OnSingularityAnalysisClicked()
 {
+    if (m_singularity_point_cloud_visible)
+    {
+        emit SingularityPointCloudGenerated({}, {});
+        m_singularity_point_cloud_visible = false;
+        SetOperationMessage(QStringLiteral("奇异区点云已隐藏。"), true, false);
+        emit LogMessageGenerated(QStringLiteral("[Kinematics] 奇异区点云已隐藏。"));
+        emit StatusChanged();
+        return;
+    }
+
     m_state.current_model = CollectModelFromForm();
     RefreshBackendDiagnostics();
 
@@ -3364,9 +3389,11 @@ void KinematicsWidget::OnSingularityAnalysisClicked()
             isSingular.push_back(pt.condition_number > request.condition_threshold);
         }
         emit SingularityPointCloudGenerated(tcpPositions, isSingular);
+        m_singularity_point_cloud_visible = !tcpPositions.empty();
     }
     else
     {
+        m_singularity_point_cloud_visible = false;
         m_singularity_result_label->setStyleSheet(QStringLiteral("color: #dc2626;"));
         m_singularity_result_label->setText(QStringLiteral("分析失败：%1").arg(result.message));
     }

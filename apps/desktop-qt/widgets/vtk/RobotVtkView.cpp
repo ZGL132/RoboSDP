@@ -748,11 +748,14 @@ void RobotVtkView::ShowRequirementWorkspace(const std::vector<std::array<double,
 void RobotVtkView::ShowKinematicsWorkspace(const std::vector<std::array<double, 3>>& tcpPositions)
 {
     m_kinematicsWorkspacePositions = tcpPositions;
-    if (!tcpPositions.empty())
+    const QString layerId = QString::fromLatin1(kLayerKinematicsWorkspace);
+    if (tcpPositions.empty())
     {
-        AutoEnableAnalysisLayerIfDefault(QString::fromLatin1(kLayerKinematicsWorkspace));
+        SetAnalysisLayerVisibleInternal(layerId, false, false);
+        return;
     }
-    RenderAnalysisLayers(true);
+
+    SetAnalysisLayerVisibleInternal(layerId, true, false);
 }
 
 void RobotVtkView::RenderAnalysisLayers(bool renderNow)
@@ -829,11 +832,14 @@ void RobotVtkView::ShowSingularityWorkspace(
 {
     m_singularityWorkspacePositions = tcpPositions;
     m_singularityFlags = isSingular;
-    if (!tcpPositions.empty())
+    const QString layerId = QString::fromLatin1(kLayerKinematicsSingularity);
+    if (tcpPositions.empty())
     {
-        AutoEnableAnalysisLayerIfDefault(QString::fromLatin1(kLayerKinematicsSingularity));
+        SetAnalysisLayerVisibleInternal(layerId, false, false);
+        return;
     }
-    RenderAnalysisLayers(true);
+
+    SetAnalysisLayerVisibleInternal(layerId, true, false);
 }
 
 void RobotVtkView::ShowRequirementKeyPoses(
