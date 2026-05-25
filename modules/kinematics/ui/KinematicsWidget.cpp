@@ -247,10 +247,33 @@ void StyleKinematicsTable(QTableWidget* table)
     table->verticalHeader()->setDefaultSectionSize(28);
     table->verticalHeader()->setMinimumSectionSize(26);
     table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     table->horizontalHeader()->setHighlightSections(false);
     table->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
     table->setShowGrid(true);
     table->setStyleSheet(QString());
+}
+
+void ResizeTableToContentsHeight(QTableWidget* table)
+{
+    if (table == nullptr)
+    {
+        return;
+    }
+
+    const int frame = table->frameWidth() * 2;
+    const int headerHeight = table->horizontalHeader() != nullptr
+        ? table->horizontalHeader()->height()
+        : 0;
+    int rowsHeight = 0;
+    for (int row = 0; row < table->rowCount(); ++row)
+    {
+        rowsHeight += table->rowHeight(row);
+    }
+
+    const int height = frame + headerHeight + rowsHeight + 2;
+    table->setMinimumHeight(height);
+    table->setMaximumHeight(height);
 }
 
 QTableWidgetItem* EnsureItem(QTableWidget* table, int row, int column)
@@ -293,7 +316,43 @@ bool TryReadTableDouble(const QTableWidget* table, int row, int column, double& 
 QString ReadTableString(QTableWidget* table, int row, int column, const QString& defaultValue = {})
 {
     QTableWidgetItem* item = table->item(row, column);
-    return item != nullptr ? item->text().trimmed() : defaultValue;
+    if (item == nullptr)
+    {
+        return defaultValue;
+    }
+
+    const QString rawValue = item->data(Qt::UserRole).toString().trimmed();
+    return rawValue.isEmpty() ? item->text().trimmed() : rawValue;
+}
+
+QString FormatShortLinkId(const QString& linkId)
+{
+    const QString trimmed = linkId.trimmed();
+    if (trimmed.startsWith(QStringLiteral("link_")))
+    {
+        bool ok = false;
+        const int index = trimmed.mid(5).toInt(&ok);
+        if (ok && index >= 1)
+        {
+            return QStringLiteral("L%1").arg(index);
+        }
+    }
+    return trimmed;
+}
+
+QString FormatShortJointId(const QString& jointId)
+{
+    const QString trimmed = jointId.trimmed();
+    if (trimmed.startsWith(QStringLiteral("joint_")))
+    {
+        bool ok = false;
+        const int index = trimmed.mid(6).toInt(&ok);
+        if (ok && index >= 1)
+        {
+            return QStringLiteral("J%1").arg(index);
+        }
+    }
+    return trimmed;
 }
 
 void SetReadOnlyItem(QTableWidgetItem* item)
@@ -878,21 +937,16 @@ QWidget* KinematicsWidget::CreateModelGroup()
 
 QGroupBox* KinematicsWidget::CreateDhTableGroup()
 {
-    auto* groupBox = new QGroupBox(QStringLiteral("DH/MDH 参数表"), this);
+    auto* groupBox = new QGroupBox(this);
+    groupBox->setFlat(true);
     auto* layout = new QVBoxLayout(groupBox);
-    layout->setContentsMargins(10, 14, 10, 10);
-    layout->setSpacing(8);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(6);
 
     m_dh_readonly_banner_label = new QLabel(groupBox);
     m_dh_readonly_banner_label->setWordWrap(true);
     m_dh_readonly_banner_label->hide();
     layout->addWidget(m_dh_readonly_banner_label);
-
-    auto* hintLabel = new QLabel(
-        QStringLiteral("长度单位统一为 m，角度单位统一为 deg；修改 DH 参数会实时重建中央骨架预览。"),
-        groupBox);
-    hintLabel->setWordWrap(true);
-    layout->addWidget(hintLabel);
 
     m_dh_table = new QTableWidget(groupBox);
     SetupDhTableColumns();
@@ -902,14 +956,11 @@ QGroupBox* KinematicsWidget::CreateDhTableGroup()
 
 QGroupBox* KinematicsWidget::CreateJointLimitGroup()
 {
-    auto* groupBox = new QGroupBox(QStringLiteral("关节限位表"), this);
+    auto* groupBox = new QGroupBox(this);
+    groupBox->setFlat(true);
     auto* layout = new QVBoxLayout(groupBox);
-
-    auto* hintLabel = new QLabel(
-        QStringLiteral("最小入口保留 soft/hard limit 与速度、加速度上限，joint_id 由模型自动生成。"),
-        groupBox);
-    hintLabel->setWordWrap(true);
-    layout->addWidget(hintLabel);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(6);
 
     m_joint_limit_table = new QTableWidget(groupBox);
     SetupJointLimitTableColumns();
@@ -1419,9 +1470,9 @@ void KinematicsWidget::SetupDhTableColumns()
     m_dh_table->setHorizontalHeaderLabels({
         QStringLiteral("Link"),
         QStringLiteral("a [m]"),
-        QStringLiteral("alpha [deg]"),
+        QStringLiteral("α [deg]"),
         QStringLiteral("d [m]"),
-        QStringLiteral("theta offset [deg]")});
+        QStringLiteral("θ₀ [deg]")});
     m_dh_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     m_dh_table->horizontalHeader()->setStretchLastSection(true);
     m_dh_table->setColumnWidth(0, 82);
@@ -1436,20 +1487,21 @@ void KinematicsWidget::SetupJointLimitTableColumns()
     m_joint_limit_table->setColumnCount(7);
     m_joint_limit_table->setHorizontalHeaderLabels({
         QStringLiteral("Joint"),
-        QStringLiteral("soft min [deg]"),
-        QStringLiteral("soft max [deg]"),
-        QStringLiteral("hard min [deg]"),
-        QStringLiteral("hard max [deg]"),
-        QStringLiteral("velocity [deg/s]"),
-        QStringLiteral("accel [deg/s²]")});
+        QStringLiteral("Smin"),
+        QStringLiteral("Smax"),
+        QStringLiteral("Hmin"),
+        QStringLiteral("Hmax"),
+        QStringLiteral("Vmax"),
+        QStringLiteral("Amax")});
     m_joint_limit_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     m_joint_limit_table->horizontalHeader()->setStretchLastSection(true);
-    m_joint_limit_table->setColumnWidth(0, 78);
-    m_joint_limit_table->setColumnWidth(1, 104);
-    m_joint_limit_table->setColumnWidth(2, 104);
-    m_joint_limit_table->setColumnWidth(3, 104);
-    m_joint_limit_table->setColumnWidth(4, 104);
-    m_joint_limit_table->setColumnWidth(5, 118);
+    m_joint_limit_table->setColumnWidth(0, 58);
+    m_joint_limit_table->setColumnWidth(1, 76);
+    m_joint_limit_table->setColumnWidth(2, 76);
+    m_joint_limit_table->setColumnWidth(3, 76);
+    m_joint_limit_table->setColumnWidth(4, 76);
+    m_joint_limit_table->setColumnWidth(5, 72);
+    m_joint_limit_table->setColumnWidth(6, 72);
     StyleKinematicsTable(m_joint_limit_table);
 }
 
@@ -1548,7 +1600,8 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
     {
         const auto& link = model.links.at(static_cast<std::size_t>(row));
         auto* idItem = EnsureItem(m_dh_table, row, 0);
-        idItem->setText(link.link_id);
+        idItem->setText(FormatShortLinkId(link.link_id));
+        idItem->setData(Qt::UserRole, link.link_id);
         SetReadOnlyItem(idItem);
         StyleTableItem(idItem, false);
         auto* aItem = EnsureItem(m_dh_table, row, 1);
@@ -1570,7 +1623,8 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
     {
         const auto& limit = model.joint_limits.at(static_cast<std::size_t>(row));
         auto* idItem = EnsureItem(m_joint_limit_table, row, 0);
-        idItem->setText(limit.joint_id);
+        idItem->setText(FormatShortJointId(limit.joint_id));
+        idItem->setData(Qt::UserRole, limit.joint_id);
         SetReadOnlyItem(idItem);
         StyleTableItem(idItem, false);
         for (int column = 1; column <= 6; ++column)
@@ -1585,6 +1639,8 @@ void KinematicsWidget::PopulateForm(const RoboSDP::Kinematics::Dto::KinematicMod
         m_joint_limit_table->item(row, 5)->setText(QString::number(limit.max_velocity, 'f', 3));
         m_joint_limit_table->item(row, 6)->setText(QString::number(limit.max_acceleration, 'f', 3));
     }
+    ResizeTableToContentsHeight(m_dh_table);
+    ResizeTableToContentsHeight(m_joint_limit_table);
 
     const int solverIndex = m_solver_type_combo->findData(model.ik_solver_config.solver_type);
     m_solver_type_combo->setCurrentIndex(solverIndex >= 0 ? solverIndex : 0);
