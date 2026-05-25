@@ -2582,6 +2582,7 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
         segment.joint_type = QStringLiteral("revolute"); // DH 默认都是旋转关节
         segment.parent_link_name = parentLinkName;
         segment.child_link_name = childLinkName;
+        segment.joint_axis_xyz = {0.0, 0.0, 1.0};
         // 起点坐标 (父节点)
         segment.start_position_m = nodePositions[parentLinkName];
         // 终点坐标 (当前节点)
@@ -2606,6 +2607,7 @@ PreviewSceneBuildResult KinematicsService::BuildDhPreviewScene(
         tcpSegment.joint_type = QStringLiteral("fixed");
         tcpSegment.parent_link_name = fkResult.link_poses.back().link_id;
         tcpSegment.child_link_name = tcpNode.link_name;
+        tcpSegment.joint_axis_xyz = {0.0, 0.0, 1.0};
         tcpSegment.start_position_m = nodePositions[tcpSegment.parent_link_name];
         tcpSegment.end_position_m = tcpNode.position_m;
         scene.segments.push_back(tcpSegment);
@@ -3090,8 +3092,8 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
         seg.joint_type = jointType; // 区分 revolute 和 fixed
         seg.start_position_m = T_parent.GetTranslation();
         seg.end_position_m = T_child.GetTranslation();
-        
-        seg.joint_axis_xyz = T_parent.GetZAxis();
+        // joint_axis_xyz 约定为父坐标系下的局部轴，VTK 渲染时再应用父节点位姿。
+        seg.joint_axis_xyz = {0.0, 0.0, 1.0};
         scene.segments.push_back(seg);
     };
 

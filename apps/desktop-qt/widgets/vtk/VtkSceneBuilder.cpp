@@ -26,7 +26,6 @@
 #include <vtkPolyData.h>
 #include <vtkProperty.h>
 #include <vtkRenderer.h>
-#include <vtkSphereSource.h>
 #include <vtkSmartPointer.h>
 #include <vtkTextProperty.h>
 #include <vtkTextActor.h>       // <--- 【新增这一行】
@@ -442,6 +441,64 @@ std::array<double, 3> TransformDirectionByPose(
     return NormalizeVector(worldDirection, {0.0, 0.0, 1.0});
 }
 
+std::array<double, 3> ComputeJointAxisWorld(
+    const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& previewScene,
+    const RoboSDP::Kinematics::Dto::UrdfPreviewSegmentDto& segment)
+{
+    const std::array<double, 3> localAxis = NormalizeVector(segment.joint_axis_xyz, {0.0, 0.0, 1.0});
+    const auto* parentNode = FindNodeByLinkName(previewScene, segment.parent_link_name);
+    return parentNode != nullptr
+        ? TransformDirectionByPose(parentNode->world_pose, localAxis)
+        : localAxis;
+}
+
+bool IsRotatingJointType(const QString& jointType)
+{
+    const QString normalizedJointType = jointType.trimmed().toLower();
+    return normalizedJointType == QStringLiteral("revolute") ||
+           normalizedJointType == QStringLiteral("continuous");
+}
+
+vtkSmartPointer<vtkActor> CreateAxisAlignedCylinderActor(
+    const std::array<double, 3>& center,
+    const std::array<double, 3>& axisWorld,
+    double radius,
+    double height,
+    const std::array<double, 3>& color,
+    double opacity)
+{
+    const std::array<double, 3> axis = NormalizeVector(axisWorld, {0.0, 0.0, 1.0});
+    const double halfHeight = height * 0.5;
+
+    vtkNew<vtkLineSource> axisLine;
+    axisLine->SetPoint1(
+        center[0] - axis[0] * halfHeight,
+        center[1] - axis[1] * halfHeight,
+        center[2] - axis[2] * halfHeight);
+    axisLine->SetPoint2(
+        center[0] + axis[0] * halfHeight,
+        center[1] + axis[1] * halfHeight,
+        center[2] + axis[2] * halfHeight);
+
+    vtkNew<vtkTubeFilter> cylinderTube;
+    cylinderTube->SetInputConnection(axisLine->GetOutputPort());
+    cylinderTube->SetRadius(radius);
+    cylinderTube->SetNumberOfSides(32);
+    cylinderTube->CappingOn();
+
+    vtkNew<vtkPolyDataMapper> mapper;
+    mapper->SetInputConnection(cylinderTube->GetOutputPort());
+
+    auto actor = vtkSmartPointer<vtkActor>::New();
+    actor->SetMapper(mapper);
+    actor->GetProperty()->SetColor(color[0], color[1], color[2]);
+    actor->GetProperty()->SetOpacity(opacity);
+    actor->GetProperty()->SetSpecular(0.5);
+    actor->GetProperty()->SetSpecularPower(30.0);
+    actor->GetProperty()->SetAmbient(0.1);
+    return actor;
+}
+
 /**
  * @brief 为三维缩放构建独立矩阵。
  * @details 单独拆出 scale 变换，便于最终按 Global * Local * Scale 的顺序拼接矩阵。
@@ -726,29 +783,26 @@ void AddJointLabel(
 
 void AddJointHighlight(
     vtkRenderer* renderer,
-    vtkNamedColors* colors,
+    const RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto& previewScene,
     const RoboSDP::Kinematics::Dto::UrdfPreviewSegmentDto& segment,
     double nodeRadius,
     double opacity)
 {
-    vtkNew<vtkSphereSource> jointSphere;
-    jointSphere->SetRadius(nodeRadius * 0.2);
-    jointSphere->SetThetaResolution(24);
-    jointSphere->SetPhiResolution(24);
-    jointSphere->SetCenter(
-        segment.start_position_m[0],
-        segment.start_position_m[1],
-        segment.start_position_m[2]);
+    if (renderer == nullptr || !IsRotatingJointType(segment.joint_type))
+    {
+        return;
+    }
 
-    vtkNew<vtkPolyDataMapper> jointMapper;
-    jointMapper->SetInputConnection(jointSphere->GetOutputPort());
+    const std::array<double, 3> axisWorld = ComputeJointAxisWorld(previewScene, segment);
+    const auto jointActor = CreateAxisAlignedCylinderActor(
+        segment.start_position_m,
+        axisWorld,
+        std::max(nodeRadius * 0.68, 0.008),
+        std::max(nodeRadius * 2.70, 0.036),
+        {1.0, 1.0, 0.0},
+        opacity);
 
-    vtkNew<vtkActor> jointActor;
-    jointActor->SetMapper(jointMapper);
-    jointActor->GetProperty()->SetColor(colors->GetColor3d("Yellow").GetData());
-    jointActor->GetProperty()->SetOpacity(opacity);
-
-    // 【新增】：给关节球添加金属光泽
+    // 中文说明：给关节圆柱添加轻微高光，便于和连杆圆管区分。
     if (opacity > 0.9)
     { // 如果是不透明状态，强化光影
         jointActor->GetProperty()->SetSpecular(0.5);
@@ -770,9 +824,7 @@ void AddJointAxisArrow(
         return;
     }
 
-    const QString normalizedJointType = segment.joint_type.trimmed().toLower();
-    if (normalizedJointType != QStringLiteral("revolute") &&
-        normalizedJointType != QStringLiteral("continuous"))
+    if (!IsRotatingJointType(segment.joint_type))
     {
         return;
     }
@@ -948,9 +1000,8 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
     ApplyStableViewportBackground(renderer);
 
     const bool hasVisualMeshes = displayOptions.show_visual_meshes && !previewScene.visual_geometries.empty();
-    const double skeletonNodeOpacity = hasVisualMeshes ? 0.42 : 1.0;
     const double skeletonSegmentOpacity = hasVisualMeshes ? 0.58 : 1.0;
-    const double jointHighlightOpacity = hasVisualMeshes ? 0.18 : 0.30;
+    const double jointHighlightOpacity = 1.0;
     const double nodeRadius = ComputeNodeRadius(previewScene);
     const double labelOffset = ComputeLabelOffset(nodeRadius);
     if (displayOptions.show_ground_grid)
@@ -1043,7 +1094,7 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
         int jointIndex = 0;
         for (const auto& segment : previewScene.segments)
         {
-            AddJointHighlight(renderer, colors, segment, nodeRadius, jointHighlightOpacity);
+            AddJointHighlight(renderer, previewScene, segment, nodeRadius, jointHighlightOpacity);
 
             if (displayOptions.show_joint_labels && segment.joint_type != QStringLiteral("fixed"))
             {
@@ -1062,28 +1113,10 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
             }
         }
 
-        // 中文说明：节点球用于标识每个 link 的参考点，先验证骨架拓扑是否正确。
+        // 中文说明：link 标签仍使用节点位置，但不再绘制额外节点实体，避免与关节轴向圆柱混淆。
         int linkIndex = 0;
         for (const auto& node : previewScene.nodes)
         {
-            vtkNew<vtkSphereSource> nodeSphere;
-            nodeSphere->SetRadius(nodeRadius);
-            nodeSphere->SetThetaResolution(24);
-            nodeSphere->SetPhiResolution(24);
-            nodeSphere->SetCenter(node.position_m[0], node.position_m[1], node.position_m[2]);
-
-            vtkNew<vtkPolyDataMapper> nodeMapper;
-            nodeMapper->SetInputConnection(nodeSphere->GetOutputPort());
-
-            vtkNew<vtkActor> nodeActor;
-            nodeActor->SetMapper(nodeMapper);
-            nodeActor->GetProperty()->SetColor(colors->GetColor3d("Orange").GetData());
-            nodeActor->GetProperty()->SetOpacity(skeletonNodeOpacity);
-            nodeActor->GetProperty()->SetSpecular(0.6);
-            nodeActor->GetProperty()->SetSpecularPower(40.0);
-            nodeActor->GetProperty()->SetAmbient(0.1);
-            renderer->AddActor(nodeActor);
-
             ++linkIndex;
             if (displayOptions.show_link_labels)
             {
@@ -1120,7 +1153,7 @@ void VtkSceneBuilder::BuildUrdfPreviewScene(
             // 【新增】：使用 vtkTubeFilter 将线条变成 3D 圆管
             vtkNew<vtkTubeFilter> tubeFilter;
             tubeFilter->SetInputConnection(lineSource->GetOutputPort());
-            tubeFilter->SetRadius(nodeRadius * 0.5); // 连杆稍微比关节球细一点
+            tubeFilter->SetRadius(nodeRadius * 0.5); // 连杆稍微比关节圆柱细一点
             tubeFilter->SetNumberOfSides(16);        // 圆柱切面数，保证圆滑
 
             vtkNew<vtkPolyDataMapper> lineMapper;
