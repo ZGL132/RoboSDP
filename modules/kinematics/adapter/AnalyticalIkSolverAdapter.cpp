@@ -82,12 +82,20 @@ QString AnalyticalIkSolverAdapter::SolverId() const
 
 QString AnalyticalIkSolverAdapter::SolverDescription() const
 {
-    return QStringLiteral("闭式解析 IK 求解器（标准 DH、6R、球形腕、|α₀|=90°、α₁=α₂=0）。");
+    return QStringLiteral(
+        "闭式解析 IK 求解器（标准 DH、6R PUMA-Spong：|α₁|=|α₃|=|α₄|=|α₅|=90°、α₂=0、球形腕）。");
 }
 
 // =========================================================================
 // Pieper 条件检测
 // =========================================================================
+// 项目内拓扑→运动学约定（PUMA-Spong 风格）固定为：
+//   links[0]: a1=肩部偏置, |α1|=90°, d1=基座高度
+//   links[1]: a2=上臂长度, α2=0,     d=0      (J2 与 J3 轴线平行)
+//   links[2]: a3=肘部偏置, |α3|=90°, d=0      (z3 与 z2 正交，d4 沿 z3 表前臂长)
+//   links[3]: a4=0,        |α4|=90°, d4=前臂长度
+//   links[4]: a5=0,        |α5|=90°, d5=0     (球形腕：J5/J6 与 J4 共点)
+//   links[5]: a6=0,         α6=0,    d6=腕部偏置
 bool AnalyticalIkSolverAdapter::CheckPieperCriterion(
     const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
     double tolerance)
@@ -101,30 +109,33 @@ bool AnalyticalIkSolverAdapter::CheckPieperCriterion(
         return false;
 
     // 3. 球形腕条件：最后三个关节的轴线必须交于一点。
-    // 在标准 DH 参数下，这通常对应 a4 ≈ 0, a5 ≈ 0 且 d5 ≈ 0。
+    //    要求 a4=0、a5=0 以及 d5=0（J5/J6 与 J4 同心）。
     if (std::abs(model.links[3].a) > tolerance ||
         std::abs(model.links[4].a) > tolerance ||
         std::abs(model.links[4].d) > tolerance)
         return false;
 
-    // 4. 腕部相邻关节轴线的夹角 (alpha4, alpha5) 必须为 ±90°，以保证闭式解析法能够正常提取腕部角度
+    // 4. 腕部相邻关节轴线的夹角 (alpha4, alpha5) 必须为 ±90°，
+    //    保证闭式解析法可从 R_36 提取 ZYZ-like Euler 角。
     const double alpha4 = std::abs(model.links[3].alpha);
     const double alpha5 = std::abs(model.links[4].alpha);
     if (std::abs(alpha4 - 90.0) > tolerance ||
         std::abs(alpha5 - 90.0) > tolerance)
         return false;
 
-    // 5. 仅支持标准 DH（MDH 下臂部闭式解推导不适用）
+    // 5. 仅支持标准 DH（MDH 下的臂部闭式推导不在此处覆盖）
     if (model.parameter_convention != QStringLiteral("DH"))
         return false;
 
-    // 6. 臂型假设：α₁ ≈ 0、α₂ ≈ 0（肩关节与肘关节轴线平行，构成平面 2R 臂）
-    if (std::abs(model.links[1].alpha) > tolerance ||
-        std::abs(model.links[2].alpha) > tolerance)
+    // 6. 臂型假设：α2 ≈ 0（J2 与 J3 轴线平行，构成平面 2R 臂）
+    if (std::abs(model.links[1].alpha) > tolerance)
         return false;
 
-    // 7. 基座与肩关节轴线需近似垂直：|α₀| ≈ 90°
-    //    保证臂部投影到水平面可用当前闭式推导
+    // 7. PUMA-Spong 约定：|α3| ≈ 90°（z3 ⊥ z2，d4 沿 z3 方向表前臂）
+    if (std::abs(std::abs(model.links[2].alpha) - 90.0) > tolerance)
+        return false;
+
+    // 8. 基座→肩关节轴线需正交：|α1| ≈ 90°
     if (std::abs(std::abs(model.links[0].alpha) - 90.0) > tolerance)
         return false;
 
@@ -218,104 +229,101 @@ Eigen::Matrix4d AnalyticalIkSolverAdapter::ComputeTargetFlangeTransform(
 }
 
 // =========================================================================
-// 臂部求解 (θ1, θ2, θ3)
+// 臂部求解 (θ1, θ2, θ3) — PUMA-Spong 约定
 // =========================================================================
+// DH 参数（含 theta_offset，以下记号都是“几何角” q_i = q_user + theta_offset_i）：
+//   links[0]: a1, |α1|=90°, d1
+//   links[1]: a2, α2=0,     d=0
+//   links[2]: a3, |α3|=90°, d3  ← d3 即“肘部沿 z2 偏置”，常为 0
+//   links[3]: a4=0, |α4|=90°, d4
+// 设 c_i = cos(q_i), s_i = sin(q_i), c23 = cos(q2+q3), s23 = sin(q2+q3)。
+// 通过 T_03 与 z3 轴的展开可得腕心方程：
+//   Wx = c1·R + d3·s1,     R = a1 + a2·c2 + a3·c23 + d4·s23
+//   Wy = s1·R − d3·c1
+//   Wz = d1 + a2·s2 + a3·s23 − d4·c23
+// 由 Wx²+Wy² = R²+d3² 得到 R = ±√(ρ²−d3²)，进而：
+//   q1 = atan2(d3·Wx + R·Wy,  R·Wx − d3·Wy)
+// 令 r' = R − a1, z = Wz − d1, L = √(a3²+d4²), β = atan2(d4, a3)，
+// 则平面 2R 形式：
+//   r' = a2·c2 + L·cos(q2+q3-β)
+//   z  = a2·s2 + L·sin(q2+q3-β)
+// 共 2 (shoulder front/back) × 2 (elbow up/down) = 最多 4 组臂部解。
 std::vector<std::array<double, 3>> AnalyticalIkSolverAdapter::SolveArm(
     const Eigen::Vector3d& wristCenter,
     const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links)
 {
-    // 标准 DH 参数提取（0-indexed）：
-    //   links[0]: a₀, α₀=±90°, d₁     — 基座偏置
-    //   links[1]: a₁, α₁=0,    d₂=0   — 上臂长度
-    //   links[2]: a₂, α₂=0,    d₃=0   — 前臂 DH a 参数
-    //   links[3]: a₃=0, α₃=±90°, d₄   — 腕心沿 Z₃ 方向的偏移
     const double d1 = links[0].d;
-    const double a0 = links[0].a;
-    const double a1 = links[1].a;      // 上臂长度
-    const double a2 = links[2].a;      // 前臂 DH a 参数
-    const double d4 = links[3].d;      // 腕心在 Z₃ 方向的偏移
+    const double a1 = links[0].a;
+    const double a2 = links[1].a;       // 上臂长度
+    const double a3 = links[2].a;       // 前臂长度（PUMA-Spong 约定下 a3 携带前臂主长度）
+    const double d3 = links[2].d;       // 肘部沿 z2 偏置（横向偏置，常为 0）
+    const double d4 = links[3].d;       // 腕部沿 z3 偏置（球腕首段长度，常为 0）
 
-    if (a1 <= kSingularTolerance || a2 <= kSingularTolerance)
+    if (a2 <= kSingularTolerance)
         return {};
 
-    const double Px = wristCenter.x();
-    const double Py = wristCenter.y();
-    const double Pz = wristCenter.z();
-    const double rho = std::hypot(Px, Py);
-    if (rho <= kSingularTolerance)
-        return {};  // 腕心在 Z₀ 轴上，退化
+    // a3 与 d4 折合为单一等效肘-腕连杆 L
+    const double L = std::hypot(a3, d4);
+    if (L <= kSingularTolerance)
+        return {};
 
-    // ────────────────────────────────────────────────────────────────────
-    // 标准 DH 正向运动学（α₀=±90°, α₁=α₂=0）：
-    //
-    //   Px = (x₁+a₀)*cθ₁ + d₄*sθ₁
-    //   Py = (x₁+a₀)*sθ₁ - d₄*cθ₁
-    //   Pz = y₁ + d₁
-    //
-    // 其中 x₁ = a₁*cθ₂ + a₂*cos(θ₂+θ₃), y₁ = a₁*sθ₂ + a₂*sin(θ₂+θ₃)
-    //       z₁ = d₄ （腕心在 Z₃ 方向偏移，垂直于臂平面）
-    //
-    // 由 Px*sθ₁ - Py*cθ₁ = d₄ 可解 θ₁
-    // ────────────────────────────────────────────────────────────────────
+    const double beta = std::atan2(d4, a3);
 
-    // d₄ 校正后的径向距离（腕心在臂平面内的投影半径）
-    const double rho_sq = rho * rho;
-    const double d4_sq = d4 * d4;
-    const double radial = std::sqrt(std::max(0.0, rho_sq - d4_sq));
+    const double Wx = wristCenter.x();
+    const double Wy = wristCenter.y();
+    const double Wz = wristCenter.z();
 
-    // θ₁ 基准解（对应臂向前的构型）
-    //   θ₁ = φ + atan2(-d₄, radial), 其中 φ = atan2(Py, Px)
-    const double th1_rad_base = std::atan2(Py * radial - Px * d4,
-                                            Px * radial + Py * d4);
+    // 水平投影 ρ 必须满足 ρ ≥ |d3|，否则腕心落入第一关节轴的死区，q1 无解
+    const double rho_sq = Wx * Wx + Wy * Wy;
+    if (rho_sq <= d3 * d3 + kSingularTolerance)
+        return {};
+
+    const double R_mag = std::sqrt(rho_sq - d3 * d3);
 
     std::vector<std::array<double, 3>> solutions;
 
     for (const double shoulderSign : {1.0, -1.0})
     {
-        const double th1_rad = th1_rad_base + (shoulderSign < 0.0 ? kPi : 0.0);
-        const double ct1 = std::cos(th1_rad);
-        const double st1 = std::sin(th1_rad);
+        const double R = shoulderSign * R_mag;
 
-        // 臂平面内腕心相对于关节 2 原点的位置
-        //   x₁ = Px*cθ₁ + Py*sθ₁ - a₀   （径向分量）
-        //   y₁ = Pz - d₁                 （垂直分量，即臂平面内高度）
-        const double x1 = Px * ct1 + Py * st1 - a0;
-        const double y1 = Pz - d1;
+        // 由线性系统反解 q1：[R d3; -d3 R]·[c1;s1] = [Wx; Wy]
+        const double c1 = (R * Wx - d3 * Wy) / rho_sq;
+        const double s1 = (d3 * Wx + R * Wy) / rho_sq;
+        const double th1 = std::atan2(s1, c1);
 
-        // ── 余弦定理求 θ₃ ──
-        //   L² = x₁² + y₁² + d₄² = a₁² + a₂² + d₄² + 2*a₁*a₂*cos(θ₃)
-        const double L_sq = x1 * x1 + y1 * y1;
-        const double cos_th3 = (L_sq - a1 * a1 - a2 * a2) / (2.0 * a1 * a2);
-        if (cos_th3 < -1.0 - kSingularTolerance ||
-            cos_th3 > 1.0 + kSingularTolerance)
+        // 投影到由 q1 决定的臂平面（含 d3 偏置补偿后的纯径向距离）
+        const double rp = R - a1;
+        const double z  = Wz - d1;
+
+        // ── 余弦定理求 phi = q2 + q3 - β ──
+        const double dist_sq = rp * rp + z * z;
+        const double cos_phi = (dist_sq - a2 * a2 - L * L) / (2.0 * a2 * L);
+        if (cos_phi < -1.0 - kSingularTolerance ||
+            cos_phi > 1.0 + kSingularTolerance)
             continue;
 
-        const double th3_abs = SafeAcos(cos_th3);
+        const double phi_abs = SafeAcos(cos_phi);
 
         for (const double elbowSign : {1.0, -1.0})
         {
-            const double th3 = elbowSign * th3_abs;
+            const double phi = elbowSign * phi_abs;  // q2 + q3 - β
+            const double q3  = phi + beta;
 
-            // ── 2R 臂平面正解求 θ₂ ──
-            //   x₁ = A*cθ₂ - B*sθ₂
-            //   y₁ = A*sθ₂ + B*cθ₂
-            //   其中 A = a₁ + a₂*cos(θ₃), B = a₂*sin(θ₃)
-            const double c3 = std::cos(th3);
-            const double s3 = std::sin(th3);
-            const double A = a1 + a2 * c3;
-            const double B = a2 * s3;
-            const double r2_sq = A * A + B * B;
-            if (r2_sq <= kSingularTolerance)
+            // ── 平面 2R 反解 q2 ──
+            const double A = a2 + L * std::cos(phi);
+            const double B = L * std::sin(phi);
+            const double denom = A * A + B * B;
+            if (denom <= kSingularTolerance)
                 continue;
 
-            const double s2 = (A * y1 - B * x1) / r2_sq;
-            const double c2 = (A * x1 + B * y1) / r2_sq;
-            const double th2 = std::atan2(s2, c2);
+            const double c2 = (A * rp + B * z) / denom;
+            const double s2 = (A * z  - B * rp) / denom;
+            const double q2 = std::atan2(s2, c2);
 
             solutions.push_back({
-                NormalizeAngleDeg(RadToDeg(th1_rad) - links[0].theta_offset),
-                NormalizeAngleDeg(RadToDeg(th2) - links[1].theta_offset),
-                NormalizeAngleDeg(RadToDeg(th3) - links[2].theta_offset)
+                NormalizeAngleDeg(RadToDeg(th1) - links[0].theta_offset),
+                NormalizeAngleDeg(RadToDeg(q2)  - links[1].theta_offset),
+                NormalizeAngleDeg(RadToDeg(q3)  - links[2].theta_offset)
             });
         }
     }
@@ -590,7 +598,7 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     // 1. Pieper 准则几何条件检测
     if (!CheckPieperCriterion(model))
     {
-        return failWithReason(QStringLiteral("不满足 Pieper 准则（需要 DH 标准、6R、α₁=α₂=0、|α₀|=|α₄|=|α₅|=90°、a₄=a₅=d₅=0）。"));
+        return failWithReason(QStringLiteral("不满足 Pieper 准则（需要 DH 标准、6R、α2=0、|α1|=|α3|=|α4|=|α5|=90°、a4=a5=d5=0）。"));
     }
 
     // 2. 计算目标法兰中心的目标位姿 R_06, P_06

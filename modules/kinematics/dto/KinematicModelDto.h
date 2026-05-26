@@ -165,16 +165,20 @@ struct KinematicModelDto
     IkSolverConfigDto ik_solver_config;
 
     /// @brief 创建可直接进入编辑、FK/IK 与工作空间采样流程的默认 6R 串联模型。
+    /// @details 默认 DH 表与 Topology::RobotTopologyModelDto::CreateDefault 经 BuildModelFromTopology
+    /// 派生出的 PUMA-Spong 约定保持一致：a3 携带前臂长度沿 x2 延伸到腕心，d3=d4=d5=0
+    /// 保证球形腕几何（J4/J5/J6 共点于 O_3）。J2 的 theta_offset=90 让零位时上臂沿
+    /// world +z 立起，整体呈直立立柱姿态。
     static KinematicModelDto CreateDefault()
     {
         KinematicModelDto dto;
         dto.links = {
-            {QStringLiteral("link_1"), 0.0, 90.0, 0.35, 0.0},
-            {QStringLiteral("link_2"), 0.30, 0.0, 0.0, 0.0},
-            {QStringLiteral("link_3"), 0.25, 0.0, 0.0, 0.0},
-            {QStringLiteral("link_4"), 0.0, 90.0, 0.12, 0.0},
-            {QStringLiteral("link_5"), 0.0, -90.0, 0.10, 0.0},
-            {QStringLiteral("link_6"), 0.0, 0.0, 0.08, 0.0}};
+            {QStringLiteral("link_1"), 0.10,  90.0, 0.35, 0.0},
+            {QStringLiteral("link_2"), 0.40,   0.0, 0.0,  90.0},
+            {QStringLiteral("link_3"), 0.35,  90.0, 0.0,  0.0},
+            {QStringLiteral("link_4"), 0.0,  -90.0, 0.0,  0.0},
+            {QStringLiteral("link_5"), 0.0,   90.0, 0.0,  0.0},
+            {QStringLiteral("link_6"), 0.0,    0.0, 0.10, 0.0}};
 
         dto.joint_limits = {
             {QStringLiteral("joint_1"), {-175.0, 175.0}, {-185.0, 185.0}, 180.0, 360.0},

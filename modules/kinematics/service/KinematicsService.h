@@ -359,7 +359,7 @@ namespace RoboSDP::Kinematics::Service
          * 这是一个轻量级的跨模块通用工具。它不依赖 Pinocchio 原生库，
          * 用于在 Topology 或 Kinematics 阶段实时提供所见即所得的视觉反馈。提供给 Topology 或在引擎未就绪瞬间填补 UI 空窗期。
          * @param topologyModel 拓扑输入模型（提供连杆尺寸 a, d 等）
-         * @param jointAnglesDeg 给定的各关节角度。如果为空，则默认按“L型展开零位”展示。
+         * @param jointAnglesDeg 给定的各关节角度。为空或显式传入全 0 时，均按“立柱/L 型展开零位”展示。
          * @return 用于传递给 VTK 渲染的场景 DTO
          */
         static RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto GenerateSkeletonPreview(

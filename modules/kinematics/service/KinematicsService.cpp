@@ -2580,41 +2580,39 @@ RoboSDP::Kinematics::Dto::UrdfPreviewSceneDto KinematicsService::GenerateSkeleto
     const double d1 = topologyModel.robot_definition.base_height_m;      // 基座高度
     const double a1 = topologyModel.robot_definition.shoulder_offset_m;  // 肩部偏置
     const double a2 = topologyModel.robot_definition.upper_arm_length_m; // 大臂长度
-    const double a3 = topologyModel.robot_definition.elbow_offset_m;     // 肘部偏移
-    const double d4 = topologyModel.robot_definition.forearm_length_m;   // 小臂长度
-    double d5 = 0.0;
+    const double a3_offset = topologyModel.robot_definition.elbow_offset_m;     // 肘部偏置（沿 z2，默认 0）
+    const double forearm = topologyModel.robot_definition.forearm_length_m;     // 前臂长度
     double d6 = topologyModel.robot_definition.wrist_offset_m;           // 腕部偏置
     double tcpOffsetZ = 0.0;
 
     // 【新增】：同步运动学模块中的空心手腕补偿特性
+    //   注意：保持球腕几何（J4/J5/J6 共点于 O_3），把空心补偿挪到 d6 与 TCP，避免破坏 d4=d5=0
     if (topologyModel.layout.hollow_wrist_required)
     {
-        d5 = 0.12;
-        d6 = 0.10;
+        d6 += 0.12;
         tcpOffsetZ = 0.12;
     }
 
     // =====================================================================
-    // 2. 构造标准 D-H (Standard DH) 参数表
+    // 2. 构造 PUMA-Spong 标准 D-H 参数表
+    //    a3 携带前臂长度，沿 x2 方向延伸到腕心，保证 J4/J5/J6 在腕心重合
     // =====================================================================
     struct DHTableRow { double a, alpha, d, theta; };
     std::array<DHTableRow, 6> dhTable = {{
-        {a1,  90.0,  d1,  0.0},    // Link 1
-        {a2,  0.0,   0.0, 0.0},    // Link 2
-        {a3,  90.0,  0.0, 90.0},   // Link 3
-        {0.0, -90.0, d4,  0.0},    // Link 4
-        {0.0, 90.0,  d5,  0.0},    // Link 5 (引入空心手腕 d5)
-        {0.0, 0.0,   d6,  0.0}     // Link 6
+        {a1,       90.0,  d1,        0.0},   // Link 1
+        {a2,       0.0,   0.0,       90.0},  // Link 2
+        {forearm,  90.0,  a3_offset, 0.0},   // Link 3 — a3=前臂长度, d3=肘偏置, θ_offset=0
+        {0.0,     -90.0,  0.0,       0.0},   // Link 4 — 球腕首段，d4=0
+        {0.0,      90.0,  0.0,       0.0},   // Link 5 — 球腕中段
+        {0.0,      0.0,   d6,        0.0}    // Link 6 — 法兰沿 z5 偏 d6
     }};
 
     // =====================================================================
     // 3. 应用输入的关节角度或默认零位补偿
     // =====================================================================
-    if (jointAnglesDeg.size() >= 6) {
-        for (int i = 0; i < 6; ++i) { dhTable[i].theta += jointAnglesDeg[i]; }
-    } else {
-        // 【视觉优化】：强制给 J2 补偿 90 度，呈现易于观察的“L型展开”姿态
-        dhTable[1].theta += 90.0; 
+    const std::size_t jointCount = std::min<std::size_t>(jointAnglesDeg.size(), dhTable.size());
+    for (std::size_t i = 0; i < jointCount; ++i) {
+        dhTable[i].theta += jointAnglesDeg[i];
     }
 
     // =====================================================================

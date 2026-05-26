@@ -356,7 +356,8 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
     const double d4 = topologyModel.robot_definition.forearm_length_m;   // 小臂长度
     const double d6 = topologyModel.robot_definition.wrist_offset_m;     // 腕部偏置
 
-    // (3) 严格按照 6R 机器人的标准 D-H 规范映射参数
+    // (3) 严格按照 6R 机器人的 PUMA-Spong DH 规范映射参数
+    //     前臂长度落在 a3（沿 x2 延伸到腕心），保证 J4/J5/J6 在球腕中心重合
     if (model.links.size() >= 6)
     {
         // Link 1 (腰关节)
@@ -365,44 +366,44 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
         model.links[0].d = d1;         // 基座高度作为 d1
         model.links[0].theta_offset = 0.0;
 
-        // Link 2 (肩关节)
+        // Link 2 (肩关节) — 上臂沿 x1 方向延伸
         model.links[1].a = a2;         // 大臂长度作为 a2
         model.links[1].alpha = 0.0;
         model.links[1].d = 0.0;
-        // 补偿 -90 度，使模型在零位时大臂前伸（与 Topology 预览 L 型对齐）
+        // 补偿 90 度，使零位时上臂沿 world +z 立起（L 型立柱姿态）
         model.links[1].theta_offset = 90.0;
 
-        // Link 3 (肘关节)
-        model.links[2].a = a3;
+        // Link 3 (肘关节) — 前臂沿 x2 方向延伸到腕心 O_3
+        //   令 a3 = 前臂长度，d3 = 肘部沿 z2 的横向偏置（默认 0）
+        //   这样 O_3 = O_2 + a3·x2，正好是腕中心；J4/J5/J6 共点于此
+        model.links[2].a = d4;             // 前臂长度作为 a3（拓扑字段名 forearm_length）
         model.links[2].alpha = 90.0;
-        model.links[2].d = 0.0;
-        // 补偿 90 度，使模型在零位时小臂垂直（与 Topology 预览 L 型对齐）
-        model.links[2].theta_offset = 90.0;
+        model.links[2].d = a3;             // 肘部偏置作为 d3（拓扑字段名 elbow_offset）
+        model.links[2].theta_offset = 0.0; // 零位下前臂沿 x2(=world +z) 直伸
 
-        // Link 4 (小臂滚动)
+        // Link 4 (腕 roll) — 球形腕第一段，长度 d4 = 0，原点与 O_3 重合
         model.links[3].a = 0.0;
         model.links[3].alpha = -90.0;
-        model.links[3].d = d4;         // 小臂长度作为 d4
+        model.links[3].d = 0.0;
         model.links[3].theta_offset = 0.0;
 
-        // Link 5 (手腕摆动)
+        // Link 5 (腕 pitch)
         model.links[4].a = 0.0;
         model.links[4].alpha = 90.0;
         model.links[4].d = 0.0;
         model.links[4].theta_offset = 0.0;
 
-        // Link 6 (法兰盘)
+        // Link 6 (腕 yaw / 法兰) — d6 沿 z5 延伸到法兰
         model.links[5].a = 0.0;
         model.links[5].alpha = 0.0;
-        model.links[5].d = d6;         // 腕部偏置作为 d6
+        model.links[5].d = d6;             // 腕部偏置作为 d6
         model.links[5].theta_offset = 0.0;
 
-        // 业务特性体现：空心手腕补偿
+        // 业务特性体现：空心手腕补偿（沿法兰轴方向延长 d6，保留球腕语义）
         if (topologyModel.layout.hollow_wrist_required)
         {
-            model.links[4].d = 0.12;
-            model.links[5].d = 0.10;
-            model.tcp_frame.translation_m[2] = 0.12; // 确保 TCP 也同步前移
+            model.links[5].d = d6 + 0.12;
+            model.tcp_frame.translation_m[2] = 0.12;
         }
     }
 
