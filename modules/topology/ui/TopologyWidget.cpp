@@ -385,8 +385,8 @@ QGroupBox* TopologyWidget::CreateTopologyGroup()
     dimensionLayout->addRow(QStringLiteral("基座高度 (d1) [m]"), m_base_height_spin);
     dimensionLayout->addRow(QStringLiteral("肩部偏置 (a1) [m]"), m_shoulder_offset_spin);
     dimensionLayout->addRow(QStringLiteral("大臂长度 (a2) [m]"), m_upper_arm_length_spin);
-    dimensionLayout->addRow(QStringLiteral("肘部偏移 (a3) [m]"), m_elbow_offset_spin);
-    dimensionLayout->addRow(QStringLiteral("小臂长度 (d4) [m]"), m_forearm_length_spin);
+    dimensionLayout->addRow(QStringLiteral("肘部偏移 (d3) [m]"), m_elbow_offset_spin);
+    dimensionLayout->addRow(QStringLiteral("小臂长度 (a3) [m]"), m_forearm_length_spin);
     dimensionLayout->addRow(QStringLiteral("腕法兰偏置 (d6) [m]"), m_wrist_offset_spin);
 
     installationLayout->addRow(QStringLiteral("基座安装方式"), m_base_mount_combo);

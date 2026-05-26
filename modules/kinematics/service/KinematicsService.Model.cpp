@@ -352,8 +352,8 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
     const double d1 = topologyModel.robot_definition.base_height_m;      // 基座高度
     const double a1 = topologyModel.robot_definition.shoulder_offset_m;  // 肩部偏置
     const double a2 = topologyModel.robot_definition.upper_arm_length_m; // 大臂长度
-    const double a3 = topologyModel.robot_definition.elbow_offset_m;     // 肘部偏移
-    const double d4 = topologyModel.robot_definition.forearm_length_m;   // 小臂长度
+    const double d3 = topologyModel.robot_definition.elbow_offset_m;     // 肘部沿 z2 的横向偏置
+    const double a3 = topologyModel.robot_definition.forearm_length_m;   // 前臂/小臂主长度
     const double d6 = topologyModel.robot_definition.wrist_offset_m;     // 腕部偏置
 
     // (3) 严格按照 6R 机器人的 PUMA-Spong DH 规范映射参数
@@ -376,9 +376,9 @@ RoboSDP::Kinematics::Dto::KinematicModelDto KinematicsService::BuildModelFromTop
         // Link 3 (肘关节) — 前臂沿 x2 方向延伸到腕心 O_3
         //   令 a3 = 前臂长度，d3 = 肘部沿 z2 的横向偏置（默认 0）
         //   这样 O_3 = O_2 + a3·x2，正好是腕中心；J4/J5/J6 共点于此
-        model.links[2].a = d4;             // 前臂长度作为 a3（拓扑字段名 forearm_length）
+        model.links[2].a = a3;             // 前臂长度作为 a3（拓扑字段名 forearm_length）
         model.links[2].alpha = 90.0;
-        model.links[2].d = a3;             // 肘部偏置作为 d3（拓扑字段名 elbow_offset）
+        model.links[2].d = d3;             // 肘部偏置作为 d3（拓扑字段名 elbow_offset）
         model.links[2].theta_offset = 0.0; // 零位下前臂沿 x2(=world +z) 直伸
 
         // Link 4 (腕 roll) — 球形腕第一段，长度 d4 = 0，原点与 O_3 重合

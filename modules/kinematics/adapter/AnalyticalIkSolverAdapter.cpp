@@ -83,17 +83,17 @@ QString AnalyticalIkSolverAdapter::SolverId() const
 QString AnalyticalIkSolverAdapter::SolverDescription() const
 {
     return QStringLiteral(
-        "闭式解析 IK 求解器（标准 DH、6R PUMA-Spong：|α₁|=|α₃|=|α₄|=|α₅|=90°、α₂=0、球形腕）。");
+        "闭式解析 IK 求解器（标准 DH、6R PUMA-Spong：α₁=90°、α₂=0、α₃=90°、|α₄|=|α₅|=90°、球形腕）。");
 }
 
 // =========================================================================
 // Pieper 条件检测
 // =========================================================================
 // 项目内拓扑→运动学约定（PUMA-Spong 风格）固定为：
-//   links[0]: a1=肩部偏置, |α1|=90°, d1=基座高度
+//   links[0]: a1=肩部偏置, α1=+90°, d1=基座高度
 //   links[1]: a2=上臂长度, α2=0,     d=0      (J2 与 J3 轴线平行)
-//   links[2]: a3=肘部偏置, |α3|=90°, d=0      (z3 与 z2 正交，d4 沿 z3 表前臂长)
-//   links[3]: a4=0,        |α4|=90°, d4=前臂长度
+//   links[2]: a3=前臂长度, α3=+90°, d3=肘部沿 z2 偏置 (默认 0)
+//   links[3]: a4=0,        |α4|=90°, d4=0     (J4 原点即腕心 O3)
 //   links[4]: a5=0,        |α5|=90°, d5=0     (球形腕：J5/J6 与 J4 共点)
 //   links[5]: a6=0,         α6=0,    d6=腕部偏置
 bool AnalyticalIkSolverAdapter::CheckPieperCriterion(
@@ -131,12 +131,12 @@ bool AnalyticalIkSolverAdapter::CheckPieperCriterion(
     if (std::abs(model.links[1].alpha) > tolerance)
         return false;
 
-    // 7. PUMA-Spong 约定：|α3| ≈ 90°（z3 ⊥ z2，d4 沿 z3 方向表前臂）
-    if (std::abs(std::abs(model.links[2].alpha) - 90.0) > tolerance)
+    // 7. 当前闭式推导只覆盖项目生成的正号 PUMA-Spong 约定：α3 ≈ +90°
+    if (std::abs(model.links[2].alpha - 90.0) > tolerance)
         return false;
 
-    // 8. 基座→肩关节轴线需正交：|α1| ≈ 90°
-    if (std::abs(std::abs(model.links[0].alpha) - 90.0) > tolerance)
+    // 8. 当前闭式推导只覆盖项目生成的正号基座扭转：α1 ≈ +90°
+    if (std::abs(model.links[0].alpha - 90.0) > tolerance)
         return false;
 
     return true;
@@ -232,9 +232,9 @@ Eigen::Matrix4d AnalyticalIkSolverAdapter::ComputeTargetFlangeTransform(
 // 臂部求解 (θ1, θ2, θ3) — PUMA-Spong 约定
 // =========================================================================
 // DH 参数（含 theta_offset，以下记号都是“几何角” q_i = q_user + theta_offset_i）：
-//   links[0]: a1, |α1|=90°, d1
+//   links[0]: a1, α1=+90°, d1
 //   links[1]: a2, α2=0,     d=0
-//   links[2]: a3, |α3|=90°, d3  ← d3 即“肘部沿 z2 偏置”，常为 0
+//   links[2]: a3, α3=+90°, d3  ← d3 即“肘部沿 z2 偏置”，常为 0
 //   links[3]: a4=0, |α4|=90°, d4
 // 设 c_i = cos(q_i), s_i = sin(q_i), c23 = cos(q2+q3), s23 = sin(q2+q3)。
 // 通过 T_03 与 z3 轴的展开可得腕心方程：
@@ -598,7 +598,7 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     // 1. Pieper 准则几何条件检测
     if (!CheckPieperCriterion(model))
     {
-        return failWithReason(QStringLiteral("不满足 Pieper 准则（需要 DH 标准、6R、α2=0、|α1|=|α3|=|α4|=|α5|=90°、a4=a5=d5=0）。"));
+        return failWithReason(QStringLiteral("不满足 Pieper 准则（需要 DH 标准、6R、α1=90°、α2=0、α3=90°、|α4|=|α5|=90°、a4=a5=d5=0）。"));
     }
 
     // 2. 计算目标法兰中心的目标位姿 R_06, P_06

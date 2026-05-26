@@ -232,7 +232,7 @@ TopologyValidationResult TopologyValidator::Validate(
             result,
             QStringLiteral("robot_definition.elbow_offset_m"),
             QStringLiteral("TOPOLOGY_ELBOW_OFFSET_NEGATIVE"),
-            QStringLiteral("肘部偏移不能为负数。"));
+            QStringLiteral("肘部 d3 偏移不能为负数。"));
     }
 
     if (model.robot_definition.forearm_length_m <= 0.0)
@@ -241,7 +241,7 @@ TopologyValidationResult TopologyValidator::Validate(
             result,
             QStringLiteral("robot_definition.forearm_length_m"),
             QStringLiteral("TOPOLOGY_FOREARM_INVALID"),
-            QStringLiteral("小臂长度必须大于 0。"));
+            QStringLiteral("小臂 a3 长度必须大于 0。"));
     }
 
     if (model.robot_definition.wrist_offset_m < 0.0)

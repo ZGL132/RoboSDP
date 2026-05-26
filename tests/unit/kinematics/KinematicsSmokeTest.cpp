@@ -1,5 +1,6 @@
 #include "modules/kinematics/adapter/PinocchioIkSolverAdapter.h"
 #include "modules/kinematics/adapter/PinocchioKinematicBackendAdapter.h"
+#include "modules/kinematics/adapter/AnalyticalIkSolverAdapter.h"
 #include "modules/kinematics/dto/KinematicModelDto.h"
 #include "modules/kinematics/dto/KinematicSolverResultDto.h"
 #include "modules/kinematics/service/KinematicsService.h"
@@ -21,6 +22,23 @@ int main()
     using namespace RoboSDP::Kinematics::Dto;
 
     const KinematicModelDto model = KinematicModelDto::CreateDefault();
+    if (!RoboSDP::Kinematics::Adapter::AnalyticalIkSolverAdapter::CheckPieperCriterion(model))
+    {
+        return 8;
+    }
+    auto negativeAlpha1Model = model;
+    negativeAlpha1Model.links[0].alpha = -90.0;
+    if (RoboSDP::Kinematics::Adapter::AnalyticalIkSolverAdapter::CheckPieperCriterion(negativeAlpha1Model))
+    {
+        return 9;
+    }
+    auto negativeAlpha3Model = model;
+    negativeAlpha3Model.links[2].alpha = -90.0;
+    if (RoboSDP::Kinematics::Adapter::AnalyticalIkSolverAdapter::CheckPieperCriterion(negativeAlpha3Model))
+    {
+        return 10;
+    }
+
     // PUMA-Spong 约定：a3 携带前臂长度，d4=0 保证 J4/J5/J6 在腕心重合，d5=0 保证球腕。
     const std::vector<KinematicLinkParameterDto> expectedTopologyDefaultLinks {
         {QStringLiteral("link_1"), 0.10,  90.0, 0.35, 0.0},
