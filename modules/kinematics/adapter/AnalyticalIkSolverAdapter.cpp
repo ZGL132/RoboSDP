@@ -12,14 +12,18 @@ namespace RoboSDP::Kinematics::Adapter
 namespace
 {
 
+// =========================================================================
+// 匿名空间：辅助常量与工具函数
+// =========================================================================
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDegToRad = kPi / 180.0;
 constexpr double kRadToDeg = 180.0 / kPi;
-constexpr double kSingularTolerance = 1.0e-10;
+constexpr double kSingularTolerance = 1.0e-10; // 奇异值判定容差
 
 double DegToRad(double deg) { return deg * kDegToRad; }
 double RadToDeg(double rad) { return rad * kRadToDeg; }
 
+/// @brief 将角度规整到 [-180, 180) 范围内。
 double NormalizeAngleDegAnon(double a)
 {
     double n = std::fmod(a + 180.0, 360.0);
@@ -27,12 +31,15 @@ double NormalizeAngleDegAnon(double a)
     return n - 180.0;
 }
 
+/// @brief 安全的反余弦函数，防止因浮点数微小误差导致输入超出 [-1, 1] 范围而产生 NaN。
 double SafeAcos(double v)
 {
     return std::acos(std::max(-1.0, std::min(1.0, v)));
 }
 
-/// @brief RPY (ZYX extrinsic) → 旋转矩阵。与 FK 中 BuildPoseFromSe3 的 RPY 约定一致。
+/// @brief RPY (ZYX 外规旋转) -> 旋转矩阵。
+/// 旋转顺序：先绕固定轴 X 旋转 Roll，再绕固定轴 Y 旋转 Pitch，最后绕固定轴 Z 旋转 Yaw。
+/// 该定义与正向运动学 (FK) 中 BuildPoseFromSe3 的 RPY 约定一致。
 Eigen::Matrix3d RpyDegToMatrix(double rollDeg, double pitchDeg, double yawDeg)
 {
     const double r = DegToRad(rollDeg);
@@ -44,7 +51,7 @@ Eigen::Matrix3d RpyDegToMatrix(double rollDeg, double pitchDeg, double yawDeg)
     return (rz * ry * rx).toRotationMatrix();
 }
 
-/// @brief RPY 差分 → 轴角姿态误差向量。
+/// @brief 计算目标 RPY 与当前 RPY 之间的姿态误差，返回以弧度表示的轴角姿态误差向量。
 Eigen::Vector3d ComputeOrientationErrorRad(
     const std::array<double, 3>& targetRpyDeg,
     const std::array<double, 3>& currentRpyDeg)
@@ -75,7 +82,7 @@ QString AnalyticalIkSolverAdapter::SolverId() const
 
 QString AnalyticalIkSolverAdapter::SolverDescription() const
 {
-    return QStringLiteral("闭式解析 IK 求解器（Pieper 准则，适用于标准 6R 球形腕机器人）。");
+    return QStringLiteral("闭式解析 IK 求解器（标准 DH、6R、球形腕、|α₀|=90°、α₁=α₂=0）。");
 }
 
 // =========================================================================
@@ -85,18 +92,40 @@ bool AnalyticalIkSolverAdapter::CheckPieperCriterion(
     const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
     double tolerance)
 {
-    // 1. 必须为 6 轴
+    // 1. 关节及连杆数量必须为 6（六轴机器人）
     if (model.links.size() != 6 || model.joint_count != 6)
         return false;
 
-    // 2. 关节限位数量也必须匹配
+    // 2. 关节限位数据数量也必须为 6
     if (model.joint_limits.size() != 6)
         return false;
 
-    // 3. 球形腕条件：a4 ≈ 0、a5 ≈ 0 且 d5 ≈ 0（最后三关节轴线交于一点）
+    // 3. 球形腕条件：最后三个关节的轴线必须交于一点。
+    // 在标准 DH 参数下，这通常对应 a4 ≈ 0, a5 ≈ 0 且 d5 ≈ 0。
     if (std::abs(model.links[3].a) > tolerance ||
         std::abs(model.links[4].a) > tolerance ||
         std::abs(model.links[4].d) > tolerance)
+        return false;
+
+    // 4. 腕部相邻关节轴线的夹角 (alpha4, alpha5) 必须为 ±90°，以保证闭式解析法能够正常提取腕部角度
+    const double alpha4 = std::abs(model.links[3].alpha);
+    const double alpha5 = std::abs(model.links[4].alpha);
+    if (std::abs(alpha4 - 90.0) > tolerance ||
+        std::abs(alpha5 - 90.0) > tolerance)
+        return false;
+
+    // 5. 仅支持标准 DH（MDH 下臂部闭式解推导不适用）
+    if (model.parameter_convention != QStringLiteral("DH"))
+        return false;
+
+    // 6. 臂型假设：α₁ ≈ 0、α₂ ≈ 0（肩关节与肘关节轴线平行，构成平面 2R 臂）
+    if (std::abs(model.links[1].alpha) > tolerance ||
+        std::abs(model.links[2].alpha) > tolerance)
+        return false;
+
+    // 7. 基座与肩关节轴线需近似垂直：|α₀| ≈ 90°
+    //    保证臂部投影到水平面可用当前闭式推导
+    if (std::abs(std::abs(model.links[0].alpha) - 90.0) > tolerance)
         return false;
 
     return true;
@@ -113,12 +142,11 @@ Eigen::Matrix4d AnalyticalIkSolverAdapter::DhTransform(
     const double ca = std::cos(DegToRad(alphaDeg));
     const double sa = std::sin(DegToRad(alphaDeg));
 
-    // 标准 DH: RotZ(theta) * TransZ(d) * TransX(a) * RotX(alpha)
+    // 标准 DH 齐次变换矩阵公式: RotZ(theta) * TransZ(d) * TransX(a) * RotX(alpha)
     Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
     T(0, 0) = ct;         T(0, 1) = -st * ca;   T(0, 2) =  st * sa;   T(0, 3) = a * ct;
     T(1, 0) = st;         T(1, 1) =  ct * ca;   T(1, 2) = -ct * sa;   T(1, 3) = a * st;
     T(2, 1) = sa;         T(2, 2) =  ca;         T(2, 3) = d;
-    // Row 3: 0, 0, 0, 1  (identity)
     return T;
 }
 
@@ -130,7 +158,7 @@ Eigen::Matrix4d AnalyticalIkSolverAdapter::MdhTransform(
     const double ca = std::cos(DegToRad(alphaDeg));
     const double sa = std::sin(DegToRad(alphaDeg));
 
-    // 改进 DH: TransX(a) * RotX(alpha) * RotZ(theta) * TransZ(d)
+    // 改进 DH (Modified DH) 齐次变换矩阵公式: TransX(a) * RotX(alpha) * RotZ(theta) * TransZ(d)
     Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
     T(0, 0) = ct;          T(0, 1) = -st;         T(0, 2) = 0.0;    T(0, 3) = a;
     T(1, 0) = st * ca;     T(1, 1) = ct * ca;     T(1, 2) = -sa;    T(1, 3) = -d * sa;
@@ -147,6 +175,7 @@ Eigen::Matrix4d AnalyticalIkSolverAdapter::ComputeFlangeTransform(
     Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
     for (std::size_t i = 0; i < links.size() && i < jointAnglesDeg.size(); ++i)
     {
+        // 计算时累加关节的初始偏差偏移量 (theta_offset)
         const double theta = jointAnglesDeg[i] + links[i].theta_offset;
         if (isDh)
         {
@@ -167,20 +196,20 @@ Eigen::Matrix4d AnalyticalIkSolverAdapter::ComputeTargetFlangeTransform(
     const RoboSDP::Kinematics::Dto::KinematicModelDto& model,
     const RoboSDP::Kinematics::Dto::IkRequestDto& request) const
 {
-    // 目标 TCP 位姿 → 4x4
+    // 获取目标 TCP 的 4x4 齐次变换矩阵
     const Eigen::Matrix4d T_target = PoseToMatrix4d(request.target_pose);
 
-    // 基坐标系偏移
+    // 基坐标系变换矩阵
     const Eigen::Matrix4d T_base = PoseToMatrix4d(model.base_frame);
 
-    // TCP offset (flange → TCP)
+    // 工具中心点偏移量 (Flange -> TCP)
     const Eigen::Matrix4d T_tcp = TcpFrameToMatrix4d(model.tcp_frame);
 
-    // Flange offset (DH6 → 法兰中心)
+    // 法兰坐标系偏移量 (DH 最后一个连杆坐标系 -> 法兰中心)
     const Eigen::Matrix4d T_flange = PoseToMatrix4d(model.flange_frame);
 
+    // 逆向求解目标连杆链的末端位姿 (从基座 0 到连杆 6 的变换)：
     // T_base_to_flange_target = inv(T_base) * T_target * inv(T_tcp) * inv(T_flange)
-    // 即 DH chain 从 0 到 6 需要达到的目标
     const Eigen::Matrix4d T_base_inv = T_base.inverse();
     const Eigen::Matrix4d T_tcp_inv = T_tcp.inverse();
     const Eigen::Matrix4d T_flange_inv = T_flange.inverse();
@@ -195,57 +224,105 @@ std::vector<std::array<double, 3>> AnalyticalIkSolverAdapter::SolveArm(
     const Eigen::Vector3d& wristCenter,
     const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links)
 {
+    // 标准 DH 参数提取（0-indexed）：
+    //   links[0]: a₀, α₀=±90°, d₁     — 基座偏置
+    //   links[1]: a₁, α₁=0,    d₂=0   — 上臂长度
+    //   links[2]: a₂, α₂=0,    d₃=0   — 前臂 DH a 参数
+    //   links[3]: a₃=0, α₃=±90°, d₄   — 腕心沿 Z₃ 方向的偏移
     const double d1 = links[0].d;
-    const double a1 = links[0].a;
-    const double a2 = links[1].a;
-    const double a3 = links[2].a;
-    const double d4 = links[3].d;
-    const double forearmLength = std::hypot(a3, d4);
-    if (a2 <= kSingularTolerance || forearmLength <= kSingularTolerance)
+    const double a0 = links[0].a;
+    const double a1 = links[1].a;      // 上臂长度
+    const double a2 = links[2].a;      // 前臂 DH a 参数
+    const double d4 = links[3].d;      // 腕心在 Z₃ 方向的偏移
+
+    if (a1 <= kSingularTolerance || a2 <= kSingularTolerance)
         return {};
 
     const double Px = wristCenter.x();
     const double Py = wristCenter.y();
     const double Pz = wristCenter.z();
     const double rho = std::hypot(Px, Py);
-    const double baseAngle = std::atan2(Px, -Py);
-    const double planarY = d1 - Pz;
-    const double forearmPhase = std::atan2(a3, d4);
+    if (rho <= kSingularTolerance)
+        return {};  // 腕心在 Z₀ 轴上，退化
+
+    // ────────────────────────────────────────────────────────────────────
+    // 标准 DH 正向运动学（α₀=±90°, α₁=α₂=0）：
+    //
+    //   Px = (x₁+a₀)*cθ₁ + d₄*sθ₁
+    //   Py = (x₁+a₀)*sθ₁ - d₄*cθ₁
+    //   Pz = y₁ + d₁
+    //
+    // 其中 x₁ = a₁*cθ₂ + a₂*cos(θ₂+θ₃), y₁ = a₁*sθ₂ + a₂*sin(θ₂+θ₃)
+    //       z₁ = d₄ （腕心在 Z₃ 方向偏移，垂直于臂平面）
+    //
+    // 由 Px*sθ₁ - Py*cθ₁ = d₄ 可解 θ₁
+    // ────────────────────────────────────────────────────────────────────
+
+    // d₄ 校正后的径向距离（腕心在臂平面内的投影半径）
+    const double rho_sq = rho * rho;
+    const double d4_sq = d4 * d4;
+    const double radial = std::sqrt(std::max(0.0, rho_sq - d4_sq));
+
+    // θ₁ 基准解（对应臂向前的构型）
+    //   θ₁ = φ + atan2(-d₄, radial), 其中 φ = atan2(Py, Px)
+    const double th1_rad_base = std::atan2(Py * radial - Px * d4,
+                                            Px * radial + Py * d4);
 
     std::vector<std::array<double, 3>> solutions;
+
     for (const double shoulderSign : {1.0, -1.0})
     {
-        const double th1Deg = NormalizeAngleDeg(
-            RadToDeg(baseAngle + (shoulderSign < 0.0 ? kPi : 0.0)));
-        const double planarX = shoulderSign * rho - a1;
+        const double th1_rad = th1_rad_base + (shoulderSign < 0.0 ? kPi : 0.0);
+        const double ct1 = std::cos(th1_rad);
+        const double st1 = std::sin(th1_rad);
 
-        const double cosIncluded =
-            (planarX * planarX + planarY * planarY - a2 * a2 - forearmLength * forearmLength) /
-            (2.0 * a2 * forearmLength);
-        if (cosIncluded < -1.0 - kSingularTolerance ||
-            cosIncluded > 1.0 + kSingularTolerance)
-        {
+        // 臂平面内腕心相对于关节 2 原点的位置
+        //   x₁ = Px*cθ₁ + Py*sθ₁ - a₀   （径向分量）
+        //   y₁ = Pz - d₁                 （垂直分量，即臂平面内高度）
+        const double x1 = Px * ct1 + Py * st1 - a0;
+        const double y1 = Pz - d1;
+
+        // ── 余弦定理求 θ₃ ──
+        //   L² = x₁² + y₁² + d₄² = a₁² + a₂² + d₄² + 2*a₁*a₂*cos(θ₃)
+        const double L_sq = x1 * x1 + y1 * y1;
+        const double cos_th3 = (L_sq - a1 * a1 - a2 * a2) / (2.0 * a1 * a2);
+        if (cos_th3 < -1.0 - kSingularTolerance ||
+            cos_th3 > 1.0 + kSingularTolerance)
             continue;
-        }
 
-        const double included = SafeAcos(cosIncluded);
-        for (const double includedSigned : {included, -included})
+        const double th3_abs = SafeAcos(cos_th3);
+
+        for (const double elbowSign : {1.0, -1.0})
         {
-            const double beta = std::atan2(
-                forearmLength * std::sin(includedSigned),
-                a2 + forearmLength * std::cos(includedSigned));
-            const double theta2 = std::atan2(planarY, planarX) - beta;
-            const double theta3 = includedSigned - forearmPhase;
+            const double th3 = elbowSign * th3_abs;
+
+            // ── 2R 臂平面正解求 θ₂ ──
+            //   x₁ = A*cθ₂ - B*sθ₂
+            //   y₁ = A*sθ₂ + B*cθ₂
+            //   其中 A = a₁ + a₂*cos(θ₃), B = a₂*sin(θ₃)
+            const double c3 = std::cos(th3);
+            const double s3 = std::sin(th3);
+            const double A = a1 + a2 * c3;
+            const double B = a2 * s3;
+            const double r2_sq = A * A + B * B;
+            if (r2_sq <= kSingularTolerance)
+                continue;
+
+            const double s2 = (A * y1 - B * x1) / r2_sq;
+            const double c2 = (A * x1 + B * y1) / r2_sq;
+            const double th2 = std::atan2(s2, c2);
+
             solutions.push_back({
-                th1Deg,
-                NormalizeAngleDeg(RadToDeg(theta2)),
-                NormalizeAngleDeg(RadToDeg(theta3))
+                NormalizeAngleDeg(RadToDeg(th1_rad) - links[0].theta_offset),
+                NormalizeAngleDeg(RadToDeg(th2) - links[1].theta_offset),
+                NormalizeAngleDeg(RadToDeg(th3) - links[2].theta_offset)
             });
         }
     }
 
     return solutions;
 }
+
 // =========================================================================
 // 腕部求解 (θ4, θ5, θ6)
 // =========================================================================
@@ -255,78 +332,92 @@ std::vector<AnalyticalIkSolverAdapter::JointSolution> AnalyticalIkSolverAdapter:
     const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links,
     const QString& parameterConvention)
 {
-    // 计算前 3 个关节的 FK → T_03
+    // 1. 基于已知的臂部解计算前 3 个关节的正向运动学矩阵 T_03
     const std::vector<double> armAngles = {armSolutionDeg[0], armSolutionDeg[1], armSolutionDeg[2]};
     std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto> first3Links(
         links.begin(), links.begin() + 3);
     const Eigen::Matrix4d T_03 = ComputeFlangeTransform(armAngles, first3Links, parameterConvention);
     const Eigen::Matrix3d R_03 = ExtractRotation(T_03);
 
-    // 目标方向矩阵 R_06
+    // 2. 提取目标末端总方向 R_06
     const Eigen::Matrix3d R_06 = ExtractRotation(targetFlangeTransform);
 
-    // R_3_to_6 = R_03^T * R_06
+    // 3. 计算从连杆 3 到连杆 6 的相对旋转：R_3_to_6 = R_03^T * R_06
     const Eigen::Matrix3d R_36 = R_03.transpose() * R_06;
 
-    // 使用 alpha4, alpha5, alpha6 参数
-    const double a4 = DegToRad(links[3].alpha);
-    const double a5 = DegToRad(links[4].alpha);
-    // alpha6 通常为 0
+    // 获取相邻连杆旋向符号。由于已满足 Pieper 准则，|alpha4| 和 |alpha5| 接近 90°
+    const double sA4 = std::sin(DegToRad(links[3].alpha)); // sin(α4), 值为 ±1
+    const double sA5 = std::sin(DegToRad(links[4].alpha)); // sin(α5), 值为 ±1
 
-    // 从 R_36 提取腕关节角
-    // R_36 = RotZ(th4) * RotX(a4) * RotZ(th5) * RotX(a5) * RotZ(th6)
-    // 当 a4 = pi/2, a5 = -pi/2 (标准球形腕):
-    // R_36(0,2) = -cos(th4)*sin(th5)
-    // R_36(1,2) = -sin(th4)*sin(th5)
-    // R_36(2,2) = cos(th5)
-    // R_36(2,0) = sin(th5)*cos(th6)
-    // R_36(2,1) = -sin(th5)*sin(th6)
+    // 4. 从 R_36 提取腕关节角
+    // R_36 展开式 (|α4|=|α5|=90°):
+    //   R_36(0,2) =  cos(θ4) * sin(θ5) * sA5
+    //   R_36(1,2) =  sin(θ4) * sin(θ5) * sA5
+    //   R_36(2,2) = -sA4 * sA5 * cos(θ5)
+    //   R_36(2,0) =  sA4 * sin(θ5) * cos(θ6)
+    //   R_36(2,1) = -sA4 * sin(θ5) * sin(θ6)
 
-    const double r13 = R_36(0, 2);   // -c4*s5
-    const double r23 = R_36(1, 2);   // -s4*s5
-    const double r33 = R_36(2, 2);   // c5
-    const double r31 = R_36(2, 0);   // s5*c6
-    const double r32 = R_36(2, 1);   // -s5*s6
+    const double r13 = R_36(0, 2);
+    const double r23 = R_36(1, 2);
+    const double r33 = R_36(2, 2);
+    const double r31 = R_36(2, 0);
+    const double r32 = R_36(2, 1);
 
+    // 计算 sin²(θ5)
     const double s5_sq = r13 * r13 + r23 * r23;
 
     std::vector<JointSolution> solutions;
 
     if (s5_sq > kSingularTolerance)
     {
-        // 正常情况 (非腕部奇异)
-        const double s5 = std::sqrt(s5_sq);
+        // ================= 非奇异情况 =================
+        const double s5Mag = std::sqrt(s5_sq);           // |sin(θ5)|
+        const double cosTh5 = -sA4 * sA5 * r33;          // cos(θ5)
 
-        // 两个腕解: th5 取正或负
+        // sin(θ5) 可取正值或负值，对应两种不同的手腕姿态（翻转状态）
         for (int sign : {+1, -1})
         {
-            const double th5_rad = std::atan2(sign * s5, r33);
-            const double th4_rad = std::atan2(sign * r23, sign * r13);
-            const double th6_rad = std::atan2(sign * r32, -sign * r31);
+            const double th5_rad = std::atan2(sign * s5Mag, cosTh5);
+            const double th4_rad = std::atan2(sign * sA5 * r23, sign * sA5 * r13);
+            const double th6_rad = std::atan2(-sign * sA4 * r32, sign * sA4 * r31);
 
             JointSolution sol;
             sol.values_deg = {
                 armSolutionDeg[0], armSolutionDeg[1], armSolutionDeg[2],
-                NormalizeAngleDeg(RadToDeg(th4_rad)),
-                NormalizeAngleDeg(RadToDeg(th5_rad)),
-                NormalizeAngleDeg(RadToDeg(th6_rad))
+                NormalizeAngleDeg(RadToDeg(th4_rad) - links[3].theta_offset),
+                NormalizeAngleDeg(RadToDeg(th5_rad) - links[4].theta_offset),
+                NormalizeAngleDeg(RadToDeg(th6_rad) - links[5].theta_offset)
             };
             solutions.push_back(sol);
         }
     }
     else
     {
-        // 腕部奇异 (s5 ≈ 0): th4 和 th6 无法单独确定，只有 th4+th6 可解
-        // 设置 th4 = 0，解出 th4+th6
-        const double th5_rad = std::atan2(0.0, r33); // 0 或 pi
-        const double th4_plus_th6 = std::atan2(-R_36(0, 1), R_36(0, 0));
+        // ================= 腕部奇异情况 (sin(θ5) ≈ 0) =================
+        // 此时第 4 轴与第 6 轴共线，它们具有无穷多组解。
+        // 按通用约定：令 θ4 = 0，从而将相对旋转全部合并给 θ6。
+        const double cosTh5 = -sA4 * sA5 * r33;
+        const double th5_rad = (cosTh5 >= 0.0) ? 0.0 : kPi;
+
+        double th6_composite_rad = 0.0;
+        if (cosTh5 >= 0.0)
+        {
+            // 当 θ5 ≈ 0 时：R_36 ≈ Rz(θ4) * Rx(α4+α5) * Rz(θ6)
+            // 根据公式简化并用 R_36(0,0) 和 R_36(0,1) 求解复合角 θ6
+            th6_composite_rad = std::atan2(-R_36(0, 1), R_36(0, 0));
+        }
+        else
+        {
+            // 当 θ5 ≈ π 时：R_36 ≈ Rz(θ4) * Rx(α4) * Rz(π) * Rx(α5) * Rz(θ6)
+            th6_composite_rad = std::atan2(R_36(0, 1), -R_36(0, 0));
+        }
 
         JointSolution sol;
         sol.values_deg = {
             armSolutionDeg[0], armSolutionDeg[1], armSolutionDeg[2],
-            0.0,
-            NormalizeAngleDeg(RadToDeg(th5_rad)),
-            NormalizeAngleDeg(RadToDeg(th4_plus_th6))
+            NormalizeAngleDeg(-links[3].theta_offset), // θ4 设为 0
+            NormalizeAngleDeg(RadToDeg(th5_rad) - links[4].theta_offset),
+            NormalizeAngleDeg(RadToDeg(th6_composite_rad) - links[5].theta_offset)
         };
         solutions.push_back(sol);
     }
@@ -347,16 +438,17 @@ AnalyticalIkSolverAdapter::FilterAndSortSolutions(
 
     for (auto& sol : allSolutions)
     {
-        // 归一化各关节角
+        // 将各关节角度规整到标准区间
         for (auto& v : sol.values_deg)
             v = NormalizeAngleDeg(v);
 
-        // 限位检查
+        // 软限位检查
         bool withinLimits = true;
         for (std::size_t j = 0; j < sol.values_deg.size() && j < jointLimits.size(); ++j)
         {
             const double val = sol.values_deg[j];
-            if (val < jointLimits[j].soft_limit[0] - 1.0 ||  // 1° 松弛容差
+            // 允许给关节软限位提供 1.0 度的冗余宽容度
+            if (val < jointLimits[j].soft_limit[0] - 1.0 ||
                 val > jointLimits[j].soft_limit[1] + 1.0)
             {
                 withinLimits = false;
@@ -366,12 +458,12 @@ AnalyticalIkSolverAdapter::FilterAndSortSolutions(
         if (!withinLimits)
             continue;
 
-        // 计算种子距离
+        // 计算当前解相比于种子关节状态 (seed joint state) 的累计位移距离
         sol.seed_distance = ComputeSeedDistance(sol.values_deg, seedDeg);
         valid.push_back(std::move(sol));
     }
 
-    // 按种子距离升序排序
+    // 按与种子状态的距离升序排序，使最接近当前姿态的解排在最前面
     std::sort(valid.begin(), valid.end(),
         [](const JointSolution& a, const JointSolution& b) {
             return a.seed_distance < b.seed_distance;
@@ -483,6 +575,7 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
 {
     using RoboSDP::Kinematics::Dto::IkResultDto;
 
+    // 统一定义失败退出的返回辅助闭包
     const auto failWithReason = [this, &request](const QString& reason) -> IkResultDto
     {
         IkResultDto result;
@@ -494,26 +587,27 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
         return result;
     };
 
-    // 1. Pieper 条件检测
+    // 1. Pieper 准则几何条件检测
     if (!CheckPieperCriterion(model))
     {
-        return failWithReason(QStringLiteral("不满足 Pieper 准则（需要 6R 且 a4=a5=d5=0）。"));
+        return failWithReason(QStringLiteral("不满足 Pieper 准则（需要 DH 标准、6R、α₁=α₂=0、|α₀|=|α₄|=|α₅|=90°、a₄=a₅=d₅=0）。"));
     }
 
-    // 2. 计算目标法兰位姿
+    // 2. 计算目标法兰中心的目标位姿 R_06, P_06
     const Eigen::Matrix4d T_flange_target = ComputeTargetFlangeTransform(model, request);
     const Eigen::Vector3d P_06 = ExtractPosition(T_flange_target);
     const Eigen::Matrix3d R_06 = ExtractRotation(T_flange_target);
     const Eigen::Vector3d z_06 = R_06 * Eigen::Vector3d::UnitZ();
 
-    // 3. 腕心位置：标准球形腕要求 d5=0，因此只沿法兰末端 Z 轴扣除 d6。
+    // 3. 计算腕心位置 (Wrist Center)：标准球形手腕其第 4、5、6 轴线交于一点
+    // 因此只需将法兰端点坐标沿末端 Z 轴方向反向缩减一个 d6 连杆长度。
     const double d6 = model.links[5].d;
     const Eigen::Vector3d wristCenter = P_06 - d6 * z_06;
 
-    // 4. 求解臂部 (θ1, θ2, θ3)
+    // 4. 求解臂部关节角度 (θ1, θ2, θ3)
     const auto armSolutions = SolveArm(wristCenter, model.links);
 
-    // 5. 对每组臂解求解腕部 (θ4, θ5, θ6)
+    // 5. 针对前一步得到的每组可用臂部解，进一步求出对应的手腕解 (θ4, θ5, θ6)
     std::vector<JointSolution> allSolutions;
     for (const auto& armSol : armSolutions)
     {
@@ -525,17 +619,21 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
 
     const int totalFound = static_cast<int>(allSolutions.size());
 
-    // 6. 限位过滤 + 排序
+    // 6. 进行限位过滤与基于种子距离的重排序
     auto validSolutions = FilterAndSortSolutions(
         std::move(allSolutions), model.joint_limits, request.seed_joint_positions_deg);
     const int limitValidCount = static_cast<int>(validSolutions.size());
+    
+    // 通过正向运动学 (FK) 计算每个候选解的位姿误差，剔除误差超出容差范围的无效解。
+    // [修复此处]: 在捕获列表中显式添加 "this" 指针，以调用类成员函数 ComputePositionErrorM 等
     validSolutions.erase(
         std::remove_if(validSolutions.begin(), validSolutions.end(),
-            [&model, &T_flange_target](const JointSolution& solution) {
+            [this, &model, &T_flange_target](const JointSolution& solution) {
                 const double positionErrorM = ComputePositionErrorM(
                     solution.values_deg, T_flange_target, model.links, model.parameter_convention);
                 const double orientationErrorRad = ComputeOrientationErrorRad(
                     solution.values_deg, T_flange_target, model.links, model.parameter_convention);
+                // 限制容差：位置误差不得大于 5 毫米，姿态误差不得大于 5 度
                 return positionErrorM > 0.005 || orientationErrorRad > DegToRad(5.0);
             }),
         validSolutions.end());
@@ -547,7 +645,7 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
             .arg(limitValidCount));
     }
 
-    // 7. 取最佳解，计算误差
+    // 7. 提取最优解并评估误差精度
     const auto& best = validSolutions.front();
 
     const double posErrM = ComputePositionErrorM(
@@ -555,7 +653,7 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     const double orientErrRad = ComputeOrientationErrorRad(
         best.values_deg, T_flange_target, model.links, model.parameter_convention);
 
-    // 8. 组装结果
+    // 8. 组装并返回最终求解结果结构体
     IkResultDto result;
     result.success = true;
     result.solver_id = SolverId();
@@ -564,7 +662,7 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     result.orientation_error_deg = RadToDeg(orientErrRad);
     result.iteration_count = 1;
 
-    // 填充多解信息
+    // 输出多解统计信息
     result.total_solutions_found = totalFound;
     result.valid_solution_count = static_cast<int>(validSolutions.size());
     for (const auto& sol : validSolutions)
