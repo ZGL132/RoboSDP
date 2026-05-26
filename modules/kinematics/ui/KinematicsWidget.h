@@ -253,6 +253,8 @@ private:
     RoboSDP::Kinematics::Service::KinematicsService m_service;
     RoboSDP::Kinematics::Dto::KinematicsWorkspaceStateDto m_state;
     RoboSDP::Kinematics::Dto::JacobianAnalysisDto m_last_jacobian_analysis;
+    RoboSDP::Kinematics::Dto::WorkspaceResultDto m_last_singularity_workspace_result;
+    double m_last_singularity_condition_threshold = 1000.0;
     PreviewSceneDto m_preview_scene;
     RoboSDP::Kinematics::Dto::KinematicModelDto m_preview_model;
     RoboSDP::Kinematics::Dto::KinematicBackendBuildContextResultDto m_backend_diagnostic;
@@ -322,6 +324,8 @@ private:
     QGridLayout* m_ik_seed_grid = nullptr;
     std::array<QDoubleSpinBox*, 6> m_ik_target_pose_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     QSpinBox* m_workspace_sample_count_spin = nullptr;
+    QCheckBox* m_workspace_xz_slice_check = nullptr;
+    QDoubleSpinBox* m_workspace_slice_tolerance_spin = nullptr;
     QDoubleSpinBox* m_singularity_threshold_spin = nullptr;
 
     QLabel* m_singularity_result_label = nullptr;

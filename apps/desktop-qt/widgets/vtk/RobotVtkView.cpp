@@ -31,9 +31,13 @@
 #include <vtkBoxRepresentation.h>
 #include <vtkCamera.h>
 #include <vtkCaptionActor2D.h>
+#include <vtkClipPolyData.h>
 #include <vtkGlyph3D.h>
+#include <vtkImplicitPlaneRepresentation.h>
+#include <vtkImplicitPlaneWidget2.h>
 #include <vtkLineSource.h>
 #include <vtkPoints.h>
+#include <vtkPlane.h>
 #include <vtkPolyData.h>
 #include <vtkPolyDataMapper.h>
 #include <vtkSphereSource.h>
@@ -54,6 +58,7 @@
 #include <vtkTransform.h>
 #include <vtkUnsignedCharArray.h>
 #include <vtkPointData.h>
+#endif
 
 namespace
 {
@@ -249,7 +254,8 @@ vtkSmartPointer<vtkActor> CreatePointCloudActor(
     double green,
     double blue,
     double opacity,
-    double pointSize)
+    double pointSize,
+    vtkPlane* clipPlane)
 {
     vtkNew<vtkPoints> points;
     points->SetNumberOfPoints(static_cast<vtkIdType>(positions.size()));
@@ -267,7 +273,19 @@ vtkSmartPointer<vtkActor> CreatePointCloudActor(
     glyphFilter->Update();
 
     vtkNew<vtkPolyDataMapper> mapper;
-    mapper->SetInputConnection(glyphFilter->GetOutputPort());
+    if (clipPlane != nullptr)
+    {
+        vtkNew<vtkClipPolyData> clipper;
+        clipper->SetInputConnection(glyphFilter->GetOutputPort());
+        clipper->SetClipFunction(clipPlane);
+        clipper->InsideOutOn();
+        clipper->Update();
+        mapper->SetInputData(clipper->GetOutput());
+    }
+    else
+    {
+        mapper->SetInputConnection(glyphFilter->GetOutputPort());
+    }
 
     auto actor = vtkSmartPointer<vtkActor>::New();
     actor->SetMapper(mapper);
@@ -280,7 +298,8 @@ vtkSmartPointer<vtkActor> CreatePointCloudActor(
 
 vtkSmartPointer<vtkActor> CreateClassifiedPointCloudActor(
     const std::vector<std::array<double, 3>>& positions,
-    const std::vector<bool>& isSingular)
+    const std::vector<bool>& isSingular,
+    vtkPlane* clipPlane)
 {
     vtkNew<vtkPoints> points;
     points->SetNumberOfPoints(static_cast<vtkIdType>(positions.size()));
@@ -311,7 +330,19 @@ vtkSmartPointer<vtkActor> CreateClassifiedPointCloudActor(
     glyphFilter->Update();
 
     vtkNew<vtkPolyDataMapper> mapper;
-    mapper->SetInputConnection(glyphFilter->GetOutputPort());
+    if (clipPlane != nullptr)
+    {
+        vtkNew<vtkClipPolyData> clipper;
+        clipper->SetInputConnection(glyphFilter->GetOutputPort());
+        clipper->SetClipFunction(clipPlane);
+        clipper->InsideOutOn();
+        clipper->Update();
+        mapper->SetInputData(clipper->GetOutput());
+    }
+    else
+    {
+        mapper->SetInputConnection(glyphFilter->GetOutputPort());
+    }
     mapper->ScalarVisibilityOn();
     mapper->SetScalarModeToUsePointData();
 
@@ -484,6 +515,7 @@ private:
 
 } // namespace
 
+#if defined(ROBOSDP_HAVE_VTK)
 /// @brief 自定义 VTK 鼠标交互器，支持左键点击拾取 3D Actor、滚轮关节驱动、虚线框选等。
 class VtkClickInteractorStyle : public vtkInteractorStyleTrackballCamera
 {
@@ -505,6 +537,12 @@ public:
 
     void OnLeftButtonDown() override
     {
+        if (parentView != nullptr && parentView->IsWorkspaceClipPlaneEnabled())
+        {
+            vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
+            return;
+        }
+
         // 中文说明：左键按下时先执行拾取；若命中 Actor 则只高亮不旋转视角；若未命中则保留默认相机操作。
         bool pickedActor = false;
         if (renderer != nullptr && parentView != nullptr && this->GetInteractor() != nullptr)
@@ -579,6 +617,10 @@ RobotVtkView::~RobotVtkView()
         // 中文说明：角落坐标轴绑定了 VTK interactor，销毁视图前先禁用，避免关闭窗口时访问失效对象。
         m_corner_axes_widget->SetEnabled(0);
     }
+    if (m_workspace_clip_plane_widget != nullptr)
+    {
+        m_workspace_clip_plane_widget->SetEnabled(0);
+    }
 #endif
 }
 
@@ -626,11 +668,13 @@ void RobotVtkView::ClearIkPoseComparison()
     m_ikPositionErrorMm = 0.0;
     m_ikOrientationErrorDeg = 0.0;
     ClearIkPoseComparisonActors();
+#if defined(ROBOSDP_HAVE_VTK)
     // IK 对比清除后恢复 FK 实时 TCP 坐标指示器
     if (m_tcp_axes_actor != nullptr && !m_currentScene.IsEmpty())
     {
         m_tcp_axes_actor->SetVisibility(true);
     }
+#endif
     SetAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsIkCompare), false);
 #if defined(ROBOSDP_HAVE_VTK)
     if (m_renderWindow != nullptr)
@@ -742,12 +786,24 @@ void RobotVtkView::ShowWorkspacePointCloud(
 void RobotVtkView::ShowRequirementWorkspace(const std::vector<std::array<double, 3>>& workspacePoints)
 {
     m_requirementWorkspacePositions = workspacePoints;
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_workspaceClipPlaneEnabled)
+    {
+        UpdateWorkspaceClipPlanePlacement();
+    }
+#endif
     RenderAnalysisLayers(true);
 }
 
 void RobotVtkView::ShowKinematicsWorkspace(const std::vector<std::array<double, 3>>& tcpPositions)
 {
     m_kinematicsWorkspacePositions = tcpPositions;
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_workspaceClipPlaneEnabled)
+    {
+        UpdateWorkspaceClipPlanePlacement();
+    }
+#endif
     const QString layerId = QString::fromLatin1(kLayerKinematicsWorkspace);
     if (tcpPositions.empty())
     {
@@ -775,6 +831,9 @@ void RobotVtkView::RenderAnalysisLayers(bool renderNow)
     removeActor(m_kinematics_workspace_actor);
     removeActor(m_singularity_workspace_actor);
 
+    InitializeWorkspaceClipPlane();
+    vtkPlane* clipPlane = ShouldUseWorkspaceClipPlane() ? m_workspace_clip_plane.GetPointer() : nullptr;
+
     if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementWorkspace)) &&
         !m_requirementWorkspacePositions.empty())
     {
@@ -784,7 +843,8 @@ void RobotVtkView::RenderAnalysisLayers(bool renderNow)
             0.51,
             0.96,
             0.34,
-            2.4);
+            2.4,
+            clipPlane);
         m_renderer->AddActor(m_requirement_workspace_actor);
     }
 
@@ -797,7 +857,8 @@ void RobotVtkView::RenderAnalysisLayers(bool renderNow)
             0.77,
             0.37,
             IsAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsSingularity)) ? 0.28 : 0.68,
-            3.0);
+            3.0,
+            clipPlane);
         m_renderer->AddActor(m_kinematics_workspace_actor);
     }
 
@@ -806,7 +867,7 @@ void RobotVtkView::RenderAnalysisLayers(bool renderNow)
         m_singularityWorkspacePositions.size() == m_singularityFlags.size())
     {
         m_singularity_workspace_actor =
-            CreateClassifiedPointCloudActor(m_singularityWorkspacePositions, m_singularityFlags);
+            CreateClassifiedPointCloudActor(m_singularityWorkspacePositions, m_singularityFlags, clipPlane);
         m_renderer->AddActor(m_singularity_workspace_actor);
     }
 
@@ -832,6 +893,12 @@ void RobotVtkView::ShowSingularityWorkspace(
 {
     m_singularityWorkspacePositions = tcpPositions;
     m_singularityFlags = isSingular;
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_workspaceClipPlaneEnabled)
+    {
+        UpdateWorkspaceClipPlanePlacement();
+    }
+#endif
     const QString layerId = QString::fromLatin1(kLayerKinematicsSingularity);
     if (tcpPositions.empty())
     {
@@ -1463,6 +1530,26 @@ void RobotVtkView::BuildAnalysisLayerPanel(QWidget* viewportFrame)
         panelLayout->addWidget(row);
     }
 
+    auto* clipRow = new QWidget(panel);
+    auto* clipRowLayout = new QHBoxLayout(clipRow);
+    clipRowLayout->setContentsMargins(0, 6, 0, 0);
+    clipRowLayout->setSpacing(10);
+
+    auto* clipSwatch = new QLabel(clipRow);
+    clipSwatch->setObjectName(QStringLiteral("analysisLayerSwatch"));
+    clipSwatch->setStyleSheet(QStringLiteral("QLabel#analysisLayerSwatch{background:#f8fafc;}"));
+
+    m_workspaceClipPlaneCheck = new QCheckBox(QStringLiteral("剖切平面"), clipRow);
+    m_workspaceClipPlaneCheck->setChecked(false);
+    m_workspaceClipPlaneCheck->setToolTip(QStringLiteral("启用后拖动半透明平面，动态剪裁工作空间点云。"));
+    connect(m_workspaceClipPlaneCheck, &QCheckBox::toggled, this, [this](bool enabled) {
+        SetWorkspaceClipPlaneEnabled(enabled);
+    });
+
+    clipRowLayout->addWidget(clipSwatch);
+    clipRowLayout->addWidget(m_workspaceClipPlaneCheck, 1);
+    panelLayout->addWidget(clipRow);
+
     PositionAnalysisLayerPanel();
     panel->show();
     RaiseViewOverlays();
@@ -1572,6 +1659,181 @@ bool RobotVtkView::IsAnalysisLayerVisible(const QString& layerId) const
         return spec->defaultVisible;
     }
     return false;
+}
+
+void RobotVtkView::SetWorkspaceClipPlaneEnabled(bool enabled)
+{
+    m_workspaceClipPlaneEnabled = enabled;
+
+#if defined(ROBOSDP_HAVE_VTK)
+    InitializeWorkspaceClipPlane();
+    if (m_workspace_clip_plane_widget != nullptr)
+    {
+        if (enabled)
+        {
+            UpdateWorkspaceClipPlanePlacement();
+        }
+        m_workspace_clip_plane_widget->SetEnabled(enabled ? 1 : 0);
+    }
+    RenderAnalysisLayers(true);
+#endif
+
+    if (m_workspaceClipPlaneCheck != nullptr && m_workspaceClipPlaneCheck->isChecked() != enabled)
+    {
+        const QSignalBlocker blocker(m_workspaceClipPlaneCheck);
+        m_workspaceClipPlaneCheck->setChecked(enabled);
+    }
+}
+
+bool RobotVtkView::ShouldUseWorkspaceClipPlane() const
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    return m_workspaceClipPlaneEnabled && m_workspace_clip_plane != nullptr;
+#else
+    return false;
+#endif
+}
+
+void RobotVtkView::HandleWorkspaceClipPlaneInteraction()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_workspace_clip_plane_widget != nullptr && m_workspace_clip_plane != nullptr)
+    {
+        if (auto* representation = vtkImplicitPlaneRepresentation::SafeDownCast(
+                m_workspace_clip_plane_widget->GetRepresentation()))
+        {
+            representation->GetPlane(m_workspace_clip_plane);
+        }
+        RenderAnalysisLayers(true);
+    }
+#endif
+}
+
+void RobotVtkView::InitializeWorkspaceClipPlane()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_workspace_clip_plane == nullptr)
+    {
+        m_workspace_clip_plane = vtkSmartPointer<vtkPlane>::New();
+        m_workspace_clip_plane->SetOrigin(0.0, 0.0, 0.0);
+        m_workspace_clip_plane->SetNormal(1.0, 0.0, 0.0);
+    }
+
+    if (m_workspace_clip_plane_widget != nullptr || m_vtkWidget == nullptr)
+    {
+        return;
+    }
+
+    auto representation = vtkSmartPointer<vtkImplicitPlaneRepresentation>::New();
+    representation->SetPlaceFactor(1.18);
+    representation->DrawOutlineOff();
+    representation->DrawPlaneOn();
+    representation->SetTubing(0);
+    representation->SetOrigin(0.0, 0.0, 0.0);
+    representation->SetNormal(1.0, 0.0, 0.0);
+    representation->GetPlaneProperty()->SetColor(0.86, 0.93, 1.0);
+    representation->GetPlaneProperty()->SetOpacity(0.18);
+    representation->GetSelectedPlaneProperty()->SetColor(0.20, 0.72, 1.0);
+    representation->GetSelectedPlaneProperty()->SetOpacity(0.28);
+    representation->GetOutlineProperty()->SetOpacity(0.0);
+    representation->GetSelectedOutlineProperty()->SetOpacity(0.0);
+    representation->GetEdgesProperty()->SetColor(0.86, 0.93, 1.0);
+    representation->GetEdgesProperty()->SetOpacity(0.10);
+    representation->GetEdgesProperty()->SetLineWidth(1.0);
+    if (representation->GetNormalProperty() != nullptr)
+    {
+        representation->GetNormalProperty()->SetColor(0.20, 0.72, 1.0);
+    }
+
+    m_workspace_clip_plane_widget = vtkSmartPointer<vtkImplicitPlaneWidget2>::New();
+    m_workspace_clip_plane_widget->SetPriority(0.95);
+    m_workspace_clip_plane_widget->SetDefaultRenderer(m_renderer);
+    m_workspace_clip_plane_widget->SetCurrentRenderer(m_renderer);
+    m_workspace_clip_plane_widget->SetInteractor(m_vtkWidget->interactor());
+    m_workspace_clip_plane_widget->SetRepresentation(representation);
+
+    vtkNew<vtkCallbackCommand> interactionCallback;
+    interactionCallback->SetClientData(this);
+    interactionCallback->SetCallback([](vtkObject*, unsigned long, void* clientData, void*) {
+        auto* view = static_cast<RobotVtkView*>(clientData);
+        if (view != nullptr)
+        {
+            view->HandleWorkspaceClipPlaneInteraction();
+        }
+    });
+    m_workspace_clip_plane_widget->AddObserver(vtkCommand::InteractionEvent, interactionCallback);
+    m_workspace_clip_plane_widget->SetEnabled(0);
+#endif
+}
+
+void RobotVtkView::UpdateWorkspaceClipPlanePlacement()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_workspace_clip_plane_widget == nullptr)
+    {
+        return;
+    }
+
+    std::array<double, 6> bounds {
+        std::numeric_limits<double>::max(),
+        std::numeric_limits<double>::lowest(),
+        std::numeric_limits<double>::max(),
+        std::numeric_limits<double>::lowest(),
+        std::numeric_limits<double>::max(),
+        std::numeric_limits<double>::lowest()};
+
+    auto includePoint = [&bounds](const std::array<double, 3>& point) {
+        bounds[0] = std::min(bounds[0], point[0]);
+        bounds[1] = std::max(bounds[1], point[0]);
+        bounds[2] = std::min(bounds[2], point[1]);
+        bounds[3] = std::max(bounds[3], point[1]);
+        bounds[4] = std::min(bounds[4], point[2]);
+        bounds[5] = std::max(bounds[5], point[2]);
+    };
+
+    if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementWorkspace)))
+    {
+        for (const auto& point : m_requirementWorkspacePositions) includePoint(point);
+    }
+    if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsWorkspace)))
+    {
+        for (const auto& point : m_kinematicsWorkspacePositions) includePoint(point);
+    }
+    if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsSingularity)))
+    {
+        for (const auto& point : m_singularityWorkspacePositions) includePoint(point);
+    }
+
+    if (bounds[0] > bounds[1])
+    {
+        bounds = {-0.5, 0.5, -0.5, 0.5, 0.0, 1.0};
+    }
+
+    for (int axis = 0; axis < 3; ++axis)
+    {
+        const int minIndex = axis * 2;
+        const int maxIndex = minIndex + 1;
+        const double span = bounds[maxIndex] - bounds[minIndex];
+        const double pad = std::max(0.08, span * 0.18);
+        bounds[minIndex] -= pad;
+        bounds[maxIndex] += pad;
+    }
+
+    auto* representation = vtkImplicitPlaneRepresentation::SafeDownCast(
+        m_workspace_clip_plane_widget->GetRepresentation());
+    if (representation == nullptr)
+    {
+        return;
+    }
+
+    representation->PlaceWidget(bounds.data());
+    representation->SetNormal(1.0, 0.0, 0.0);
+    representation->SetOrigin(
+        0.5 * (bounds[0] + bounds[1]),
+        0.5 * (bounds[2] + bounds[3]),
+        0.5 * (bounds[4] + bounds[5]));
+    representation->GetPlane(m_workspace_clip_plane);
+#endif
 }
 
 void RobotVtkView::RaiseViewOverlays()

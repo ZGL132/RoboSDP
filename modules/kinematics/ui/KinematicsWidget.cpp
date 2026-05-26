@@ -79,6 +79,66 @@ QString FormatDerivedModelState(const QString& derivedModelState)
     return QStringLiteral("已同步");
 }
 
+bool IsWorkspaceXzSliceEnabled(const QCheckBox* checkBox)
+{
+    return checkBox != nullptr && checkBox->isChecked();
+}
+
+double WorkspaceSliceToleranceM(const QDoubleSpinBox* spinBox)
+{
+    return spinBox != nullptr ? std::max(0.0, spinBox->value()) : 0.02;
+}
+
+bool IsWithinWorkspaceXzSlice(
+    const std::array<double, 3>& position,
+    bool sliceEnabled,
+    double toleranceM)
+{
+    return !sliceEnabled || std::abs(position[1]) <= toleranceM;
+}
+
+std::vector<std::array<double, 3>> FilterWorkspaceXzSlice(
+    const std::vector<RoboSDP::Kinematics::Dto::WorkspacePointDto>& sampledPoints,
+    bool sliceEnabled,
+    double toleranceM)
+{
+    std::vector<std::array<double, 3>> tcpPositions;
+    tcpPositions.reserve(sampledPoints.size());
+    for (const auto& point : sampledPoints)
+    {
+        const auto& position = point.tcp_pose.position_m;
+        if (IsWithinWorkspaceXzSlice(position, sliceEnabled, toleranceM))
+        {
+            tcpPositions.push_back(position);
+        }
+    }
+    return tcpPositions;
+}
+
+void FilterWorkspaceXzSliceWithSingularity(
+    const std::vector<RoboSDP::Kinematics::Dto::WorkspacePointDto>& sampledPoints,
+    bool sliceEnabled,
+    double toleranceM,
+    double conditionThreshold,
+    std::vector<std::array<double, 3>>& tcpPositions,
+    std::vector<bool>& isSingular)
+{
+    tcpPositions.clear();
+    isSingular.clear();
+    tcpPositions.reserve(sampledPoints.size());
+    isSingular.reserve(sampledPoints.size());
+
+    for (const auto& point : sampledPoints)
+    {
+        const auto& position = point.tcp_pose.position_m;
+        if (IsWithinWorkspaceXzSlice(position, sliceEnabled, toleranceM))
+        {
+            tcpPositions.push_back(position);
+            isSingular.push_back(point.condition_number > conditionThreshold);
+        }
+    }
+}
+
 QString FormatPreviewSourceMode(const QString& previewSourceMode)
 {
     if (previewSourceMode == QStringLiteral("urdf_preview"))
@@ -1258,6 +1318,62 @@ QWidget* KinematicsWidget::CreateAdvancedAnalysisPage()
     m_workspace_sample_count_spin->setRange(1, 100000);
     m_workspace_sample_count_spin->setValue(128);
     workspaceLayout->addRow(QStringLiteral("采样点数"), m_workspace_sample_count_spin);
+
+    m_workspace_xz_slice_check = new QCheckBox(QStringLiteral("展示 XZ 剖面（Y=0）"), workspaceGroup);
+    m_workspace_xz_slice_check->setToolTip(QStringLiteral("仅渲染 |Y| 在阈值内的采样点，保留原始 3D 工作空间统计。"));
+    workspaceLayout->addRow(QStringLiteral("切片显示"), m_workspace_xz_slice_check);
+
+    m_workspace_slice_tolerance_spin = new QDoubleSpinBox(workspaceGroup);
+    m_workspace_slice_tolerance_spin->setRange(0.001, 1.000);
+    m_workspace_slice_tolerance_spin->setDecimals(3);
+    m_workspace_slice_tolerance_spin->setSingleStep(0.005);
+    m_workspace_slice_tolerance_spin->setValue(0.020);
+    m_workspace_slice_tolerance_spin->setSuffix(QStringLiteral(" m"));
+    m_workspace_slice_tolerance_spin->setToolTip(QStringLiteral("XZ 剖面过滤厚度：保留 |Y| 小于等于该值的 TCP 采样点。"));
+    workspaceLayout->addRow(QStringLiteral("切片阈值 |Y|≤"), m_workspace_slice_tolerance_spin);
+
+    const auto refreshWorkspaceSlice = [this]() {
+        if (!m_workspace_point_cloud_visible || !m_state.last_workspace_result.success)
+        {
+            if (!m_singularity_point_cloud_visible || !m_last_singularity_workspace_result.success)
+            {
+                return;
+            }
+        }
+
+        const bool sliceEnabled = IsWorkspaceXzSliceEnabled(m_workspace_xz_slice_check);
+        const double toleranceM = WorkspaceSliceToleranceM(m_workspace_slice_tolerance_spin);
+
+        if (m_workspace_point_cloud_visible && m_state.last_workspace_result.success)
+        {
+            const auto tcpPositions = FilterWorkspaceXzSlice(
+                m_state.last_workspace_result.sampled_points,
+                sliceEnabled,
+                toleranceM);
+            emit WorkspacePointCloudGenerated(tcpPositions);
+        }
+
+        if (m_singularity_point_cloud_visible && m_last_singularity_workspace_result.success)
+        {
+            std::vector<std::array<double, 3>> tcpPositions;
+            std::vector<bool> isSingular;
+            FilterWorkspaceXzSliceWithSingularity(
+                m_last_singularity_workspace_result.sampled_points,
+                sliceEnabled,
+                toleranceM,
+                m_last_singularity_condition_threshold,
+                tcpPositions,
+                isSingular);
+            emit SingularityPointCloudGenerated(tcpPositions, isSingular);
+        }
+    };
+    connect(m_workspace_xz_slice_check, &QCheckBox::toggled, this, refreshWorkspaceSlice);
+    connect(
+        m_workspace_slice_tolerance_spin,
+        QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+        this,
+        [refreshWorkspaceSlice](double) { refreshWorkspaceSlice(); });
+
     m_singularity_threshold_spin = new QDoubleSpinBox(workspaceGroup);
     m_singularity_threshold_spin->setRange(1.0, 100000.0);
     m_singularity_threshold_spin->setDecimals(0);
@@ -3483,17 +3599,16 @@ void KinematicsWidget::OnSampleWorkspaceClicked()
     m_state.last_workspace_result = m_service.SampleWorkspace(m_state.current_model, request);
     MarkDirty();
 
-    // 工作空间采样成功后，发射点云信号供 VTK 渲染 3D 散点图
+    std::vector<std::array<double, 3>> tcpPositions;
+    // 工作空间采样成功后，发射点云信号供 VTK 渲染；切片过滤只影响显示，不改写采样结果。
     if (m_state.last_workspace_result.success)
     {
-        std::vector<std::array<double, 3>> tcpPositions;
-        tcpPositions.reserve(m_state.last_workspace_result.sampled_points.size());
-        for (const auto& pt : m_state.last_workspace_result.sampled_points)
-        {
-            tcpPositions.push_back(pt.tcp_pose.position_m);
-        }
+        tcpPositions = FilterWorkspaceXzSlice(
+            m_state.last_workspace_result.sampled_points,
+            IsWorkspaceXzSliceEnabled(m_workspace_xz_slice_check),
+            WorkspaceSliceToleranceM(m_workspace_slice_tolerance_spin));
         emit WorkspacePointCloudGenerated(tcpPositions);
-        m_workspace_point_cloud_visible = !tcpPositions.empty();
+        m_workspace_point_cloud_visible = true;
     }
     else
     {
@@ -3503,14 +3618,24 @@ void KinematicsWidget::OnSampleWorkspaceClicked()
     RenderResults();
 
     const bool warning = !m_state.last_workspace_result.success;
-    SetOperationMessage(m_state.last_workspace_result.message, m_state.last_workspace_result.success, warning);
+    QString workspaceMessage = m_state.last_workspace_result.message;
+    if (m_state.last_workspace_result.success &&
+        IsWorkspaceXzSliceEnabled(m_workspace_xz_slice_check))
+    {
+        workspaceMessage = QStringLiteral("%1；XZ 剖面显示 %2 / %3 点，|Y|≤%4 m。")
+            .arg(workspaceMessage)
+            .arg(static_cast<int>(tcpPositions.size()))
+            .arg(static_cast<int>(m_state.last_workspace_result.sampled_points.size()))
+            .arg(WorkspaceSliceToleranceM(m_workspace_slice_tolerance_spin), 0, 'f', 3);
+    }
+    SetOperationMessage(workspaceMessage, m_state.last_workspace_result.success, warning);
     EmitTelemetryStatus(
         QStringLiteral("Pinocchio 共享内核"),
-        m_state.last_workspace_result.message,
+        workspaceMessage,
         warning);
     emit LogMessageGenerated(QStringLiteral("%1 %2").arg(
         warning ? QStringLiteral("[Kinematics][Warning]") : QStringLiteral("[Kinematics]"),
-        m_state.last_workspace_result.message));
+        workspaceMessage));
     emit StatusChanged();
 }
 
@@ -3581,6 +3706,8 @@ void KinematicsWidget::OnSingularityAnalysisClicked()
         ? m_singularity_threshold_spin->value() : 1000.0;
 
     const auto result = m_service.SampleWorkspaceWithSingularity(m_state.current_model, request);
+    m_last_singularity_workspace_result = result;
+    m_last_singularity_condition_threshold = request.condition_threshold;
 
     if (result.success)
     {
@@ -3605,18 +3732,32 @@ void KinematicsWidget::OnSingularityAnalysisClicked()
             .arg(maxCondition, 0, 'f', 1)
             .arg(avgManip, 0, 'f', 6));
 
-        // 发射奇异点云（位置 + 奇异标记）
+        // 发射奇异点云（位置 + 奇异标记）；切片过滤只影响显示，不改写全量统计。
         std::vector<std::array<double, 3>> tcpPositions;
         std::vector<bool> isSingular;
-        tcpPositions.reserve(result.sampled_points.size());
-        isSingular.reserve(result.sampled_points.size());
-        for (const auto& pt : result.sampled_points)
-        {
-            tcpPositions.push_back(pt.tcp_pose.position_m);
-            isSingular.push_back(pt.condition_number > request.condition_threshold);
-        }
+        FilterWorkspaceXzSliceWithSingularity(
+            result.sampled_points,
+            IsWorkspaceXzSliceEnabled(m_workspace_xz_slice_check),
+            WorkspaceSliceToleranceM(m_workspace_slice_tolerance_spin),
+            request.condition_threshold,
+            tcpPositions,
+            isSingular);
         emit SingularityPointCloudGenerated(tcpPositions, isSingular);
-        m_singularity_point_cloud_visible = !tcpPositions.empty();
+        m_singularity_point_cloud_visible = true;
+
+        if (IsWorkspaceXzSliceEnabled(m_workspace_xz_slice_check))
+        {
+            const QString sliceMessage = QStringLiteral(
+                "%1；XZ 剖面渲染 %2 / %3 点，|Y|≤%4 m。")
+                .arg(result.message)
+                .arg(static_cast<int>(tcpPositions.size()))
+                .arg(static_cast<int>(result.sampled_points.size()))
+                .arg(WorkspaceSliceToleranceM(m_workspace_slice_tolerance_spin), 0, 'f', 3);
+            SetOperationMessage(sliceMessage, true, false);
+            emit LogMessageGenerated(QStringLiteral("[Kinematics] 奇异区分析: %1").arg(sliceMessage));
+            emit StatusChanged();
+            return;
+        }
     }
     else
     {

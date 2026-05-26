@@ -55,6 +55,7 @@ find_package(VTK QUIET COMPONENTS
     CommonColor
     CommonCore
     CommonTransforms
+    FiltersCore
     FiltersSources
     GUISupportQt
     InteractionStyle
