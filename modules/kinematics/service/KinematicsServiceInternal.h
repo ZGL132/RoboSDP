@@ -23,6 +23,11 @@
 #include <cmath>
 #include <cstdlib>
 
+#if defined(ROBOSDP_HAVE_PINOCCHIO)
+#include <Eigen/Geometry>
+#include <pinocchio/spatial/se3.hpp>
+#endif
+
 /**
  * @brief 服务层拆分编译单元之间共享的内部工具函数集。
  * 提供服务层内部所需的纯 C++ 几何计算和文本格式化工具（不含有第三方物理库依赖）。
@@ -166,6 +171,46 @@ inline double PreviewDegToRad(double degrees)
 {
     return degrees * kPi / 180.0;
 }
+
+#if defined(ROBOSDP_HAVE_PINOCCHIO)
+/// 将通用 CartesianPose DTO 转换为 Pinocchio SE3。
+inline pinocchio::SE3 BuildArtifactPoseSe3(const RoboSDP::Kinematics::Dto::CartesianPoseDto& pose)
+{
+    const Eigen::AngleAxisd roll(PreviewDegToRad(pose.rpy_deg[0]), Eigen::Vector3d::UnitX());
+    const Eigen::AngleAxisd pitch(PreviewDegToRad(pose.rpy_deg[1]), Eigen::Vector3d::UnitY());
+    const Eigen::AngleAxisd yaw(PreviewDegToRad(pose.rpy_deg[2]), Eigen::Vector3d::UnitZ());
+    const Eigen::Matrix3d rotation = (yaw * pitch * roll).toRotationMatrix();
+    const Eigen::Vector3d translation(pose.position_m[0], pose.position_m[1], pose.position_m[2]);
+    return pinocchio::SE3(rotation, translation);
+}
+
+/// 将 Pinocchio SE3 转换回通用位姿 DTO。
+inline RoboSDP::Kinematics::Dto::CartesianPoseDto BuildArtifactPoseFromSe3(const pinocchio::SE3& transform)
+{
+    constexpr double kRadToDeg = 180.0 / kPi;
+    const Eigen::Vector3d yawPitchRoll = transform.rotation().eulerAngles(2, 1, 0);
+
+    RoboSDP::Kinematics::Dto::CartesianPoseDto pose;
+    pose.position_m = {
+        transform.translation()[0],
+        transform.translation()[1],
+        transform.translation()[2]};
+    pose.rpy_deg = {
+        yawPitchRoll[2] * kRadToDeg,
+        yawPitchRoll[1] * kRadToDeg,
+        yawPitchRoll[0] * kRadToDeg};
+    return pose;
+}
+
+/// 将 TCP DTO 转换为 Pinocchio SE3，表示 flange -> tcp 的固定安装关系。
+inline pinocchio::SE3 BuildArtifactTcpSe3(const RoboSDP::Kinematics::Dto::TcpFrameDto& tcpFrame)
+{
+    RoboSDP::Kinematics::Dto::CartesianPoseDto pose;
+    pose.position_m = tcpFrame.translation_m;
+    pose.rpy_deg = tcpFrame.rpy_deg;
+    return BuildArtifactPoseSe3(pose);
+}
+#endif
 
 // ---- 模型校验函数 ----
 
