@@ -1761,6 +1761,13 @@ RoboSDP::Kinematics::Dto::IkResultDto KinematicsService::SolveIk(
             fallbackResult.used_fallback = true;
             fallbackResult.fallback_reason = fallbackReason;
             fallbackResult.solver_id = m_ik_solver_adapter->SolverId();
+            fallbackResult.total_solutions_found = result.total_solutions_found;
+            fallbackResult.valid_solution_count = result.valid_solution_count;
+            fallbackResult.analytical_arm_solution_count = result.analytical_arm_solution_count;
+            fallbackResult.analytical_wrist_solution_count = result.analytical_wrist_solution_count;
+            fallbackResult.analytical_limit_valid_count = result.analytical_limit_valid_count;
+            fallbackResult.analytical_fk_valid_count = result.analytical_fk_valid_count;
+            fallbackResult.analytical_branch_diagnostics = result.analytical_branch_diagnostics;
             fallbackResult.message = QStringLiteral("%1（请求闭式解析 IK 已回退到 Pinocchio 数值 IK；回退原因：%2）")
                 .arg(fallbackResult.message.trimmed().isEmpty()
                     ? QStringLiteral("IK 求解完成。")

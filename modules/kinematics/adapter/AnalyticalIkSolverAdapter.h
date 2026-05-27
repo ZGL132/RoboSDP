@@ -6,6 +6,7 @@
 #include <Eigen/Dense>
 
 #include <memory>
+#include <vector>
 
 namespace RoboSDP::Kinematics::Adapter
 {
@@ -72,7 +73,8 @@ private:
     /// @brief 给定腕心位置，求解前三个关节角，返回最多 4 组解。
     static std::vector<std::array<double, 3>> SolveArm(
         const Eigen::Vector3d& wristCenter,
-        const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links);
+        const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links,
+        std::vector<QString>* diagnostics = nullptr);
 
     // ── 腕部求解 (θ4, θ5, θ6) ────────────────────────────
     /// @brief 对每组臂解，从末端旋转矩阵提取腕关节角，返回最多 2 组腕解。
@@ -80,14 +82,16 @@ private:
         const std::array<double, 3>& armSolutionDeg,
         const Eigen::Matrix4d& targetFlangeTransform,
         const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links,
-        const QString& parameterConvention);
+        const QString& parameterConvention,
+        std::vector<QString>* diagnostics = nullptr);
 
     // ── 后处理 ───────────────────────────────────────────
     /// @brief 限位过滤 + 按种子距离升序排序。
     static std::vector<JointSolution> FilterAndSortSolutions(
         std::vector<JointSolution> allSolutions,
         const std::vector<RoboSDP::Kinematics::Dto::KinematicJointLimitDto>& jointLimits,
-        const std::vector<double>& seedDeg);
+        const std::vector<double>& seedDeg,
+        std::vector<QString>* diagnostics = nullptr);
 
     // ── 误差计算 ─────────────────────────────────────────
     /// @brief 计算给定关节角对应的 TCP 位置误差 [mm]。

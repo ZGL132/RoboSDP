@@ -99,6 +99,27 @@ std::vector<double> ReadVectorArray(const QJsonArray& array)
     return values;
 }
 
+QJsonArray ToStringArray(const std::vector<QString>& values)
+{
+    QJsonArray array;
+    for (const QString& value : values)
+    {
+        array.append(value);
+    }
+    return array;
+}
+
+std::vector<QString> ReadStringArray(const QJsonArray& array)
+{
+    std::vector<QString> values;
+    values.reserve(static_cast<std::size_t>(array.size()));
+    for (const QJsonValue& value : array)
+    {
+        values.push_back(value.toString());
+    }
+    return values;
+}
+
 QString ReadString(const QJsonObject& object, const QString& key, const QString& defaultValue = {})
 {
     return object.contains(key) ? object.value(key).toString(defaultValue) : defaultValue;
@@ -372,6 +393,11 @@ QJsonObject ToIkResultObject(const RoboSDP::Kinematics::Dto::IkResultDto& result
     object.insert(QStringLiteral("fallback_reason"), result.fallback_reason);
     object.insert(QStringLiteral("total_solutions_found"), result.total_solutions_found);
     object.insert(QStringLiteral("valid_solution_count"), result.valid_solution_count);
+    object.insert(QStringLiteral("analytical_arm_solution_count"), result.analytical_arm_solution_count);
+    object.insert(QStringLiteral("analytical_wrist_solution_count"), result.analytical_wrist_solution_count);
+    object.insert(QStringLiteral("analytical_limit_valid_count"), result.analytical_limit_valid_count);
+    object.insert(QStringLiteral("analytical_fk_valid_count"), result.analytical_fk_valid_count);
+    object.insert(QStringLiteral("analytical_branch_diagnostics"), ToStringArray(result.analytical_branch_diagnostics));
     return object;
 }
 
@@ -390,6 +416,12 @@ RoboSDP::Kinematics::Dto::IkResultDto FromIkResultObject(const QJsonObject& obje
     result.fallback_reason = ReadString(object, QStringLiteral("fallback_reason"));
     result.total_solutions_found = ReadInt(object, QStringLiteral("total_solutions_found"));
     result.valid_solution_count = ReadInt(object, QStringLiteral("valid_solution_count"));
+    result.analytical_arm_solution_count = ReadInt(object, QStringLiteral("analytical_arm_solution_count"));
+    result.analytical_wrist_solution_count = ReadInt(object, QStringLiteral("analytical_wrist_solution_count"));
+    result.analytical_limit_valid_count = ReadInt(object, QStringLiteral("analytical_limit_valid_count"));
+    result.analytical_fk_valid_count = ReadInt(object, QStringLiteral("analytical_fk_valid_count"));
+    result.analytical_branch_diagnostics =
+        ReadStringArray(object.value(QStringLiteral("analytical_branch_diagnostics")).toArray());
     return result;
 }
 

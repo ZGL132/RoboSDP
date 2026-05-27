@@ -2416,12 +2416,54 @@ void KinematicsWidget::RenderResults()
                     .arg(m_state.last_ik_result.total_solutions_found)
                     .arg(m_state.last_ik_result.valid_solution_count));
             }
+            if (m_state.last_ik_result.analytical_arm_solution_count > 0 ||
+                m_state.last_ik_result.analytical_wrist_solution_count > 0 ||
+                !m_state.last_ik_result.analytical_branch_diagnostics.empty())
+            {
+                lines.push_back(QStringLiteral("解析诊断：臂部候选 = %1，腕部候选 = %2，限位后 = %3，FK 反验后 = %4")
+                    .arg(m_state.last_ik_result.analytical_arm_solution_count)
+                    .arg(m_state.last_ik_result.analytical_wrist_solution_count)
+                    .arg(m_state.last_ik_result.analytical_limit_valid_count)
+                    .arg(m_state.last_ik_result.analytical_fk_valid_count));
+                const int maxDiagnosticLines = 8;
+                const int diagnosticCount = static_cast<int>(m_state.last_ik_result.analytical_branch_diagnostics.size());
+                for (int i = 0; i < diagnosticCount && i < maxDiagnosticLines; ++i)
+                {
+                    lines.push_back(QStringLiteral("跳过原因：%1")
+                        .arg(m_state.last_ik_result.analytical_branch_diagnostics[static_cast<std::size_t>(i)]));
+                }
+                if (diagnosticCount > maxDiagnosticLines)
+                {
+                    lines.push_back(QStringLiteral("跳过原因：其余 %1 条已省略。")
+                        .arg(diagnosticCount - maxDiagnosticLines));
+                }
+            }
         }
         else
         {
             lines.push_back(QStringLiteral("状态：%1").arg(m_state.last_ik_result.message.isEmpty()
                 ? QStringLiteral("尚未执行")
                 : m_state.last_ik_result.message));
+            if (!m_state.last_ik_result.analytical_branch_diagnostics.empty())
+            {
+                lines.push_back(QStringLiteral("解析诊断：臂部候选 = %1，腕部候选 = %2，限位后 = %3，FK 反验后 = %4")
+                    .arg(m_state.last_ik_result.analytical_arm_solution_count)
+                    .arg(m_state.last_ik_result.analytical_wrist_solution_count)
+                    .arg(m_state.last_ik_result.analytical_limit_valid_count)
+                    .arg(m_state.last_ik_result.analytical_fk_valid_count));
+                const int maxDiagnosticLines = 8;
+                const int diagnosticCount = static_cast<int>(m_state.last_ik_result.analytical_branch_diagnostics.size());
+                for (int i = 0; i < diagnosticCount && i < maxDiagnosticLines; ++i)
+                {
+                    lines.push_back(QStringLiteral("跳过原因：%1")
+                        .arg(m_state.last_ik_result.analytical_branch_diagnostics[static_cast<std::size_t>(i)]));
+                }
+                if (diagnosticCount > maxDiagnosticLines)
+                {
+                    lines.push_back(QStringLiteral("跳过原因：其余 %1 条已省略。")
+                        .arg(diagnosticCount - maxDiagnosticLines));
+                }
+            }
         }
         if (m_result_ik_label != nullptr)
         {

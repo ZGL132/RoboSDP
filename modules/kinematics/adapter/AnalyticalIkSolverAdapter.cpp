@@ -2,6 +2,8 @@
 
 #include <Eigen/Dense>
 
+#include <QStringList>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -22,6 +24,37 @@ constexpr double kSingularTolerance = 1.0e-10; // 奇异值判定容差
 
 double DegToRad(double deg) { return deg * kDegToRad; }
 double RadToDeg(double rad) { return rad * kRadToDeg; }
+
+QString BuildAnalyticalDiagnosticMessage(
+    int armSolutionCount,
+    int wristSolutionCount,
+    int totalFound,
+    int limitValidCount,
+    int fkValidCount,
+    const std::vector<QString>& diagnostics,
+    int maxDiagnosticLines = 6)
+{
+    QStringList lines;
+    lines.push_back(QStringLiteral("解析诊断：臂部候选=%1，腕部候选=%2，原始候选=%3，限位后=%4，FK 反验后=%5。")
+        .arg(armSolutionCount)
+        .arg(wristSolutionCount)
+        .arg(totalFound)
+        .arg(limitValidCount)
+        .arg(fkValidCount));
+
+    const int diagnosticCount = static_cast<int>(diagnostics.size());
+    for (int i = 0; i < diagnosticCount && i < maxDiagnosticLines; ++i)
+    {
+        lines.push_back(QStringLiteral("解析 IK 跳过原因：%1")
+            .arg(diagnostics[static_cast<std::size_t>(i)]));
+    }
+    if (diagnosticCount > maxDiagnosticLines)
+    {
+        lines.push_back(QStringLiteral("解析 IK 跳过原因：其余 %1 条已省略。")
+            .arg(diagnosticCount - maxDiagnosticLines));
+    }
+    return lines.join(QLatin1Char('\n'));
+}
 
 /// @brief 将角度规整到 [-180, 180) 范围内。
 double NormalizeAngleDegAnon(double a)
@@ -250,7 +283,8 @@ Eigen::Matrix4d AnalyticalIkSolverAdapter::ComputeTargetFlangeTransform(
 // 共 2 (shoulder front/back) × 2 (elbow up/down) = 最多 4 组臂部解。
 std::vector<std::array<double, 3>> AnalyticalIkSolverAdapter::SolveArm(
     const Eigen::Vector3d& wristCenter,
-    const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links)
+    const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links,
+    std::vector<QString>* diagnostics)
 {
     const double d1 = links[0].d;
     const double a1 = links[0].a;
@@ -260,12 +294,26 @@ std::vector<std::array<double, 3>> AnalyticalIkSolverAdapter::SolveArm(
     const double d4 = links[3].d;       // 腕部沿 z3 偏置（球腕首段长度，常为 0）
 
     if (a2 <= kSingularTolerance)
+    {
+        if (diagnostics != nullptr)
+        {
+            diagnostics->push_back(QStringLiteral("臂部求解跳过：a2=%1，小于奇异容差，前 3 轴几何退化。")
+                .arg(a2, 0, 'g', 10));
+        }
         return {};
+    }
 
     // a3 与 d4 折合为单一等效肘-腕连杆 L
     const double L = std::hypot(a3, d4);
     if (L <= kSingularTolerance)
+    {
+        if (diagnostics != nullptr)
+        {
+            diagnostics->push_back(QStringLiteral("臂部求解跳过：等效前臂长度 L=sqrt(a3^2+d4^2)=%1，小于奇异容差。")
+                .arg(L, 0, 'g', 10));
+        }
         return {};
+    }
 
     const double beta = std::atan2(d4, a3);
 
@@ -276,7 +324,15 @@ std::vector<std::array<double, 3>> AnalyticalIkSolverAdapter::SolveArm(
     // 水平投影 ρ 必须满足 ρ ≥ |d3|，否则腕心落入第一关节轴的死区，q1 无解
     const double rho_sq = Wx * Wx + Wy * Wy;
     if (rho_sq <= d3 * d3 + kSingularTolerance)
+    {
+        if (diagnostics != nullptr)
+        {
+            diagnostics->push_back(QStringLiteral("臂部求解跳过：腕心水平投影 rho^2=%1 <= d3^2=%2，J1 无可区分解。")
+                .arg(rho_sq, 0, 'g', 10)
+                .arg(d3 * d3, 0, 'g', 10));
+        }
         return {};
+    }
 
     const double R_mag = std::sqrt(rho_sq - d3 * d3);
 
@@ -300,7 +356,18 @@ std::vector<std::array<double, 3>> AnalyticalIkSolverAdapter::SolveArm(
         const double cos_phi = (dist_sq - a2 * a2 - L * L) / (2.0 * a2 * L);
         if (cos_phi < -1.0 - kSingularTolerance ||
             cos_phi > 1.0 + kSingularTolerance)
+        {
+            if (diagnostics != nullptr)
+            {
+                diagnostics->push_back(QStringLiteral("臂部肩部符号 %1 跳过：余弦定理 cos_phi=%2 超出 [-1,1]，rp=%3，z=%4，dist=%5。")
+                    .arg(shoulderSign > 0.0 ? QStringLiteral("+") : QStringLiteral("-"))
+                    .arg(cos_phi, 0, 'g', 10)
+                    .arg(rp, 0, 'g', 10)
+                    .arg(z, 0, 'g', 10)
+                    .arg(std::sqrt(dist_sq), 0, 'g', 10));
+            }
             continue;
+        }
 
         const double phi_abs = SafeAcos(cos_phi);
 
@@ -314,7 +381,16 @@ std::vector<std::array<double, 3>> AnalyticalIkSolverAdapter::SolveArm(
             const double B = L * std::sin(phi);
             const double denom = A * A + B * B;
             if (denom <= kSingularTolerance)
+            {
+                if (diagnostics != nullptr)
+                {
+                    diagnostics->push_back(QStringLiteral("臂部肩部符号 %1、肘部符号 %2 跳过：平面 2R 分母=%3，小于奇异容差。")
+                        .arg(shoulderSign > 0.0 ? QStringLiteral("+") : QStringLiteral("-"))
+                        .arg(elbowSign > 0.0 ? QStringLiteral("+") : QStringLiteral("-"))
+                        .arg(denom, 0, 'g', 10));
+                }
                 continue;
+            }
 
             const double c2 = (A * rp + B * z) / denom;
             const double s2 = (A * z  - B * rp) / denom;
@@ -338,7 +414,8 @@ std::vector<AnalyticalIkSolverAdapter::JointSolution> AnalyticalIkSolverAdapter:
     const std::array<double, 3>& armSolutionDeg,
     const Eigen::Matrix4d& targetFlangeTransform,
     const std::vector<RoboSDP::Kinematics::Dto::KinematicLinkParameterDto>& links,
-    const QString& parameterConvention)
+    const QString& parameterConvention,
+    std::vector<QString>* diagnostics)
 {
     // 1. 基于已知的臂部解计算前 3 个关节的正向运动学矩阵 T_03
     const std::vector<double> armAngles = {armSolutionDeg[0], armSolutionDeg[1], armSolutionDeg[2]};
@@ -401,6 +478,14 @@ std::vector<AnalyticalIkSolverAdapter::JointSolution> AnalyticalIkSolverAdapter:
     }
     else
     {
+        if (diagnostics != nullptr)
+        {
+            diagnostics->push_back(QStringLiteral("腕部奇异：臂部解 [%1, %2, %3] 的 sin(theta5)^2=%4，每个臂部解仅返回 1 个代表腕部解。")
+                .arg(armSolutionDeg[0], 0, 'f', 3)
+                .arg(armSolutionDeg[1], 0, 'f', 3)
+                .arg(armSolutionDeg[2], 0, 'f', 3)
+                .arg(s5_sq, 0, 'g', 10));
+        }
         // ================= 腕部奇异情况 (sin(θ5) ≈ 0) =================
         // 此时第 4 轴与第 6 轴共线，它们具有无穷多组解。
         // 按通用约定：令 θ4 = 0，从而将相对旋转全部合并给 θ6。
@@ -440,7 +525,8 @@ std::vector<AnalyticalIkSolverAdapter::JointSolution>
 AnalyticalIkSolverAdapter::FilterAndSortSolutions(
     std::vector<JointSolution> allSolutions,
     const std::vector<RoboSDP::Kinematics::Dto::KinematicJointLimitDto>& jointLimits,
-    const std::vector<double>& seedDeg)
+    const std::vector<double>& seedDeg,
+    std::vector<QString>* diagnostics)
 {
     std::vector<JointSolution> valid;
 
@@ -452,6 +538,7 @@ AnalyticalIkSolverAdapter::FilterAndSortSolutions(
 
         // 软限位检查
         bool withinLimits = true;
+        QString limitReason;
         for (std::size_t j = 0; j < sol.values_deg.size() && j < jointLimits.size(); ++j)
         {
             const double val = sol.values_deg[j];
@@ -460,11 +547,22 @@ AnalyticalIkSolverAdapter::FilterAndSortSolutions(
                 val > jointLimits[j].soft_limit[1] + 1.0)
             {
                 withinLimits = false;
+                limitReason = QStringLiteral("候选解因 J%1=%2 deg 超出软限位 [%3, %4] deg 被过滤。")
+                    .arg(static_cast<int>(j + 1))
+                    .arg(val, 0, 'f', 3)
+                    .arg(jointLimits[j].soft_limit[0], 0, 'f', 3)
+                    .arg(jointLimits[j].soft_limit[1], 0, 'f', 3);
                 break;
             }
         }
         if (!withinLimits)
+        {
+            if (diagnostics != nullptr)
+            {
+                diagnostics->push_back(limitReason);
+            }
             continue;
+        }
 
         // 计算当前解相比于种子关节状态 (seed joint state) 的累计位移距离
         sol.seed_distance = ComputeSeedDistance(sol.values_deg, seedDeg);
@@ -584,14 +682,60 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     using RoboSDP::Kinematics::Dto::IkResultDto;
 
     // 统一定义失败退出的返回辅助闭包
-    const auto failWithReason = [this, &request](const QString& reason) -> IkResultDto
+    std::vector<QString> diagnostics;
+    int armSolutionCount = 0;
+    int wristSolutionCount = 0;
+    int limitValidCount = 0;
+    int fkValidCount = 0;
+    int totalFound = 0;
+
+    const auto failWithReason = [this, &request, &diagnostics, &armSolutionCount,
+                                 &wristSolutionCount, &limitValidCount,
+                                 &fkValidCount, &totalFound](const QString& reason) -> IkResultDto
     {
         IkResultDto result;
         result.joint_positions_deg = request.seed_joint_positions_deg;
         result.success = false;
         result.solver_id = SolverId();
         result.message = QStringLiteral("解析 IK 求解失败：%1").arg(reason);
+        result.total_solutions_found = totalFound;
+        result.valid_solution_count = fkValidCount;
+        result.analytical_arm_solution_count = armSolutionCount;
+        result.analytical_wrist_solution_count = wristSolutionCount;
+        result.analytical_limit_valid_count = limitValidCount;
+        result.analytical_fk_valid_count = fkValidCount;
+        result.analytical_branch_diagnostics = diagnostics;
+        if (armSolutionCount > 0 || wristSolutionCount > 0 || totalFound > 0 || !diagnostics.empty())
+        {
+            result.message += QLatin1Char('\n');
+            result.message += BuildAnalyticalDiagnosticMessage(
+                armSolutionCount, wristSolutionCount, totalFound,
+                limitValidCount, fkValidCount, diagnostics);
+        }
         LogMessage(RoboSDP::Logging::LogLevel::Warning, QStringLiteral("SolveIk"), result.message);
+        if (armSolutionCount > 0 || wristSolutionCount > 0 || totalFound > 0 || !diagnostics.empty())
+        {
+            LogMessage(RoboSDP::Logging::LogLevel::Warning, QStringLiteral("SolveIk"),
+                QStringLiteral("解析 IK 诊断：臂部候选=%1，腕部候选=%2，原始候选=%3，限位后=%4，FK 反验后=%5。")
+                    .arg(armSolutionCount)
+                    .arg(wristSolutionCount)
+                    .arg(totalFound)
+                    .arg(limitValidCount)
+                    .arg(fkValidCount));
+            constexpr int kMaxLoggedDiagnostics = 12;
+            const int diagnosticCount = static_cast<int>(diagnostics.size());
+            for (int i = 0; i < diagnosticCount && i < kMaxLoggedDiagnostics; ++i)
+            {
+                LogMessage(RoboSDP::Logging::LogLevel::Warning, QStringLiteral("SolveIk"),
+                    QStringLiteral("解析 IK 跳过原因：%1").arg(diagnostics[static_cast<std::size_t>(i)]));
+            }
+            if (diagnosticCount > kMaxLoggedDiagnostics)
+            {
+                LogMessage(RoboSDP::Logging::LogLevel::Warning, QStringLiteral("SolveIk"),
+                    QStringLiteral("解析 IK 跳过原因：其余 %1 条已省略。")
+                        .arg(diagnosticCount - kMaxLoggedDiagnostics));
+            }
+        }
         return result;
     };
 
@@ -613,38 +757,47 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     const Eigen::Vector3d wristCenter = P_06 - d6 * z_06;
 
     // 4. 求解臂部关节角度 (θ1, θ2, θ3)
-    const auto armSolutions = SolveArm(wristCenter, model.links);
+    const auto armSolutions = SolveArm(wristCenter, model.links, &diagnostics);
+    armSolutionCount = static_cast<int>(armSolutions.size());
 
     // 5. 针对前一步得到的每组可用臂部解，进一步求出对应的手腕解 (θ4, θ5, θ6)
     std::vector<JointSolution> allSolutions;
     for (const auto& armSol : armSolutions)
     {
         auto wristSolutions = SolveWrist(armSol, T_flange_target, model.links,
-            model.parameter_convention);
+            model.parameter_convention, &diagnostics);
+        wristSolutionCount += static_cast<int>(wristSolutions.size());
         for (auto& ws : wristSolutions)
             allSolutions.push_back(std::move(ws));
     }
 
-    const int totalFound = static_cast<int>(allSolutions.size());
+    totalFound = static_cast<int>(allSolutions.size());
 
     // 6. 进行限位过滤与基于种子距离的重排序
     auto validSolutions = FilterAndSortSolutions(
-        std::move(allSolutions), model.joint_limits, request.seed_joint_positions_deg);
-    const int limitValidCount = static_cast<int>(validSolutions.size());
+        std::move(allSolutions), model.joint_limits, request.seed_joint_positions_deg, &diagnostics);
+    limitValidCount = static_cast<int>(validSolutions.size());
     
     // 通过正向运动学 (FK) 计算每个候选解的位姿误差，剔除误差超出容差范围的无效解。
     // [修复此处]: 在捕获列表中显式添加 "this" 指针，以调用类成员函数 ComputePositionErrorM 等
     validSolutions.erase(
         std::remove_if(validSolutions.begin(), validSolutions.end(),
-            [this, &model, &T_flange_target](const JointSolution& solution) {
+            [this, &model, &T_flange_target, &diagnostics](const JointSolution& solution) {
                 const double positionErrorM = ComputePositionErrorM(
                     solution.values_deg, T_flange_target, model.links, model.parameter_convention);
                 const double orientationErrorRad = ComputeOrientationErrorRad(
                     solution.values_deg, T_flange_target, model.links, model.parameter_convention);
-                // 限制容差：位置误差不得大于 5 毫米，姿态误差不得大于 5 度
-                return positionErrorM > 0.005 || orientationErrorRad > DegToRad(5.0);
+                const bool rejected = positionErrorM > 0.005 || orientationErrorRad > DegToRad(5.0);
+                if (rejected)
+                {
+                    diagnostics.push_back(QStringLiteral("候选解 FK 反验失败：位置误差=%1 mm，姿态误差=%2 deg，超过 5 mm / 5 deg 容差。")
+                        .arg(positionErrorM * 1000.0, 0, 'f', 3)
+                        .arg(RadToDeg(orientationErrorRad), 0, 'f', 3));
+                }
+                return rejected;
             }),
         validSolutions.end());
+    fkValidCount = static_cast<int>(validSolutions.size());
 
     if (validSolutions.empty())
     {
@@ -673,14 +826,43 @@ RoboSDP::Kinematics::Dto::IkResultDto AnalyticalIkSolverAdapter::SolveIk(
     // 输出多解统计信息
     result.total_solutions_found = totalFound;
     result.valid_solution_count = static_cast<int>(validSolutions.size());
+    result.analytical_arm_solution_count = armSolutionCount;
+    result.analytical_wrist_solution_count = wristSolutionCount;
+    result.analytical_limit_valid_count = limitValidCount;
+    result.analytical_fk_valid_count = fkValidCount;
+    result.analytical_branch_diagnostics = diagnostics;
     for (const auto& sol : validSolutions)
         result.all_solutions_deg.push_back(sol.values_deg);
 
     result.message = QStringLiteral("解析 IK 求解完成：共 %1 组原始解，%2 组有效，使用最佳解。")
         .arg(totalFound)
         .arg(validSolutions.size());
+    result.message += QLatin1Char('\n');
+    result.message += BuildAnalyticalDiagnosticMessage(
+        armSolutionCount, wristSolutionCount, totalFound,
+        limitValidCount, fkValidCount, diagnostics);
 
     LogMessage(RoboSDP::Logging::LogLevel::Info, QStringLiteral("SolveIk"), result.message);
+    LogMessage(RoboSDP::Logging::LogLevel::Info, QStringLiteral("SolveIk"),
+        QStringLiteral("解析 IK 诊断：臂部候选=%1，腕部候选=%2，原始候选=%3，限位后=%4，FK 反验后=%5。")
+            .arg(armSolutionCount)
+            .arg(wristSolutionCount)
+            .arg(totalFound)
+            .arg(limitValidCount)
+            .arg(fkValidCount));
+    constexpr int kMaxLoggedDiagnostics = 12;
+    const int diagnosticCount = static_cast<int>(diagnostics.size());
+    for (int i = 0; i < diagnosticCount && i < kMaxLoggedDiagnostics; ++i)
+    {
+        LogMessage(RoboSDP::Logging::LogLevel::Info, QStringLiteral("SolveIk"),
+            QStringLiteral("解析 IK 跳过原因：%1").arg(diagnostics[static_cast<std::size_t>(i)]));
+    }
+    if (diagnosticCount > kMaxLoggedDiagnostics)
+    {
+        LogMessage(RoboSDP::Logging::LogLevel::Info, QStringLiteral("SolveIk"),
+            QStringLiteral("解析 IK 跳过原因：其余 %1 条已省略。")
+                .arg(diagnosticCount - kMaxLoggedDiagnostics));
+    }
     return result;
 }
 

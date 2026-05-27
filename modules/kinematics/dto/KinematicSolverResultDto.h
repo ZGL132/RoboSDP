@@ -61,6 +61,16 @@ struct IkResultDto
     int total_solutions_found = 0;
     /// @brief 过滤后有效解组数。
     int valid_solution_count = 0;
+    /// @brief 闭式解析 IK 臂部候选解组数。
+    int analytical_arm_solution_count = 0;
+    /// @brief 闭式解析 IK 腕部候选解组数。
+    int analytical_wrist_solution_count = 0;
+    /// @brief 闭式解析 IK 通过限位过滤后的解组数。
+    int analytical_limit_valid_count = 0;
+    /// @brief 闭式解析 IK 通过 FK 反验后的解组数。
+    int analytical_fk_valid_count = 0;
+    /// @brief 闭式解析 IK 分支诊断，记录候选分支被跳过或过滤的原因。
+    std::vector<QString> analytical_branch_diagnostics;
     /// @brief 产生此结果的求解器标识。
     QString solver_id;
     /// @brief 用户请求的求解器标识；发生回退时与 solver_id 不同。
