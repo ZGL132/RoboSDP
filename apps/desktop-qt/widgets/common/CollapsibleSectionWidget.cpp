@@ -12,7 +12,7 @@ static const QString kToggleButtonStyle = QStringLiteral(
     "  padding: 6px 8px;"
     "  text-align: left;"
     "  font-weight: bold;"
-    "  font-size: 13px;"
+    "  font-size: 15px;"
     "  border-radius: 4px;"
     "}"
     "QToolButton:hover {"

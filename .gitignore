@@ -77,6 +77,7 @@ Thumbs.db
 
 # Local dependency cache / third-party build artifacts
 .deps/
+.cache/
 deps/
 third_party_build/
 _thirdparty-build/

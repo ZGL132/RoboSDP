@@ -1048,9 +1048,6 @@ QWidget* KinematicsWidget::CreateInteractivePage()
     auto* fkLayout = new QVBoxLayout(fkGroup);
 
     auto* fkHeaderLayout = new QHBoxLayout();
-    auto* fkHintLabel = new QLabel(QStringLiteral("逐关节拖动滑块或输入角度，中央骨架会实时刷新。"), fkGroup);
-    fkHintLabel->setWordWrap(true);
-    fkHeaderLayout->addWidget(fkHintLabel, 1);
     m_scroll_step_spin = CreateDoubleSpinBox(0.1, 10.0, 1, 0.1);
     m_scroll_step_spin->setValue(1.0);
     m_scroll_step_spin->setToolTip(QStringLiteral(
@@ -1093,19 +1090,19 @@ QWidget* KinematicsWidget::CreateInteractivePage()
 
         auto* roTitle = new QLabel(QStringLiteral("FK 计算结果"), readoutFrame);
         roTitle->setStyleSheet(QStringLiteral(
-            "font-weight:bold;color:#3730a3;font-size:11px;"));
+            "font-weight:bold;color:#3730a3;font-size:20px;"));
         roLayout->addWidget(roTitle);
 
         m_fk_tcp_pos_label = new QLabel(
             QStringLiteral("P: (  ---- ,  ---- ,  ---- ) m"), readoutFrame);
         m_fk_tcp_pos_label->setStyleSheet(QStringLiteral(
-            "font-family:monospace;font-size:11px;color:#1e293b;"));
+            "font-family:monospace;font-size:20px;color:#1e293b;"));
         roLayout->addWidget(m_fk_tcp_pos_label);
 
         m_fk_tcp_rpy_label = new QLabel(
             QStringLiteral("R: (  ---- ,  ---- ,  ---- ) deg"), readoutFrame);
         m_fk_tcp_rpy_label->setStyleSheet(QStringLiteral(
-            "font-family:monospace;font-size:11px;color:#1e293b;"));
+            "font-family:monospace;font-size:20px;color:#1e293b;"));
         roLayout->addWidget(m_fk_tcp_rpy_label);
 
         fkLayout->addWidget(readoutFrame);
@@ -1458,9 +1455,10 @@ QGroupBox* KinematicsWidget::CreateResultGroup()
         m_result_fk_label = new QLabel(QStringLiteral("尚未执行"), fkSection);
         m_result_fk_label->setWordWrap(true);
         m_result_fk_label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        m_result_fk_label->setStyleSheet(QStringLiteral("font-size: 22px;"));
         fkSectionLayout->addWidget(m_result_fk_label);
         m_result_fk_manipulability_label = new QLabel(QStringLiteral(""), fkSection);
-        m_result_fk_manipulability_label->setStyleSheet(QStringLiteral("font-size: 11px; color: #555;"));
+        m_result_fk_manipulability_label->setStyleSheet(QStringLiteral("font-size: 22px; color: #555;"));
         m_result_fk_manipulability_label->setVisible(false);
         fkSectionLayout->addWidget(m_result_fk_manipulability_label);
         scrollLayout->addWidget(fkSection);
@@ -2366,8 +2364,8 @@ void KinematicsWidget::RenderResults()
                     .arg(singularFlag));
                 m_result_fk_manipulability_label->setStyleSheet(
                     m_last_jacobian_analysis.is_singular
-                        ? QStringLiteral("font-size: 11px; color: #dc2626; font-weight: bold;")
-                        : QStringLiteral("font-size: 11px; color: #555;"));
+                        ? QStringLiteral("font-size: 22px; color: #dc2626; font-weight: bold;")
+                        : QStringLiteral("font-size: 22px; color: #555;"));
                 m_result_fk_manipulability_label->setVisible(true);
             }
             else
@@ -2935,7 +2933,7 @@ void KinematicsWidget::UpdateFkJointLimitLabels()
             const double softMax = ReadTableDouble(m_joint_limit_table, i, 2);
             const QString label = jointId.isEmpty()
                 ? QStringLiteral("J%1").arg(i + 1)
-                : jointId;
+                : FormatShortJointId(jointId);
             m_fk_joint_labels[i]->setText(QStringLiteral("%1 [%2, %3]")
                 .arg(label)
                 .arg(softMin, 0, 'f', 1)
