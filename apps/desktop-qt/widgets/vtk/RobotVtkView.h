@@ -244,6 +244,9 @@ private:
     void RenderAnalysisLayers(bool renderNow = true);
     void SetAnalysisLayerVisibleInternal(const QString& layerId, bool visible, bool userInitiated);
     void AutoEnableAnalysisLayerIfDefault(const QString& layerId);
+    bool TrySelectWorkspacePoint(vtkActor* clickedActor, const double pickPosition[3]);
+    void ClearWorkspacePointSelection(bool renderNow = true);
+    void RenderWorkspacePointSelectionOverlay();
     void SetWorkspaceClipPlaneEnabled(bool enabled);
     bool ShouldUseWorkspaceClipPlane() const;
     void InitializeWorkspaceClipPlane();
@@ -295,6 +298,9 @@ private:
     std::vector<bool> m_singularityFlags;
     std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto> m_requirementKeyPoses;
     int m_requirementSelectedKeyPoseIndex = -1;
+    bool m_hasSelectedWorkspacePoint = false;
+    std::array<double, 3> m_selectedWorkspacePointPosition {0.0, 0.0, 0.0};
+    double m_selectedWorkspacePointSize = 3.0;
 
 #if defined(ROBOSDP_HAVE_VTK)
     QVTKOpenGLNativeWidget* m_vtkWidget = nullptr;
@@ -324,6 +330,8 @@ private:
     vtkSmartPointer<vtkActor> m_requirement_workspace_actor;
     vtkSmartPointer<vtkActor> m_kinematics_workspace_actor;
     vtkSmartPointer<vtkActor> m_singularity_workspace_actor;
+    vtkSmartPointer<vtkActor> m_selected_workspace_point_actor;
+    vtkSmartPointer<vtkBillboardTextActor3D> m_selected_workspace_point_label_actor;
     vtkSmartPointer<vtkPlane> m_workspace_clip_plane;
     vtkSmartPointer<vtkImplicitPlaneWidget2> m_workspace_clip_plane_widget;
 

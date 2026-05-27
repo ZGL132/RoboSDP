@@ -534,6 +534,8 @@ public:
     RoboSDP::Desktop::Vtk::RobotVtkView* parentView = nullptr;
     /// @brief 当前渲染器，用于 vtkPropPicker 拾取。
     vtkRenderer* renderer = nullptr;
+    bool leftButtonDownPickedActor = false;
+    int leftButtonDownPos[2] = {0, 0};
 
     void OnLeftButtonDown() override
     {
@@ -543,25 +545,49 @@ public:
             return;
         }
 
-        // 中文说明：左键按下时先执行拾取；若命中 Actor 则只高亮不旋转视角；若未命中则保留默认相机操作。
-        bool pickedActor = false;
+        leftButtonDownPickedActor = false;
         if (renderer != nullptr && parentView != nullptr && this->GetInteractor() != nullptr)
         {
             const int* clickPos = this->GetInteractor()->GetEventPosition();
+            leftButtonDownPos[0] = clickPos[0];
+            leftButtonDownPos[1] = clickPos[1];
             vtkNew<vtkPropPicker> picker;
             picker->Pick(clickPos[0], clickPos[1], 0, renderer);
 
             vtkActor* clickedActor = picker->GetActor();
-            // 中文说明：传递拾取位置（世界坐标），供 HandleActorClicked 在骨架节点查找时使用。
-            const double* pickPos = picker->GetPickPosition();
-            parentView->HandleActorClicked(clickedActor, pickPos);
-            pickedActor = (clickedActor != nullptr);
+            leftButtonDownPickedActor = (clickedActor != nullptr);
+            if (leftButtonDownPickedActor)
+            {
+                // 中文说明：传递拾取位置（世界坐标），供 HandleActorClicked 在骨架节点或点云中查找最近点。
+                const double* pickPos = picker->GetPickPosition();
+                parentView->HandleActorClicked(clickedActor, pickPos);
+            }
         }
         // 中文说明：仅未命中 Actor 时才保留默认的视角旋转/平移交互，避免点击标签导致相机偏移。
-        if (!pickedActor)
+        if (!leftButtonDownPickedActor)
         {
             vtkInteractorStyleTrackballCamera::OnLeftButtonDown();
         }
+    }
+
+    void OnLeftButtonUp() override
+    {
+        const int* releasePos = this->GetInteractor() != nullptr
+            ? this->GetInteractor()->GetEventPosition()
+            : nullptr;
+        const int dx = releasePos != nullptr ? releasePos[0] - leftButtonDownPos[0] : 0;
+        const int dy = releasePos != nullptr ? releasePos[1] - leftButtonDownPos[1] : 0;
+        const bool isSimpleBlankClick = !leftButtonDownPickedActor && (dx * dx + dy * dy <= 9);
+
+        if (!leftButtonDownPickedActor)
+        {
+            vtkInteractorStyleTrackballCamera::OnLeftButtonUp();
+        }
+        if (isSimpleBlankClick && parentView != nullptr)
+        {
+            parentView->HandleActorClicked(nullptr, nullptr);
+        }
+        leftButtonDownPickedActor = false;
     }
 
     // ── 【逆向驱动】鼠标滚轮事件重写 ──────────────────────────────
@@ -871,6 +897,182 @@ void RobotVtkView::RenderAnalysisLayers(bool renderNow)
         m_renderer->AddActor(m_singularity_workspace_actor);
     }
 
+    RenderWorkspacePointSelectionOverlay();
+
+    if (renderNow && m_renderWindow != nullptr)
+    {
+        m_renderWindow->Render();
+    }
+#else
+    Q_UNUSED(renderNow);
+#endif
+}
+
+bool RobotVtkView::TrySelectWorkspacePoint(vtkActor* clickedActor, const double pickPosition[3])
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (clickedActor == nullptr || pickPosition == nullptr || m_renderer == nullptr)
+    {
+        return false;
+    }
+
+    const std::vector<std::array<double, 3>>* positions = nullptr;
+    if (clickedActor == m_kinematics_workspace_actor.GetPointer())
+    {
+        positions = &m_kinematicsWorkspacePositions;
+    }
+    else if (clickedActor == m_singularity_workspace_actor.GetPointer())
+    {
+        positions = &m_singularityWorkspacePositions;
+    }
+
+    if (positions == nullptr || positions->empty())
+    {
+        return false;
+    }
+
+    double minDistSq = std::numeric_limits<double>::max();
+    const std::array<double, 3>* nearestPoint = nullptr;
+    for (const auto& point : *positions)
+    {
+        const double dx = point[0] - pickPosition[0];
+        const double dy = point[1] - pickPosition[1];
+        const double dz = point[2] - pickPosition[2];
+        const double distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq < minDistSq)
+        {
+            minDistSq = distSq;
+            nearestPoint = &point;
+        }
+    }
+
+    if (nearestPoint == nullptr)
+    {
+        return false;
+    }
+
+    ClearWorkspacePointSelection(false);
+    m_hasSelectedWorkspacePoint = true;
+    m_selectedWorkspacePointPosition = *nearestPoint;
+    m_selectedWorkspacePointSize = clickedActor->GetProperty() != nullptr
+        ? clickedActor->GetProperty()->GetPointSize()
+        : 3.0;
+
+    RenderWorkspacePointSelectionOverlay();
+
+    if (m_statusLabel != nullptr)
+    {
+        m_statusLabel->setText(QStringLiteral("中央三维主视图区：已选中工作空间点 [%1, %2, %3] m")
+            .arg((*nearestPoint)[0], 0, 'f', 4)
+            .arg((*nearestPoint)[1], 0, 'f', 4)
+            .arg((*nearestPoint)[2], 0, 'f', 4));
+    }
+    return true;
+#else
+    Q_UNUSED(clickedActor);
+    Q_UNUSED(pickPosition);
+    return false;
+#endif
+}
+
+void RobotVtkView::RenderWorkspacePointSelectionOverlay()
+{
+#if defined(ROBOSDP_HAVE_VTK)
+    if (!m_hasSelectedWorkspacePoint || m_renderer == nullptr)
+    {
+        return;
+    }
+
+    if (m_selected_workspace_point_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_selected_workspace_point_actor);
+        m_selected_workspace_point_actor = nullptr;
+    }
+    if (m_selected_workspace_point_label_actor != nullptr)
+    {
+        if (m_label_renderer != nullptr)
+        {
+            m_label_renderer->RemoveActor(m_selected_workspace_point_label_actor);
+        }
+        m_renderer->RemoveActor(m_selected_workspace_point_label_actor);
+        m_selected_workspace_point_label_actor = nullptr;
+    }
+
+    vtkNew<vtkPoints> markerPoints;
+    markerPoints->SetNumberOfPoints(1);
+    markerPoints->SetPoint(
+        0,
+        m_selectedWorkspacePointPosition[0],
+        m_selectedWorkspacePointPosition[1],
+        m_selectedWorkspacePointPosition[2]);
+
+    vtkNew<vtkPolyData> markerPolyData;
+    markerPolyData->SetPoints(markerPoints);
+
+    vtkNew<vtkVertexGlyphFilter> markerGlyphFilter;
+    markerGlyphFilter->SetInputData(markerPolyData);
+    markerGlyphFilter->Update();
+
+    vtkNew<vtkPolyDataMapper> markerMapper;
+    markerMapper->SetInputConnection(markerGlyphFilter->GetOutputPort());
+
+    m_selected_workspace_point_actor = vtkSmartPointer<vtkActor>::New();
+    m_selected_workspace_point_actor->SetMapper(markerMapper);
+    m_selected_workspace_point_actor->GetProperty()->SetColor(1.0, 0.92, 0.0);
+    m_selected_workspace_point_actor->GetProperty()->SetPointSize(m_selectedWorkspacePointSize);
+    m_selected_workspace_point_actor->GetProperty()->SetAmbient(0.85);
+    m_selected_workspace_point_actor->GetProperty()->SetLighting(false);
+    m_selected_workspace_point_actor->PickableOff();
+    m_renderer->AddActor(m_selected_workspace_point_actor);
+
+    const QString labelText = QStringLiteral("X %1 m\nY %2 m\nZ %3 m")
+        .arg(m_selectedWorkspacePointPosition[0], 0, 'f', 4)
+        .arg(m_selectedWorkspacePointPosition[1], 0, 'f', 4)
+        .arg(m_selectedWorkspacePointPosition[2], 0, 'f', 4);
+    m_selected_workspace_point_label_actor = CreateBillboardLabel(
+        labelText,
+        m_selectedWorkspacePointPosition,
+        1.0,
+        0.92,
+        0.0,
+        20,
+        18);
+    m_selected_workspace_point_label_actor->PickableOff();
+    if (m_label_renderer != nullptr)
+    {
+        m_label_renderer->AddActor(m_selected_workspace_point_label_actor);
+    }
+    else
+    {
+        m_renderer->AddActor(m_selected_workspace_point_label_actor);
+    }
+#else
+#endif
+}
+
+void RobotVtkView::ClearWorkspacePointSelection(bool renderNow)
+{
+    m_hasSelectedWorkspacePoint = false;
+#if defined(ROBOSDP_HAVE_VTK)
+    if (m_renderer != nullptr && m_selected_workspace_point_actor != nullptr)
+    {
+        m_renderer->RemoveActor(m_selected_workspace_point_actor);
+    }
+    m_selected_workspace_point_actor = nullptr;
+
+    if (m_selected_workspace_point_label_actor != nullptr)
+    {
+        if (m_label_renderer != nullptr)
+        {
+            m_label_renderer->RemoveActor(m_selected_workspace_point_label_actor);
+        }
+        if (m_renderer != nullptr)
+        {
+            m_renderer->RemoveActor(m_selected_workspace_point_label_actor);
+        }
+    }
+    m_selected_workspace_point_label_actor = nullptr;
+
     if (renderNow && m_renderWindow != nullptr)
     {
         m_renderWindow->Render();
@@ -959,6 +1161,7 @@ void RobotVtkView::ClearCache()
     m_link_actors.clear();
     m_link_mesh_geometries.clear();
     m_link_to_joint_index.clear();
+    ClearWorkspacePointSelection(false);
     ClearRequirementKeyPoseActors();
     m_requirement_workspace_actor = nullptr;
     m_kinematics_workspace_actor = nullptr;
@@ -1539,7 +1742,7 @@ void RobotVtkView::BuildAnalysisLayerPanel(QWidget* viewportFrame)
     clipSwatch->setObjectName(QStringLiteral("analysisLayerSwatch"));
     clipSwatch->setStyleSheet(QStringLiteral("QLabel#analysisLayerSwatch{background:#f8fafc;}"));
 
-    m_workspaceClipPlaneCheck = new QCheckBox(QStringLiteral("剖切平面"), clipRow);
+    m_workspaceClipPlaneCheck = new QCheckBox(QStringLiteral("工作空间剖切平面"), clipRow);
     m_workspaceClipPlaneCheck->setChecked(false);
     m_workspaceClipPlaneCheck->setToolTip(QStringLiteral("启用后拖动半透明平面，动态剪裁工作空间点云。"));
     connect(m_workspaceClipPlaneCheck, &QCheckBox::toggled, this, [this](bool enabled) {
@@ -2129,6 +2332,18 @@ void RobotVtkView::HandleActorClicked(vtkActor* clickedActor, const double pickP
     {
         m_last_picked_actor->GetProperty()->SetColor(m_last_picked_color);
         m_last_picked_actor->GetProperty()->SetAmbient(m_last_picked_ambient);
+        m_last_picked_actor = nullptr;
+    }
+
+    if (TrySelectWorkspacePoint(clickedActor, pickPosition))
+    {
+        m_current_picked_link.clear();
+        emit signalLinkPicked(QString());
+        if (m_renderWindow != nullptr)
+        {
+            m_renderWindow->Render();
+        }
+        return;
     }
 
     if (clickedActor == nullptr)
@@ -2136,6 +2351,7 @@ void RobotVtkView::HandleActorClicked(vtkActor* clickedActor, const double pickP
         // 【修复】点击空白区域，同时清除选中状态和当前选中连杆名称
         m_last_picked_actor = nullptr;
         m_current_picked_link.clear();    // <--- 【新增】清理选中连杆
+        ClearWorkspacePointSelection(false);
         emit signalLinkPicked(QString());
         if (m_statusLabel != nullptr)
         {

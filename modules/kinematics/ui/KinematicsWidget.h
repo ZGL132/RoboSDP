@@ -324,8 +324,6 @@ private:
     QGridLayout* m_ik_seed_grid = nullptr;
     std::array<QDoubleSpinBox*, 6> m_ik_target_pose_spins {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     QSpinBox* m_workspace_sample_count_spin = nullptr;
-    QCheckBox* m_workspace_xz_slice_check = nullptr;
-    QDoubleSpinBox* m_workspace_slice_tolerance_spin = nullptr;
     QDoubleSpinBox* m_singularity_threshold_spin = nullptr;
 
     QLabel* m_singularity_result_label = nullptr;

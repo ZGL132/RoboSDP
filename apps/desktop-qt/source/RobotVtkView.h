@@ -29,7 +29,9 @@ class vtkAxesActor;
 class vtkBillboardTextActor3D;
 class vtkBoxWidget2;
 class vtkGenericOpenGLRenderWindow;
+class vtkImplicitPlaneWidget2;
 class vtkOrientationMarkerWidget;
+class vtkPlane;
 class vtkRenderer;
 class vtkTextActor;
 #endif
@@ -76,6 +78,9 @@ public:
 
     /// @brief 将相机重新对准当前预览/测试场景，便于同步后快速找回模型。
     void ResetCameraToCurrentScene();
+
+    /// @brief 相机缩放后按当前视距刷新标签密度，供 VTK 交互器回调。
+    void RefreshLabelVisibilityForCamera();
 
     /// @brief 设置骨架层显示状态，供顶部视图页签统一控制。
     void SetSkeletonVisible(bool visible);
@@ -201,6 +206,12 @@ public:
     /// @brief 缩小当前三维相机视图。
     void ZoomOutCamera();
 
+    /// @brief 工作空间动态剖切平面是否启用，供 VTK 交互器决定是否让平面控件优先接管鼠标。
+    bool IsWorkspaceClipPlaneEnabled() const { return m_workspaceClipPlaneEnabled; }
+
+    /// @brief vtkImplicitPlaneWidget2 交互回调：同步 vtkPlane 并刷新工作空间点云裁剪。
+    void HandleWorkspaceClipPlaneInteraction();
+
 signals:
     /// @brief 3D 视图中点击连杆后鼠标滚轮滚动 → 发出关节角度变更信号。
     void signalJointAngleScrolled(int jointIndex, double deltaDeg);
@@ -233,6 +244,13 @@ private:
     void RenderAnalysisLayers(bool renderNow = true);
     void SetAnalysisLayerVisibleInternal(const QString& layerId, bool visible, bool userInitiated);
     void AutoEnableAnalysisLayerIfDefault(const QString& layerId);
+    bool TrySelectWorkspacePoint(vtkActor* clickedActor, const double pickPosition[3]);
+    void ClearWorkspacePointSelection(bool renderNow = true);
+    void RenderWorkspacePointSelectionOverlay();
+    void SetWorkspaceClipPlaneEnabled(bool enabled);
+    bool ShouldUseWorkspaceClipPlane() const;
+    void InitializeWorkspaceClipPlane();
+    void UpdateWorkspaceClipPlanePlacement();
     void RaiseViewOverlays();
     void PositionCameraToolbar();
     void PositionAnalysisLayerPanel();
@@ -245,6 +263,7 @@ private:
         double upX,
         double upY,
         double upZ);
+    bool ShouldCompactDenseLabels() const;
     QString BuildStatusText() const;
 
 private:
@@ -264,9 +283,11 @@ private:
     std::map<QString, bool> m_analysisLayerVisibility;
     std::map<QString, bool> m_analysisLayerUserOverrides;
     std::map<QString, QCheckBox*> m_analysisLayerChecks;
+    QCheckBox* m_workspaceClipPlaneCheck = nullptr;
     bool m_hasIkPoseComparison = false;
     bool m_hasIkActualPose = false;
     bool m_ikWithinTolerance = false;
+    bool m_workspaceClipPlaneEnabled = false;
     double m_ikPositionErrorMm = 0.0;
     double m_ikOrientationErrorDeg = 0.0;
     RoboSDP::Kinematics::Dto::CartesianPoseDto m_ikTargetPose;
@@ -277,6 +298,9 @@ private:
     std::vector<bool> m_singularityFlags;
     std::vector<RoboSDP::Requirement::Dto::RequirementKeyPoseDto> m_requirementKeyPoses;
     int m_requirementSelectedKeyPoseIndex = -1;
+    bool m_hasSelectedWorkspacePoint = false;
+    std::array<double, 3> m_selectedWorkspacePointPosition {0.0, 0.0, 0.0};
+    double m_selectedWorkspacePointSize = 3.0;
 
 #if defined(ROBOSDP_HAVE_VTK)
     QVTKOpenGLNativeWidget* m_vtkWidget = nullptr;
@@ -306,6 +330,10 @@ private:
     vtkSmartPointer<vtkActor> m_requirement_workspace_actor;
     vtkSmartPointer<vtkActor> m_kinematics_workspace_actor;
     vtkSmartPointer<vtkActor> m_singularity_workspace_actor;
+    vtkSmartPointer<vtkActor> m_selected_workspace_point_actor;
+    vtkSmartPointer<vtkBillboardTextActor3D> m_selected_workspace_point_label_actor;
+    vtkSmartPointer<vtkPlane> m_workspace_clip_plane;
+    vtkSmartPointer<vtkImplicitPlaneWidget2> m_workspace_clip_plane_widget;
 
     vtkSmartPointer<vtkAxesActor> m_ik_target_axes_actor;
     vtkSmartPointer<vtkAxesActor> m_ik_actual_axes_actor;
