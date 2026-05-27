@@ -3,6 +3,8 @@
 #include <QApplication>
 #include <QBoxLayout>
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QFrame>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
@@ -98,6 +100,25 @@ QString CreateRecentEmptyStyleSheet(double scale)
         "font-weight:700;").arg(ScaledInt(2, scale)).arg(ScaledInt(48, scale));
 }
 
+QString CreateRecentProjectButtonStyleSheet(double scale)
+{
+    return QStringLiteral(
+        "QPushButton#recentProjectButton{"
+        "background:#ffffff;"
+        "border:%1px solid #cbd5e1;"
+        "border-left:%2px solid #0f766e;"
+        "border-radius:0px;"
+        "color:#0f172a;"
+        "font-weight:700;"
+        "padding:%3px %4px;"
+        "text-align:left;"
+        "}"
+        "QPushButton#recentProjectButton:hover{"
+        "background:#f1f5f9;"
+        "border-color:#0f766e;"
+        "}").arg(ScaledInt(2, scale)).arg(ScaledInt(8, scale)).arg(ScaledInt(18, scale)).arg(ScaledInt(22, scale));
+}
+
 QString CreatePrimaryButtonStyleSheet(double scale)
 {
     return QStringLiteral(
@@ -139,7 +160,7 @@ QFrame* CreateRecentProjectPlaceholder(
         QStringLiteral("font-weight:800;color:#172033;"),
         card);
     auto* body = CreateTextLabel(
-        QStringLiteral("这里已预留 Recent Projects 区域。后续接入项目历史记录后，可点击项目卡片直接打开。"),
+        QStringLiteral("点击列表中的项目可直接恢复工作上下文。"),
         QStringLiteral("line-height:1.45;color:#475467;"),
         card);
     auto* empty = CreateTextLabel(
@@ -170,6 +191,19 @@ QFrame* CreateRecentProjectPlaceholder(
     }
 
     return card;
+}
+
+QString CreateRecentProjectButtonText(const QString& projectRootPath)
+{
+    const QFileInfo projectRootInfo(projectRootPath);
+    QString displayName = projectRootInfo.fileName();
+    if (displayName.trimmed().isEmpty())
+    {
+        displayName = QDir::toNativeSeparators(projectRootInfo.absoluteFilePath());
+    }
+
+    return QStringLiteral("%1\n%2")
+        .arg(displayName, QDir::toNativeSeparators(projectRootInfo.absoluteFilePath()));
 }
 
 } // namespace
@@ -386,8 +420,71 @@ void ProjectWelcomeWidget::UpdateResponsiveScale()
     SetButtonFontSize(m_new_project_button, 34, scale);
     SetButtonFontSize(m_open_project_button, 34, scale);
 
+    for (QPushButton* button : m_recent_project_buttons)
+    {
+        if (button == nullptr)
+        {
+            continue;
+        }
+        SetButtonFontSize(button, 22, scale);
+        button->setMinimumHeight(ScaledInt(92, scale));
+        button->setStyleSheet(CreateRecentProjectButtonStyleSheet(scale));
+    }
+
     m_new_project_button->setStyleSheet(CreatePrimaryButtonStyleSheet(scale));
     m_open_project_button->setStyleSheet(CreateSecondaryButtonStyleSheet(scale));
+}
+
+void ProjectWelcomeWidget::SetRecentProjects(const QStringList& projectRootPaths)
+{
+    ClearRecentProjectButtons();
+
+    const bool hasRecentProjects = !projectRootPaths.isEmpty();
+    if (m_recent_empty_label != nullptr)
+    {
+        m_recent_empty_label->setVisible(!hasRecentProjects);
+    }
+
+    for (const QString& projectRootPath : projectRootPaths)
+    {
+        const QString normalizedPath = QDir::cleanPath(projectRootPath);
+        if (normalizedPath.trimmed().isEmpty())
+        {
+            continue;
+        }
+
+        auto* button = new QPushButton(CreateRecentProjectButtonText(normalizedPath), m_recent_card);
+        button->setObjectName(QStringLiteral("recentProjectButton"));
+        button->setCursor(Qt::PointingHandCursor);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        button->setToolTip(QDir::toNativeSeparators(normalizedPath));
+        connect(button, &QPushButton::clicked, this, [this, normalizedPath]() {
+            emit RecentProjectOpenRequested(normalizedPath);
+        });
+
+        const int insertIndex = m_recent_empty_label == nullptr
+            ? m_recent_layout->count()
+            : std::max(0, m_recent_layout->indexOf(m_recent_empty_label));
+        m_recent_layout->insertWidget(insertIndex, button);
+        m_recent_project_buttons.push_back(button);
+    }
+
+    m_current_scale = -1.0;
+    UpdateResponsiveScale();
+}
+
+void ProjectWelcomeWidget::ClearRecentProjectButtons()
+{
+    for (QPushButton* button : m_recent_project_buttons)
+    {
+        if (button == nullptr)
+        {
+            continue;
+        }
+        m_recent_layout->removeWidget(button);
+        button->deleteLater();
+    }
+    m_recent_project_buttons.clear();
 }
 
 } // namespace RoboSDP::Desktop::Widgets

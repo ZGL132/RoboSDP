@@ -15,6 +15,7 @@
 #include "modules/selection/ui/SelectionWidget.h"
 #include "modules/topology/ui/TopologyWidget.h"
 
+#include <algorithm>
 #include <array>
 #include <vector>
 
@@ -28,6 +29,7 @@
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QSettings>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -40,6 +42,35 @@
 
 namespace RoboSDP::Desktop
 {
+namespace
+{
+constexpr int kMaxRecentProjectCount = 6;
+
+QString NormalizeProjectPath(const QString& projectRootPath)
+{
+    if (projectRootPath.trimmed().isEmpty())
+    {
+        return {};
+    }
+
+    return QFileInfo(projectRootPath).absoluteFilePath();
+}
+
+bool ProjectPathEquals(const QString& lhs, const QString& rhs)
+{
+    return QString::compare(
+        QDir::cleanPath(lhs),
+        QDir::cleanPath(rhs),
+        Qt::CaseInsensitive) == 0;
+}
+
+bool HasProjectMetadataFile(const QString& projectRootPath)
+{
+    const QFileInfo projectFileInfo(QDir(projectRootPath).filePath(QStringLiteral("project.json")));
+    return projectFileInfo.exists() && projectFileInfo.isFile();
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -244,6 +275,11 @@ void MainWindow::CreateCentralView()
         &RoboSDP::Desktop::Widgets::ProjectWelcomeWidget::OpenProjectRequested,
         this,
         [this]() { HandleOpenProjectRequested(); });
+    connect(
+        m_projectWelcomeWidget,
+        &RoboSDP::Desktop::Widgets::ProjectWelcomeWidget::RecentProjectOpenRequested,
+        this,
+        [this](const QString& projectRootPath) { HandleRecentProjectOpenRequested(projectRootPath); });
 }
 
 void MainWindow::CreateProjectTreeDock()
@@ -691,6 +727,7 @@ void MainWindow::ShowEmptyProjectState()
     if (m_centralStack != nullptr && m_projectWelcomeWidget != nullptr)
     {
         m_centralStack->setCurrentWidget(m_projectWelcomeWidget);
+        RefreshWelcomeRecentProjects();
     }
 
     if (m_projectTreeDock != nullptr)
@@ -812,6 +849,131 @@ QString MainWindow::ResolveProjectDisplayName(const QString& projectRootPath) co
     return document.object().value(QStringLiteral("project_name")).toString().trimmed();
 }
 
+QStringList MainWindow::LoadRecentProjectPaths() const
+{
+    QSettings settings;
+    const QStringList storedPaths = settings.value(QStringLiteral("recentProjects/paths")).toStringList();
+
+    QStringList normalizedPaths;
+    for (const QString& storedPath : storedPaths)
+    {
+        const QString normalizedPath = NormalizeProjectPath(storedPath);
+        if (normalizedPath.trimmed().isEmpty())
+        {
+            continue;
+        }
+
+        const bool alreadyAdded = std::any_of(
+            normalizedPaths.cbegin(),
+            normalizedPaths.cend(),
+            [&normalizedPath](const QString& existingPath) {
+                return ProjectPathEquals(existingPath, normalizedPath);
+            });
+        if (!alreadyAdded)
+        {
+            normalizedPaths.push_back(normalizedPath);
+        }
+        if (normalizedPaths.size() >= kMaxRecentProjectCount)
+        {
+            break;
+        }
+    }
+
+    return normalizedPaths;
+}
+
+void MainWindow::SaveRecentProjectPaths(const QStringList& projectRootPaths) const
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("recentProjects/paths"), projectRootPaths);
+}
+
+void MainWindow::AddRecentProjectPath(const QString& projectRootPath)
+{
+    const QString normalizedPath = NormalizeProjectPath(projectRootPath);
+    if (normalizedPath.trimmed().isEmpty())
+    {
+        return;
+    }
+
+    QStringList recentProjects = LoadRecentProjectPaths();
+    recentProjects.erase(
+        std::remove_if(
+            recentProjects.begin(),
+            recentProjects.end(),
+            [&normalizedPath](const QString& existingPath) {
+                return ProjectPathEquals(existingPath, normalizedPath);
+            }),
+        recentProjects.end());
+    recentProjects.push_front(normalizedPath);
+    while (recentProjects.size() > kMaxRecentProjectCount)
+    {
+        recentProjects.removeLast();
+    }
+
+    SaveRecentProjectPaths(recentProjects);
+    RefreshWelcomeRecentProjects();
+}
+
+void MainWindow::RemoveRecentProjectPath(const QString& projectRootPath)
+{
+    const QString normalizedPath = NormalizeProjectPath(projectRootPath);
+    if (normalizedPath.trimmed().isEmpty())
+    {
+        return;
+    }
+
+    QStringList recentProjects = LoadRecentProjectPaths();
+    recentProjects.erase(
+        std::remove_if(
+            recentProjects.begin(),
+            recentProjects.end(),
+            [&normalizedPath](const QString& existingPath) {
+                return ProjectPathEquals(existingPath, normalizedPath);
+            }),
+        recentProjects.end());
+
+    SaveRecentProjectPaths(recentProjects);
+    RefreshWelcomeRecentProjects();
+}
+
+void MainWindow::RefreshWelcomeRecentProjects()
+{
+    if (m_projectWelcomeWidget == nullptr)
+    {
+        return;
+    }
+
+    m_projectWelcomeWidget->SetRecentProjects(LoadRecentProjectPaths());
+}
+
+bool MainWindow::TryOpenProjectPath(const QString& projectRootPath, bool removeIfInvalid)
+{
+    const QString normalizedPath = NormalizeProjectPath(projectRootPath);
+    if (normalizedPath.trimmed().isEmpty())
+    {
+        return false;
+    }
+
+    if (!HasProjectMetadataFile(normalizedPath))
+    {
+        const QString message = QStringLiteral("该目录不是有效的 RoboSDP 项目：缺少 project.json。");
+        AppendLogLine(QStringLiteral("[ERROR] [项目服务] %1 路径：%2")
+            .arg(message, QDir::toNativeSeparators(normalizedPath)));
+        if (removeIfInvalid)
+        {
+            RemoveRecentProjectPath(normalizedPath);
+        }
+        QMessageBox::warning(this, QStringLiteral("打开项目失败"), message);
+        return false;
+    }
+
+    RoboSDP::Infrastructure::ProjectManager::instance().setCurrentProjectPath(normalizedPath);
+    AddRecentProjectPath(normalizedPath);
+    AppendLogLine(QStringLiteral("[INFO] [项目服务] 已打开项目：%1").arg(QDir::toNativeSeparators(normalizedPath)));
+    return true;
+}
+
 void MainWindow::HandleProjectTreeSelectionChanged(QTreeWidgetItem* currentItem)
 {
     if (currentItem == nullptr || m_propertyStack == nullptr)
@@ -926,6 +1088,7 @@ void MainWindow::HandleCreateNewProjectRequested()
     AppendLogLine(QStringLiteral("[INFO] [项目服务] %1").arg(createResult.message));
     AppendLogLine(QStringLiteral("[INFO] [项目服务] 已生成 project.json 和第一阶段最小目录骨架。"));
     RoboSDP::Infrastructure::ProjectManager::instance().setCurrentProjectPath(createResult.project_root_path);
+    AddRecentProjectPath(createResult.project_root_path);
 }
 
 void MainWindow::HandleOpenProjectRequested()
@@ -943,18 +1106,14 @@ void MainWindow::HandleOpenProjectRequested()
         return;
     }
 
-    const QFileInfo projectFileInfo(QDir(selectedDirectory).filePath(QStringLiteral("project.json")));
-    if (!projectFileInfo.exists() || !projectFileInfo.isFile())
-    {
-        const QString message = QStringLiteral("该目录不是有效的 RoboSDP 项目：缺少 project.json。");
-        AppendLogLine(QStringLiteral("[ERROR] [项目服务] %1").arg(message));
-        QMessageBox::warning(this, QStringLiteral("打开项目失败"), message);
-        return;
-    }
+    TryOpenProjectPath(selectedDirectory, false);
+}
 
-    // 中文说明：通过 ProjectManager 更新全局上下文，业务模块依靠信号自动刷新只读项目目录。
-    RoboSDP::Infrastructure::ProjectManager::instance().setCurrentProjectPath(selectedDirectory);
-    AppendLogLine(QStringLiteral("[INFO] [项目服务] 已打开项目：%1").arg(QDir::toNativeSeparators(selectedDirectory)));
+void MainWindow::HandleRecentProjectOpenRequested(const QString& projectRootPath)
+{
+    AppendLogLine(QStringLiteral("[INFO] [欢迎页] 用户请求打开最近项目：%1")
+        .arg(QDir::toNativeSeparators(projectRootPath)));
+    TryOpenProjectPath(projectRootPath, true);
 }
 
 void MainWindow::HandleGlobalSaveRequested()

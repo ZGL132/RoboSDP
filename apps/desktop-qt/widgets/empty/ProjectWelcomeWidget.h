@@ -3,7 +3,9 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QFrame>
+#include <QStringList>
 #include <QWidget>
+#include <vector>
 
 class QBoxLayout;
 class QResizeEvent;
@@ -23,6 +25,7 @@ class ProjectWelcomeWidget : public QWidget
 
 public:
     explicit ProjectWelcomeWidget(QWidget* parent = nullptr);
+    void SetRecentProjects(const QStringList& projectRootPaths);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -30,9 +33,11 @@ protected:
 signals:
     void CreateNewProjectRequested();
     void OpenProjectRequested();
+    void RecentProjectOpenRequested(const QString& projectRootPath);
 
 private:
     void UpdateResponsiveScale();
+    void ClearRecentProjectButtons();
 
     QBoxLayout* m_root_layout = nullptr;
     QBoxLayout* m_center_row = nullptr;
@@ -57,6 +62,7 @@ private:
     QLabel* m_recent_empty_label = nullptr;
     QPushButton* m_new_project_button = nullptr;
     QPushButton* m_open_project_button = nullptr;
+    std::vector<QPushButton*> m_recent_project_buttons;
     QWidget* m_side_panel = nullptr;
     double m_current_scale = -1.0;
     int m_current_logo_size = 0;

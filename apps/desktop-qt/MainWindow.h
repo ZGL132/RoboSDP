@@ -5,6 +5,7 @@
 
 #include <QMainWindow>
 #include <QString>
+#include <QStringList>
 
 class QPlainTextEdit;
 class QDockWidget;
@@ -113,6 +114,24 @@ private:
     /// 读取 project.json 中的项目名称；失败时返回空字符串并由调用方兜底。
     QString ResolveProjectDisplayName(const QString& projectRootPath) const;
 
+    /// 读取最近打开项目列表。
+    QStringList LoadRecentProjectPaths() const;
+
+    /// 保存最近打开项目列表。
+    void SaveRecentProjectPaths(const QStringList& projectRootPaths) const;
+
+    /// 将项目加入最近打开列表，并刷新欢迎页。
+    void AddRecentProjectPath(const QString& projectRootPath);
+
+    /// 将项目从最近打开列表移除，并刷新欢迎页。
+    void RemoveRecentProjectPath(const QString& projectRootPath);
+
+    /// 刷新欢迎页中的最近项目区域。
+    void RefreshWelcomeRecentProjects();
+
+    /// 校验并打开指定项目路径；失败时可清理最近项目记录。
+    bool TryOpenProjectPath(const QString& projectRootPath, bool removeIfInvalid);
+
     /// 清空项目树节点指针，避免树重建后保留悬空地址。
     void ResetProjectTreeItemPointers();
 
@@ -124,6 +143,9 @@ private:
 
     /// 响应顶部功能区“打开项目”命令，校验 project.json 后更新全局项目上下文。
     void HandleOpenProjectRequested();
+
+    /// 响应欢迎页最近项目点击。
+    void HandleRecentProjectOpenRequested(const QString& projectRootPath);
 
     /// 处理项目树的右键菜单请求
     void HandleProjectTreeContextMenu(const QPoint& pos);
