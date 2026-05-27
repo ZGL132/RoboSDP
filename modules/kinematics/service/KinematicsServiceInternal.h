@@ -22,6 +22,7 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <vector>
 
 #if defined(ROBOSDP_HAVE_PINOCCHIO)
 #include <Eigen/Geometry>
@@ -170,6 +171,14 @@ inline QString DefaultConversionDiagnostics(const QString& masterModelType)
 inline double PreviewDegToRad(double degrees)
 {
     return degrees * kPi / 180.0;
+}
+
+inline double GetNativeJointPosition(
+    double jointPositionDeg,
+    const std::vector<double>& offsets,
+    std::size_t index)
+{
+    return jointPositionDeg + (index < offsets.size() ? offsets[index] : 0.0);
 }
 
 #if defined(ROBOSDP_HAVE_PINOCCHIO)

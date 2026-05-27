@@ -531,6 +531,61 @@ QString BuildDraftJointSignature(const RoboSDP::Kinematics::Dto::KinematicModelD
     return signature;
 }
 
+QStringList BuildMovableJointSequenceFromTrunk(
+    const UrdfDraftModelInput& model,
+    const UrdfDraftTrunkInput& trunk)
+{
+    QStringList sequence;
+    for (int jointIndex : trunk.ordered_joint_indices)
+    {
+        if (jointIndex < 0 || jointIndex >= static_cast<int>(model.joints.size()))
+        {
+            continue;
+        }
+
+        const auto& joint = model.joints[static_cast<std::size_t>(jointIndex)];
+        if (joint.joint_type == QStringLiteral("revolute") ||
+            joint.joint_type == QStringLiteral("continuous"))
+        {
+            sequence.push_back(joint.joint_id.trimmed());
+        }
+    }
+    return sequence;
+}
+
+QStringList BuildMovableJointSequenceFromKernelModel(
+    const RoboSDP::Core::Kinematics::SharedPinocchioModel& model)
+{
+    QStringList sequence;
+    for (pinocchio::JointIndex jointIndex = 1; jointIndex < model.njoints; ++jointIndex)
+    {
+        const std::size_t nameIndex = static_cast<std::size_t>(jointIndex);
+        if (nameIndex < model.names.size())
+        {
+            sequence.push_back(QString::fromStdString(model.names[nameIndex]).trimmed());
+        }
+    }
+    return sequence;
+}
+
+bool ValidateUrdfDraftTopologyMatchesKernel(
+    const UrdfDraftModelInput& model,
+    const UrdfDraftTrunkInput& trunk,
+    const RoboSDP::Core::Kinematics::SharedPinocchioModel& kernelModel,
+    QString& mismatchMessage)
+{
+    const QStringList draftSequence = BuildMovableJointSequenceFromTrunk(model, trunk);
+    const QStringList kernelSequence = BuildMovableJointSequenceFromKernelModel(kernelModel);
+    if (draftSequence == kernelSequence)
+    {
+        return true;
+    }
+
+    mismatchMessage = QStringLiteral("DH 草案主干关节序列与共享内核不一致，已跳过草案：draft=[%1]，kernel=[%2]。")
+        .arg(draftSequence.join(QStringLiteral(", ")), kernelSequence.join(QStringLiteral(", ")));
+    return false;
+}
+
 DhDraftExtractionResult ExtractDhDraftFromUrdfModel(
     const QString& absoluteUrdfPath,
     const UrdfDraftModelInput& minimalModel,
@@ -857,25 +912,38 @@ UrdfImportResult ImportUrdfPreviewWithSharedKernel(
         {
             const auto minimalUrdfModel = ReadUrdfDraftModel(urdfFileInfo.absoluteFilePath());
             const auto trunk = ExtractUrdfDraftTrunk(minimalUrdfModel);
-            const auto dhDraftResult =
-                ExtractDhDraftFromUrdfModel(urdfFileInfo.absoluteFilePath(), minimalUrdfModel, trunk);
-            if (dhDraftResult.IsSuccess())
+            QString topologyMismatchMessage;
+            if (!ValidateUrdfDraftTopologyMatchesKernel(
+                    minimalUrdfModel,
+                    trunk,
+                    *acquireResult.model,
+                    topologyMismatchMessage))
             {
-                result.preview_model = dhDraftResult.draft_model;
-                result.preview_model.pinocchio_model_ready = previewModel.pinocchio_model_ready;
-                result.preview_model.unified_robot_model_ref = previewModel.unified_robot_model_ref;
-                // 🔽 🔽 🔽 【新增这极其关键的一行】 🔽 🔽 🔽
-                // 必须保留原 URDF 的签名，否则后续去内核拿缓存时，会因为签名不对被拒绝！
-                result.preview_model.joint_order_signature = previewModel.joint_order_signature;
-                // 🔼 🔼 🔼 
-                result.preview_model.unified_robot_snapshot = BuildUnifiedRobotSnapshot(result.preview_model);
+                result.preview_model = previewModel;
+                AppendWarningMessage(result.preview_model.conversion_diagnostics, topologyMismatchMessage);
             }
             else
             {
-                result.preview_model = previewModel;
-                AppendWarningMessage(
-                    result.preview_model.conversion_diagnostics,
-                    QStringLiteral("DH 草案提取失败：%1").arg(dhDraftResult.message));
+                const auto dhDraftResult =
+                    ExtractDhDraftFromUrdfModel(urdfFileInfo.absoluteFilePath(), minimalUrdfModel, trunk);
+                if (dhDraftResult.IsSuccess())
+                {
+                    result.preview_model = dhDraftResult.draft_model;
+                    result.preview_model.pinocchio_model_ready = previewModel.pinocchio_model_ready;
+                    result.preview_model.unified_robot_model_ref = previewModel.unified_robot_model_ref;
+                    // 🔽 🔽 🔽 【新增这极其关键的一行】 🔽 🔽 🔽
+                    // 必须保留原 URDF 的签名，否则后续去内核拿缓存时，会因为签名不对被拒绝！
+                    result.preview_model.joint_order_signature = previewModel.joint_order_signature;
+                    // 🔼 🔼 🔼
+                    result.preview_model.unified_robot_snapshot = BuildUnifiedRobotSnapshot(result.preview_model);
+                }
+                else
+                {
+                    result.preview_model = previewModel;
+                    AppendWarningMessage(
+                        result.preview_model.conversion_diagnostics,
+                        QStringLiteral("DH 草案提取失败：%1").arg(dhDraftResult.message));
+                }
             }
         }
         catch (const std::exception& exception)
@@ -1403,7 +1471,8 @@ RoboSDP::Kinematics::Dto::OrientationReachabilityResultDto KinematicsService::Ch
                 ikReq.seed_joint_positions_deg = defaultSeed;
 
                 const auto ikResult = m_ik_solver_adapter->SolveIk(model, ikReq);
-                if (ikResult.success && ikResult.position_error_mm < 5.0)
+                const double posTolerance = model.ik_solver_config.position_tolerance_mm;
+                if (ikResult.success && ikResult.position_error_mm < posTolerance)
                 {
                     ++result.reachable_count;
                     result.reachable_rpy_deg.push_back({roll, pitch, yaw});
@@ -1679,15 +1748,10 @@ PreviewPoseUpdateResult KinematicsService::UpdatePreviewPoses(
             if (!IsFiniteValue(joint_positions_deg[index])) continue;
 
             // 中文说明：DTO 输入为 deg，Pinocchio q 使用 rad；DH/MDH 零位偏移也在这里统一叠加。
-            // 物理引擎的零位（0度）和 UI 画面的零位可能不一致，这里叠加补偿值
-            // 【修复】：URDF 模型可能根本没有 native_position_offsets_deg，必须允许其为空
-            double offset = 0.0;
-            if (index < acquireResult.metadata.native_position_offsets_deg.size()) {
-                offset = acquireResult.metadata.native_position_offsets_deg[index];
-            }
-                
-            // 将角度转为弧度，存入 q 向量
-            const double nativeDegrees = joint_positions_deg[index] + offset;
+            const double nativeDegrees = GetNativeJointPosition(
+                joint_positions_deg[index],
+                acquireResult.metadata.native_position_offsets_deg,
+                index);
             q[static_cast<Eigen::Index>(index)] = PreviewDegToRad(nativeDegrees);
         }
 
