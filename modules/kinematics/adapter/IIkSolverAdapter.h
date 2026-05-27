@@ -11,8 +11,7 @@ namespace RoboSDP::Kinematics::Adapter
 /**
  * @brief IK（逆运动学）求解器的统一适配器接口。
  * @details
- * Stage 16 之后，系统只保留 Pinocchio 数值 IK 主链；但 Service 层依然只依赖这条稳定接口，
- * 从而保证 DTO / Service / Adapter 的清晰分层不被破坏。
+ * 声明了获取求解器 ID、中文描述以及执行 IK 求解的纯虚函数 SolveIk。Service 层仅依赖该接口，屏蔽了底层是采用“数值迭代法”还是“闭式解析法”的具体实现细节。
  */
 class IIkSolverAdapter
 {

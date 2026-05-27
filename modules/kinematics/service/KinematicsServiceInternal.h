@@ -23,6 +23,12 @@
 #include <cmath>
 #include <cstdlib>
 
+/**
+ * @brief 服务层拆分编译单元之间共享的内部工具函数集。
+ * 提供服务层内部所需的纯 C++ 几何计算和文本格式化工具（不含有第三方物理库依赖）。
+ * 例如通过 D-H 矩阵连乘反解关节 RPY、处理软限位收缩（PreferredSoftLimit）、以及提供最小 URDF 标签解析函数等。
+ */
+
 namespace RoboSDP::Kinematics::Service::Internal
 {
 

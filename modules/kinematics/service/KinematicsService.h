@@ -14,6 +14,15 @@
 #include <map>
 #include <memory>
 
+/**
+ * @brief 运动学核心服务管理器，负责整个模块的业务流控制。
+ * 提供运动学组件的对外应用级 API。其核心职责包括：
+ * 1. BuildFromTopology：读取上游的 Topology 物理尺寸，映射成运动学的 D-H 规格。
+ * 2. SolveFk / SolveIk / SampleWorkspace：对传入模型进行安全防爆校验，校验通过后再下发给适配器求解。
+ * 3. CheckReachability：使用多种子确定性伪随机数启动多次 IK 迭代，判定目标位姿在软限位内是否可达。
+ * 4. ImportUrdfPreview：从外部导入工程 URDF，并通过 Pinocchio 共享内核提取初始骨架线段。
+ */
+
 namespace RoboSDP::Kinematics::Service
 {
 

@@ -1,6 +1,12 @@
 #include "modules/kinematics/service/KinematicsService.h"
 #include "modules/kinematics/service/KinematicsServiceInternal.h"
 
+/**
+ * @brief 编排草稿的保存与加载流程。
+ * 属于服务类的拆分单元。
+ * 实现了 SaveDraft 和 LoadDraft，在执行真正的 JSON 磁盘写操作前，强制执行 ValidateModel 模型完整性体检，
+ * 并在保存前联动派生 URDF 文件的写出，确保模型和产物在存盘时具有一致性
+ */
 namespace RoboSDP::Kinematics::Service
 {
 

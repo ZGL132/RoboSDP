@@ -9,7 +9,7 @@ namespace RoboSDP::Kinematics::Adapter
 {
 
 /**
- * @brief 运动学核心后端的统一适配器接口。
+ * @brief 运动学核心后端引擎（如正解 FK、工作空间采样）的统一适配器接口。
  * @details
  * Stage 16 之后，Service 层只依赖这组稳定边界，不再感知任何旧时代回退实现：
  * 1. FK 与工作空间采样都通过该接口进入共享 Pinocchio 内核。

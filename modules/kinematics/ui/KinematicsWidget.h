@@ -29,6 +29,18 @@ class QTextEdit;
 class QSpinBox;
 class QTableWidget;
 
+/**
+ * @brief 运动学模块的 Qt 主视图界面与控制器。
+ * 采用卡片式和标签页布局组织复杂的表单。其核心设计包括：
+ * 双通道 UI 同步机制：
+ * 1）通道 A（重量级重建 SyncStructureAndPreview）：当用户修改 D-H 尺寸或更换坐标系时触发，重建底层物理树，通知 3D 视图重绘整个火柴人骨架。
+ * 2）通道 B（轻量级刷新 SyncPoseOnly）：当拖动示教滑块时触发，复用物理树缓存仅执行快速 FK，高频更新 3D 骨架的位姿矩阵，确保滑块拖动顺畅。
+ * 逆向驱动接口：
+ * 1）HandleJointAngleScrolled：响应 3D 视图滚轮滚动，修改 FK 对应的滑块位置。
+ * 2）HandleTcpPoseDragged：响应 3D 视图拖拽 TCP 交互轴（Gizmo），反向填入并触发 IK 逆解计算。
+ * 3）HandlePreviewLinkPicked：响应 3D 视图对某一根连杆的点击，在 DH 树形表格中自动高亮、定位对应行。
+ */
+
 namespace RoboSDP::Kinematics::Ui
 {
 

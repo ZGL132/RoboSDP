@@ -11,6 +11,13 @@
 #include <pinocchio/multibody/data.hpp>
 #endif
 
+/**
+ * @brief 处理参数模型转换与自动写出 URDF 文件的业务逻辑。
+ * 属于服务类的拆分单元。
+ * 实现了 BuildModelFromTopology（将抽象拓扑尺寸转化为具体的 D-H 连杆参数表）
+ * 以及关键的 WriteDerivedUrdfArtifact（当修改 DH 参数并保存时，自动将 DH/MDH 拓扑导出为合法的、最小的 URDF 交换文件写入项目，以便下游动力学和规划模块读取）。
+ */
+
 namespace RoboSDP::Kinematics::Service
 {
 

@@ -11,9 +11,10 @@ namespace RoboSDP::Kinematics::Adapter
  *
  * @details
  * 这是一个非常聪明的设计，属于“高级调试探针”。它不参与常规的 FK/IK 计算，只用于“检查身体”：
- * 1. 验证功能：测试上层传下来的参数，底层引擎是否能够成功消化和理解。
- * 2. 调试神器：在不实际跑耗时算法的情况下，直接拿到底层引擎内部生成的“归一化模型”用于排错。
- * 3. 依然保持解耦，不暴露第三方库的具体指针。
+ * 1. ValidateBuildContext：校验上层参数是否能正常被底层引擎解析。
+ * 2. EvaluateNativeFkDryRun 和 EvaluateNativeJacobianDryRun：不通过业务主链，直接在底层执行干跑（Dry-Run）测试，输出 base/flange/tcp 位姿及空间雅可比矩阵。
+ * 3. SampleWorkspaceWithSingularity 和 ComputeJacobianAnalysis：执行带奇异区识别的工作空间分析。
+ * 4. 这种设计在不暴露 Eigen/Pinocchio 原生指针的前提下，为界面和排错提供了直观的“底层透视”能力。
  */
 class IKinematicBackendDiagnosticsAdapter
 {

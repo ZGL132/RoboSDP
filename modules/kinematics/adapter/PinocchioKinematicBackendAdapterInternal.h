@@ -14,7 +14,14 @@
 
 namespace RoboSDP::Kinematics::Adapter
 {
-
+/**
+ * @brief 后端适配器的内部私有状态声明。
+ *
+ * @details
+ * 定义了 NativeKernelState 结构，
+ * 在 .cpp 文件内部持有 Pinocchio 相关的原生重对象（如 Model、Data 以及业务 Frame ID 缓存）。
+ * 通过该头文件将 Pinocchio 的依赖隔离在适配器实现层，避免暴露给系统其他模块。
+ */
 struct PinocchioKinematicBackendAdapter::NativeKernelState
 {
 #if defined(ROBOSDP_HAVE_PINOCCHIO)
