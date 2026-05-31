@@ -1,0 +1,39 @@
+{
+  "gravity": [0, 0, -9.81],
+  "installation_pose": {
+    "position_m": [0, 0, 0],
+    "rpy_deg": [0, 0, 0]
+  },
+  "meta": {
+    "dynamic_id": "dynamic_heavy_6r_floor_300kg",
+    "kinematic_ref": "kinematic_heavy_6r_floor_300kg",
+    "name": "Heavy 6DOF 300kg dynamic model",
+    "requirement_ref": "requirement_heavy_6r_floor_300kg",
+    "source": "kinematics",
+    "status": "ready",
+    "topology_ref": "topology_heavy_6r_floor_300kg",
+    "version": 1
+  },
+  "trajectories": [
+    {
+      "active_joint_id": "joint_2",
+      "duration_s": 3.0,
+      "joint_start_deg": [0, -10, 20, 0, 20, 0],
+      "joint_target_deg": [0, 45, -35, 0, 35, 0],
+      "name": "Heavy shoulder lift",
+      "profile_type": "single_joint_trapezoid",
+      "sample_count": 80,
+      "trajectory_id": "traj_heavy_shoulder_lift"
+    },
+    {
+      "active_joint_id": "",
+      "duration_s": 4.0,
+      "joint_start_deg": [0, -25, 45, 0, 35, 0],
+      "joint_target_deg": [35, -10, 15, 45, 25, 60],
+      "name": "Heavy pallet transfer",
+      "profile_type": "point_to_point_sync",
+      "sample_count": 100,
+      "trajectory_id": "traj_heavy_pallet_transfer"
+    }
+  ]
+}

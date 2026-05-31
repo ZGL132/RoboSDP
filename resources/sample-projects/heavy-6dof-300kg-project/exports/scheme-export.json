@@ -1,0 +1,19 @@
+{
+  "export_id": "scheme_export_heavy_6r_floor_300kg",
+  "scheme_id": "scheme_snapshot_heavy_6r_floor_300kg",
+  "export_format": "json",
+  "generated_at": "2026-05-29T00:00:00Z",
+  "output_file_path": "exports/scheme-export.json",
+  "success": true,
+  "message": "Heavy 6DOF 300kg sample project export summary is available.",
+  "available_module_count": 6,
+  "executive_summary": "Heavy 6DOF 300kg Test Project includes Requirement, Topology, Kinematics, Dynamics, Selection and Planning sample data for main-chain validation.",
+  "module_records": [
+    {"module_name": "Requirement", "object_ref": "requirements/requirement-model.json", "available": true, "summary_text": "heavy_handling / rated payload 300.00 kg / takt 8.00 s"},
+    {"module_name": "Topology", "object_ref": "topology_heavy_6r_floor_300kg", "available": true, "summary_text": "Heavy floor-mounted 6R topology recommended."},
+    {"module_name": "Kinematics", "object_ref": "kinematic_heavy_6r_floor_300kg", "available": true, "summary_text": "DH model, FK/IK preset result and workspace cache are available."},
+    {"module_name": "Dynamics", "object_ref": "dynamic_heavy_6r_floor_300kg", "available": true, "summary_text": "Heavy load envelope and mass properties are available."},
+    {"module_name": "Selection", "object_ref": "selection/drivetrain-selection.json", "available": true, "summary_text": "All six joints have heavy drivetrain recommendations."},
+    {"module_name": "Planning", "object_ref": "planning_verification_heavy_6r_floor_300kg_001", "available": true, "summary_text": "Preset point-to-point planning verification passed."}
+  ]
+}

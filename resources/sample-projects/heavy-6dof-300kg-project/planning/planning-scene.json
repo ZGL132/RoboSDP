@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "planning_scene_id": "planning_scene_heavy_6r_floor_300kg",
+    "name": "Heavy 6DOF 300kg point-to-point planning scene",
+    "version": 1,
+    "source": "planning",
+    "status": "draft",
+    "kinematic_ref": "kinematic_heavy_6r_floor_300kg",
+    "dynamic_ref": "dynamic_heavy_6r_floor_300kg",
+    "selection_ref": "selection/drivetrain-selection.json",
+    "requirement_ref": "requirements/requirement-model.json"
+  },
+  "robot_collision_model_ref": "robot_collision_model_heavy_6r_floor_300kg",
+  "joint_limits": [
+    {"joint_id": "joint_1", "lower_deg": -180.0, "upper_deg": 180.0},
+    {"joint_id": "joint_2", "lower_deg": -65.0, "upper_deg": 70.0},
+    {"joint_id": "joint_3", "lower_deg": -155.0, "upper_deg": 80.0},
+    {"joint_id": "joint_4", "lower_deg": -195.0, "upper_deg": 195.0},
+    {"joint_id": "joint_5", "lower_deg": -120.0, "upper_deg": 120.0},
+    {"joint_id": "joint_6", "lower_deg": -350.0, "upper_deg": 350.0}
+  ],
+  "start_state": {
+    "joint_ids": ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"],
+    "joint_values_deg": [0.0, -25.0, 45.0, 0.0, 35.0, 0.0]
+  },
+  "goal_state": {
+    "joint_ids": ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"],
+    "joint_values_deg": [35.0, -10.0, 15.0, 45.0, 25.0, 60.0]
+  },
+  "environment_objects": [
+    {
+      "object_id": "heavy_worktable",
+      "name": "Heavy worktable",
+      "shape_type": "box",
+      "size_m": [1.5, 1.2, 0.7],
+      "position_m": [1.4, 0.0, 0.35],
+      "rpy_deg": [0.0, 0.0, 0.0],
+      "enabled": true
+    },
+    {
+      "object_id": "operator_zone",
+      "name": "Operator exclusion zone",
+      "shape_type": "box",
+      "size_m": [1.0, 0.8, 1.8],
+      "position_m": [0.4, -1.8, 0.9],
+      "rpy_deg": [0.0, 0.0, 0.0],
+      "enabled": true
+    }
+  ],
+  "planning_config": {
+    "motion_group": "manipulator",
+    "planner_id": "RRTConnect",
+    "service_endpoint": "127.0.0.1:50051",
+    "allowed_planning_time_s": 3.0,
+    "max_planning_attempts": 2,
+    "target_cycle_time_s": 8.0,
+    "check_collision": true,
+    "check_self_collision": true
+  }
+}

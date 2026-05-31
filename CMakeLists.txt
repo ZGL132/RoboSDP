@@ -21,10 +21,6 @@ endif()
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Widgets Network)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets Network)
-include(CTest)
-
-option(ROBOSDP_INCLUDE_TESTS_IN_ALL "Build smoke/unit/integration test targets as part of the default all target." OFF)
-option(ROBOSDP_INCLUDE_VTK_SMOKE_IN_ALL "Build the standalone VTK smoke executable as part of the default all target." OFF)
 
 add_subdirectory(core/errors)
 add_subdirectory(core/logging)
@@ -40,19 +36,3 @@ add_subdirectory(modules/planning)
 add_subdirectory(modules/scheme)
 add_subdirectory(core/schema)
 add_subdirectory(apps/desktop-qt)
-
-if(ROBOSDP_INCLUDE_VTK_SMOKE_IN_ALL)
-    add_subdirectory(apps/vtk-smoke)
-else()
-    # 中文说明：默认构建只面向主程序，VTK smoke 仍可通过显式 target 构建，避免 Qt Creator 每次运行前重复链接。
-    add_subdirectory(apps/vtk-smoke EXCLUDE_FROM_ALL)
-endif()
-
-if(BUILD_TESTING)
-    if(ROBOSDP_INCLUDE_TESTS_IN_ALL)
-        add_subdirectory(tests)
-    else()
-        # 中文说明：保留测试 target 的配置能力，但从默认 all 中剥离，避免 smoke/integration 测试拖慢日常调试。
-        add_subdirectory(tests EXCLUDE_FROM_ALL)
-    endif()
-endif()

@@ -1,0 +1,23 @@
+{
+  "end_effector": {
+    "cog": [0.0, 0.0, 0.35],
+    "inertia_tensor": [18.0, 18.0, 9.0, 0.0, 0.0, 0.0],
+    "mass": 330.0
+  },
+  "joints": [
+    {"efficiency": 0.88, "friction": {"coulomb": 42.0, "static": 55.0, "viscous": 4.5}, "joint_id": "joint_1", "transmission_ratio": 220},
+    {"efficiency": 0.87, "friction": {"coulomb": 68.0, "static": 85.0, "viscous": 6.0}, "joint_id": "joint_2", "transmission_ratio": 240},
+    {"efficiency": 0.88, "friction": {"coulomb": 55.0, "static": 70.0, "viscous": 5.0}, "joint_id": "joint_3", "transmission_ratio": 220},
+    {"efficiency": 0.90, "friction": {"coulomb": 18.0, "static": 24.0, "viscous": 2.0}, "joint_id": "joint_4", "transmission_ratio": 160},
+    {"efficiency": 0.90, "friction": {"coulomb": 15.0, "static": 20.0, "viscous": 1.6}, "joint_id": "joint_5", "transmission_ratio": 140},
+    {"efficiency": 0.91, "friction": {"coulomb": 10.0, "static": 14.0, "viscous": 1.2}, "joint_id": "joint_6", "transmission_ratio": 120}
+  ],
+  "links": [
+    {"cog": [0.05, 0.0, 0.42], "inertia_tensor": [95.0, 80.0, 55.0, 0.0, 0.0, 0.0], "link_id": "link_1", "mass": 620.0, "source_detail": "heavy_sample_estimate"},
+    {"cog": [0.58, 0.0, 0.05], "inertia_tensor": [120.0, 260.0, 230.0, 0.0, 0.0, 0.0], "link_id": "link_2", "mass": 780.0, "source_detail": "heavy_sample_estimate"},
+    {"cog": [0.48, 0.0, 0.02], "inertia_tensor": [70.0, 150.0, 135.0, 0.0, 0.0, 0.0], "link_id": "link_3", "mass": 540.0, "source_detail": "heavy_sample_estimate"},
+    {"cog": [0.08, 0.0, 0.32], "inertia_tensor": [28.0, 38.0, 24.0, 0.0, 0.0, 0.0], "link_id": "link_4", "mass": 260.0, "source_detail": "heavy_sample_estimate"},
+    {"cog": [0.0, 0.0, 0.08], "inertia_tensor": [12.0, 14.0, 8.0, 0.0, 0.0, 0.0], "link_id": "link_5", "mass": 160.0, "source_detail": "heavy_sample_estimate"},
+    {"cog": [0.0, 0.0, 0.12], "inertia_tensor": [5.5, 5.5, 3.0, 0.0, 0.0, 0.0], "link_id": "link_6", "mass": 95.0, "source_detail": "heavy_sample_estimate"}
+  ]
+}

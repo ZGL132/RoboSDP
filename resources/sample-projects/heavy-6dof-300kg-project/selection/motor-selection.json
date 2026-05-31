@@ -1,0 +1,130 @@
+{
+  "motor_results": [
+    {
+      "brake_required": true,
+      "candidates": [
+        {"brake_rule_passed": true, "estimated_peak_output_speed_deg_s": 122.7, "estimated_peak_output_torque_nm": 18480.0, "estimated_rated_output_torque_nm": 8800.0, "motor": {"brake_holding_torque_nm": 130.0, "efficiency": 0.93, "has_brake": true, "max_speed_rpm": 3000, "motor_id": "heavy_servo_45kw_b", "name": "Heavy servo 45kW brake", "peak_torque_nm": 84.0, "rated_power_w": 45000, "rated_speed_rpm": 1500, "rated_torque_nm": 286.0, "rotor_inertia_kg_m2": 0.085, "vendor": "RoboSDPHeavyVendor"}, "power_margin_w": 3000.0, "recommendation_reason": "Suitable for heavy J1 rotation torque and holding brake requirement.", "speed_margin_deg_s": 27.7, "torque_margin_nm": 1980.0}
+      ],
+      "dynamic_ref": "dynamic_heavy_6r_floor_300kg",
+      "has_recommendation": true,
+      "joint_id": "joint_1",
+      "kinematic_ref": "kinematic_heavy_6r_floor_300kg",
+      "message": "Heavy servo candidate generated.",
+      "peak_output_power_w": 42000.0,
+      "peak_output_speed_deg_s": 95.0,
+      "peak_output_torque_nm": 16500.0,
+      "preferred_ratio_max": 260,
+      "preferred_ratio_min": 180,
+      "recommended_index": 0,
+      "required_brake_output_torque_nm": 14500.0,
+      "requirement_ref": "requirement_heavy_6r_floor_300kg",
+      "rms_output_torque_nm": 7200.0,
+      "topology_ref": "topology_heavy_6r_floor_300kg"
+    },
+    {
+      "brake_required": true,
+      "candidates": [
+        {"brake_rule_passed": true, "estimated_peak_output_speed_deg_s": 104.2, "estimated_peak_output_torque_nm": 42000.0, "estimated_rated_output_torque_nm": 21000.0, "motor": {"brake_holding_torque_nm": 260.0, "efficiency": 0.94, "has_brake": true, "max_speed_rpm": 2500, "motor_id": "heavy_servo_75kw_b", "name": "Heavy servo 75kW brake", "peak_torque_nm": 175.0, "rated_power_w": 75000, "rated_speed_rpm": 1200, "rated_torque_nm": 597.0, "rotor_inertia_kg_m2": 0.16, "vendor": "RoboSDPHeavyVendor"}, "power_margin_w": 7000.0, "recommendation_reason": "Shoulder axis requires maximum holding torque and sustained power.", "speed_margin_deg_s": 24.2, "torque_margin_nm": 3500.0}
+      ],
+      "dynamic_ref": "dynamic_heavy_6r_floor_300kg",
+      "has_recommendation": true,
+      "joint_id": "joint_2",
+      "kinematic_ref": "kinematic_heavy_6r_floor_300kg",
+      "message": "Heavy shoulder servo candidate generated.",
+      "peak_output_power_w": 68000.0,
+      "peak_output_speed_deg_s": 80.0,
+      "peak_output_torque_nm": 38500.0,
+      "preferred_ratio_max": 280,
+      "preferred_ratio_min": 200,
+      "recommended_index": 0,
+      "required_brake_output_torque_nm": 36000.0,
+      "requirement_ref": "requirement_heavy_6r_floor_300kg",
+      "rms_output_torque_nm": 18200.0,
+      "topology_ref": "topology_heavy_6r_floor_300kg"
+    },
+    {
+      "brake_required": true,
+      "candidates": [
+        {"brake_rule_passed": true, "estimated_peak_output_speed_deg_s": 115.9, "estimated_peak_output_torque_nm": 30800.0, "estimated_rated_output_torque_nm": 15000.0, "motor": {"brake_holding_torque_nm": 210.0, "efficiency": 0.94, "has_brake": true, "max_speed_rpm": 2500, "motor_id": "heavy_servo_55kw_b", "name": "Heavy servo 55kW brake", "peak_torque_nm": 140.0, "rated_power_w": 55000, "rated_speed_rpm": 1200, "rated_torque_nm": 438.0, "rotor_inertia_kg_m2": 0.12, "vendor": "RoboSDPHeavyVendor"}, "power_margin_w": 1000.0, "recommendation_reason": "Elbow torque margin sized for peak 300 kg handling case.", "speed_margin_deg_s": 30.9, "torque_margin_nm": 3300.0}
+      ],
+      "dynamic_ref": "dynamic_heavy_6r_floor_300kg",
+      "has_recommendation": true,
+      "joint_id": "joint_3",
+      "kinematic_ref": "kinematic_heavy_6r_floor_300kg",
+      "message": "Heavy elbow servo candidate generated.",
+      "peak_output_power_w": 54000.0,
+      "peak_output_speed_deg_s": 85.0,
+      "peak_output_torque_nm": 27500.0,
+      "preferred_ratio_max": 260,
+      "preferred_ratio_min": 180,
+      "recommended_index": 0,
+      "required_brake_output_torque_nm": 24000.0,
+      "requirement_ref": "requirement_heavy_6r_floor_300kg",
+      "rms_output_torque_nm": 12600.0,
+      "topology_ref": "topology_heavy_6r_floor_300kg"
+    },
+    {
+      "brake_required": true,
+      "candidates": [
+        {"brake_rule_passed": true, "estimated_peak_output_speed_deg_s": 168.8, "estimated_peak_output_torque_nm": 7200.0, "estimated_rated_output_torque_nm": 3200.0, "motor": {"brake_holding_torque_nm": 70.0, "efficiency": 0.94, "has_brake": true, "max_speed_rpm": 3500, "motor_id": "heavy_servo_22kw_b", "name": "Heavy wrist servo 22kW brake", "peak_torque_nm": 45.0, "rated_power_w": 22000, "rated_speed_rpm": 1800, "rated_torque_nm": 117.0, "rotor_inertia_kg_m2": 0.038, "vendor": "RoboSDPHeavyVendor"}, "power_margin_w": 4000.0, "recommendation_reason": "Wrist roll candidate keeps payload flange torque margin.", "speed_margin_deg_s": 48.8, "torque_margin_nm": 1000.0}
+      ],
+      "dynamic_ref": "dynamic_heavy_6r_floor_300kg",
+      "has_recommendation": true,
+      "joint_id": "joint_4",
+      "kinematic_ref": "kinematic_heavy_6r_floor_300kg",
+      "message": "Heavy wrist roll servo candidate generated.",
+      "peak_output_power_w": 18000.0,
+      "peak_output_speed_deg_s": 120.0,
+      "peak_output_torque_nm": 6200.0,
+      "preferred_ratio_max": 190,
+      "preferred_ratio_min": 130,
+      "recommended_index": 0,
+      "required_brake_output_torque_nm": 4200.0,
+      "requirement_ref": "requirement_heavy_6r_floor_300kg",
+      "rms_output_torque_nm": 2600.0,
+      "topology_ref": "topology_heavy_6r_floor_300kg"
+    },
+    {
+      "brake_required": true,
+      "candidates": [
+        {"brake_rule_passed": true, "estimated_peak_output_speed_deg_s": 192.9, "estimated_peak_output_torque_nm": 5320.0, "estimated_rated_output_torque_nm": 2450.0, "motor": {"brake_holding_torque_nm": 55.0, "efficiency": 0.94, "has_brake": true, "max_speed_rpm": 3500, "motor_id": "heavy_servo_18kw_b", "name": "Heavy wrist servo 18kW brake", "peak_torque_nm": 38.0, "rated_power_w": 18000, "rated_speed_rpm": 1800, "rated_torque_nm": 95.0, "rotor_inertia_kg_m2": 0.03, "vendor": "RoboSDPHeavyVendor"}, "power_margin_w": 3500.0, "recommendation_reason": "Wrist pitch candidate sized for offset payload case.", "speed_margin_deg_s": 72.9, "torque_margin_nm": 520.0}
+      ],
+      "dynamic_ref": "dynamic_heavy_6r_floor_300kg",
+      "has_recommendation": true,
+      "joint_id": "joint_5",
+      "kinematic_ref": "kinematic_heavy_6r_floor_300kg",
+      "message": "Heavy wrist pitch servo candidate generated.",
+      "peak_output_power_w": 14500.0,
+      "peak_output_speed_deg_s": 120.0,
+      "peak_output_torque_nm": 4800.0,
+      "preferred_ratio_max": 170,
+      "preferred_ratio_min": 110,
+      "recommended_index": 0,
+      "required_brake_output_torque_nm": 3600.0,
+      "requirement_ref": "requirement_heavy_6r_floor_300kg",
+      "rms_output_torque_nm": 2100.0,
+      "topology_ref": "topology_heavy_6r_floor_300kg"
+    },
+    {
+      "brake_required": false,
+      "candidates": [
+        {"brake_rule_passed": true, "estimated_peak_output_speed_deg_s": 250.0, "estimated_peak_output_torque_nm": 3000.0, "estimated_rated_output_torque_nm": 1380.0, "motor": {"brake_holding_torque_nm": 35.0, "efficiency": 0.95, "has_brake": true, "max_speed_rpm": 4000, "motor_id": "heavy_servo_11kw_b", "name": "Heavy wrist servo 11kW brake", "peak_torque_nm": 25.0, "rated_power_w": 11000, "rated_speed_rpm": 2000, "rated_torque_nm": 52.5, "rotor_inertia_kg_m2": 0.018, "vendor": "RoboSDPHeavyVendor"}, "power_margin_w": 2000.0, "recommendation_reason": "Final wrist axis has enough speed and torque margin.", "speed_margin_deg_s": 70.0, "torque_margin_nm": 500.0}
+      ],
+      "dynamic_ref": "dynamic_heavy_6r_floor_300kg",
+      "has_recommendation": true,
+      "joint_id": "joint_6",
+      "kinematic_ref": "kinematic_heavy_6r_floor_300kg",
+      "message": "Heavy wrist yaw servo candidate generated.",
+      "peak_output_power_w": 9000.0,
+      "peak_output_speed_deg_s": 180.0,
+      "peak_output_torque_nm": 2500.0,
+      "preferred_ratio_max": 150,
+      "preferred_ratio_min": 90,
+      "recommended_index": 0,
+      "required_brake_output_torque_nm": 0.0,
+      "requirement_ref": "requirement_heavy_6r_floor_300kg",
+      "rms_output_torque_nm": 1100.0,
+      "topology_ref": "topology_heavy_6r_floor_300kg"
+    }
+  ]
+}

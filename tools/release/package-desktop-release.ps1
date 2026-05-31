@@ -51,9 +51,7 @@ Write-Host "Version    : $Version"
     -DCMAKE_BUILD_TYPE=Release `
     "-DCMAKE_PREFIX_PATH=$QtRoot" `
     "-DCMAKE_C_COMPILER=$MingwRoot/bin/gcc.exe" `
-    "-DCMAKE_CXX_COMPILER=$MingwRoot/bin/g++.exe" `
-    -DROBOSDP_INCLUDE_TESTS_IN_ALL=OFF `
-    -DROBOSDP_INCLUDE_VTK_SMOKE_IN_ALL=OFF
+    "-DCMAKE_CXX_COMPILER=$MingwRoot/bin/g++.exe"
 
 & $CmakeExe --build $BuildDir --target RoboSDPDesktop --parallel $Parallel
 

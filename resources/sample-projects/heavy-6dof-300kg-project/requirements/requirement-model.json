@@ -1,0 +1,79 @@
+{
+    "accuracy_requirements": {
+        "absolute_accuracy": 0.2,
+        "orientation_accuracy": 0.1,
+        "repeatability": 0.02,
+        "tcp_orientation_tol": 0.5,
+        "tcp_position_tol": 0.2,
+        "tracking_accuracy": 0.15
+    },
+    "derived_conditions": {
+        "peak_case": {
+        },
+        "rated_case": {
+        }
+    },
+    "load_requirements": {
+        "cable_drag_load": 15,
+        "fixture_mass": 1,
+        "load_variants": [
+        ],
+        "max_payload": 11.1,
+        "off_center_load": false,
+        "payload_cog": [
+            0,
+            0,
+            0.084
+        ],
+        "payload_inertia": [
+            0.08,
+            0.08,
+            0.04,
+            0,
+            0,
+            0
+        ],
+        "rated_payload": 10,
+        "tool_mass": 2
+    },
+    "motion_requirements": {
+        "jerk_limit": 100,
+        "max_acceleration": 8,
+        "max_angular_acceleration": 720,
+        "max_angular_speed": 360,
+        "max_linear_speed": 2,
+        "takt_time": 1.2
+    },
+    "project_meta": {
+        "description": "参考 KUKA KR 10 R1100-2 级别 6R 工业机器人任务需求默认值",
+        "project_name": "Heavy 6DOF 300kg Test Project",
+        "scenario_type": "handling",
+        "selected_template_brand": "",
+        "selected_template_id": "",
+        "selected_template_name": ""
+    },
+    "reliability_requirements": {
+        "cycle_count": 10000000,
+        "design_life": 80000,
+        "duty_cycle": 0.6,
+        "mtbf_target": 20000,
+        "operating_hours_per_day": 16
+    },
+    "workspace_requirements": {
+        "base_constraints": {
+            "base_mount_type": "floor",
+            "hollow_wrist_required": false,
+            "reserved_channel_diameter_mm": 33
+        },
+        "forbidden_regions": [
+        ],
+        "key_poses": [
+        ],
+        "max_height": 1.1561,
+        "max_radius": 1.101,
+        "min_height": -0.3523,
+        "min_radius": 0.1762,
+        "obstacle_regions": [
+        ]
+    }
+}

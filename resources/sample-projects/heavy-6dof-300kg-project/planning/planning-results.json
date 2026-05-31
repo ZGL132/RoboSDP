@@ -1,0 +1,44 @@
+{
+  "results": [
+    {
+      "verification_id": "planning_verification_heavy_6r_floor_300kg_001",
+      "planning_scene_ref": "planning_scene_heavy_6r_floor_300kg",
+      "request_id": "planning_request_heavy_6r_floor_300kg_001",
+      "success": true,
+      "message": "Preset heavy-payload point-to-point planning verification passed.",
+      "feasibility_summary": "No environment collision or self-collision found in the preset sparse validation result.",
+      "cycle_time_result": {
+        "request_id": "planning_request_heavy_6r_floor_300kg_001",
+        "trajectory_duration_s": 4.8,
+        "target_cycle_time_s": 8.0,
+        "within_target": true,
+        "margin_s": 3.2,
+        "message": "Trajectory duration is within heavy handling takt target."
+      },
+      "trajectory_results": [
+        {
+          "request_id": "planning_request_heavy_6r_floor_300kg_001",
+          "planner_id": "RRTConnect",
+          "success": true,
+          "message": "Preset planning result for sample project.",
+          "planning_time_s": 0.75,
+          "trajectory_duration_s": 4.8,
+          "waypoint_count": 4,
+          "waypoints": [
+            {"time_from_start_s": 0.0, "joint_values_deg": [0.0, -25.0, 45.0, 0.0, 35.0, 0.0]},
+            {"time_from_start_s": 1.6, "joint_values_deg": [12.0, -20.0, 35.0, 15.0, 32.0, 20.0]},
+            {"time_from_start_s": 3.2, "joint_values_deg": [25.0, -15.0, 24.0, 30.0, 28.0, 42.0]},
+            {"time_from_start_s": 4.8, "joint_values_deg": [35.0, -10.0, 15.0, 45.0, 25.0, 60.0]}
+          ]
+        }
+      ],
+      "collision_results": [
+        {"request_id": "planning_request_heavy_6r_floor_300kg_001", "object_id": "heavy_worktable", "in_collision": false, "message": "No worktable collision in preset sample path."},
+        {"request_id": "planning_request_heavy_6r_floor_300kg_001", "object_id": "operator_zone", "in_collision": false, "message": "No operator-zone collision in preset sample path."}
+      ],
+      "self_collision_results": [
+        {"request_id": "planning_request_heavy_6r_floor_300kg_001", "link_a": "link_2", "link_b": "link_4", "in_self_collision": false, "message": "No self-collision detected in preset sample path."}
+      ]
+    }
+  ]
+}

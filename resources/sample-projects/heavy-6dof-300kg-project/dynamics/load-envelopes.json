@@ -1,0 +1,32 @@
+{
+  "load_envelope": [
+    {"joint_id": "joint_1", "peak_power_w": 42000.0, "peak_torque_nm": 16500.0, "rms_torque_nm": 7200.0, "source_trajectory_id": "traj_heavy_pallet_transfer"},
+    {"joint_id": "joint_2", "peak_power_w": 68000.0, "peak_torque_nm": 38500.0, "rms_torque_nm": 18200.0, "source_trajectory_id": "traj_heavy_shoulder_lift"},
+    {"joint_id": "joint_3", "peak_power_w": 54000.0, "peak_torque_nm": 27500.0, "rms_torque_nm": 12600.0, "source_trajectory_id": "traj_heavy_pallet_transfer"},
+    {"joint_id": "joint_4", "peak_power_w": 18000.0, "peak_torque_nm": 6200.0, "rms_torque_nm": 2600.0, "source_trajectory_id": "traj_heavy_pallet_transfer"},
+    {"joint_id": "joint_5", "peak_power_w": 14500.0, "peak_torque_nm": 4800.0, "rms_torque_nm": 2100.0, "source_trajectory_id": "traj_heavy_pallet_transfer"},
+    {"joint_id": "joint_6", "peak_power_w": 9000.0, "peak_torque_nm": 2500.0, "rms_torque_nm": 1100.0, "source_trajectory_id": "traj_heavy_pallet_transfer"}
+  ],
+  "parameterized_trajectories": [
+    {
+      "duration_s": 3.0,
+      "name": "Heavy shoulder lift",
+      "samples": [
+        {"accelerations_deg_s2": [0, 80, 0, 0, 0, 0], "positions_deg": [0, -10, 20, 0, 20, 0], "time_s": 0.0, "velocities_deg_s": [0, 0, 0, 0, 0, 0]},
+        {"accelerations_deg_s2": [0, 0, 0, 0, 0, 0], "positions_deg": [0, 17.5, -7.5, 0, 27.5, 0], "time_s": 1.5, "velocities_deg_s": [0, 36, -36, 0, 10, 0]},
+        {"accelerations_deg_s2": [0, -80, 0, 0, 0, 0], "positions_deg": [0, 45, -35, 0, 35, 0], "time_s": 3.0, "velocities_deg_s": [0, 0, 0, 0, 0, 0]}
+      ],
+      "trajectory_id": "traj_heavy_shoulder_lift"
+    },
+    {
+      "duration_s": 4.0,
+      "name": "Heavy pallet transfer",
+      "samples": [
+        {"accelerations_deg_s2": [55, 25, -40, 60, -15, 80], "positions_deg": [0, -25, 45, 0, 35, 0], "time_s": 0.0, "velocities_deg_s": [0, 0, 0, 0, 0, 0]},
+        {"accelerations_deg_s2": [0, 0, 0, 0, 0, 0], "positions_deg": [17.5, -17.5, 30, 22.5, 30, 30], "time_s": 2.0, "velocities_deg_s": [18, 8, -15, 22, -5, 30]},
+        {"accelerations_deg_s2": [-55, -25, 40, -60, 15, -80], "positions_deg": [35, -10, 15, 45, 25, 60], "time_s": 4.0, "velocities_deg_s": [0, 0, 0, 0, 0, 0]}
+      ],
+      "trajectory_id": "traj_heavy_pallet_transfer"
+    }
+  ]
+}
