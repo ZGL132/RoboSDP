@@ -327,7 +327,7 @@ private:
     /// @brief TCP 坐标系指示器（vtkAxesActor）：在末端显示红绿蓝三轴，随 FK 结果更新位姿。
     vtkSmartPointer<vtkAxesActor> m_tcp_axes_actor;
 
-    vtkSmartPointer<vtkActor> m_requirement_workspace_actor;
+    std::vector<vtkSmartPointer<vtkActor>> m_requirement_workspace_volume_actors;
     vtkSmartPointer<vtkActor> m_kinematics_workspace_actor;
     vtkSmartPointer<vtkActor> m_singularity_workspace_actor;
     vtkSmartPointer<vtkActor> m_selected_workspace_point_actor;
@@ -342,6 +342,7 @@ private:
     vtkSmartPointer<vtkBillboardTextActor3D> m_ik_target_label_actor;
     vtkSmartPointer<vtkBillboardTextActor3D> m_ik_actual_label_actor;
     vtkSmartPointer<vtkBillboardTextActor3D> m_ik_error_label_actor;
+    std::vector<vtkSmartPointer<vtkBillboardTextActor3D>> m_requirement_workspace_label_actors;
     std::vector<vtkSmartPointer<vtkActor>> m_requirement_key_pose_marker_actors;
     std::vector<vtkSmartPointer<vtkAxesActor>> m_requirement_key_pose_axes_actors;
     std::vector<vtkSmartPointer<vtkBillboardTextActor3D>> m_requirement_key_pose_label_actors;

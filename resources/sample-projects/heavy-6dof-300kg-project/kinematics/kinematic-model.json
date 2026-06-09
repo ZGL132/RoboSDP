@@ -1,118 +1,320 @@
 {
-  "backend_summary": {
-    "active_backend_type": "pinocchio_kinematic_backend",
-    "default_backend_type": "pinocchio_kinematic_backend",
-    "shared_kernel_stage": "pinocchio_primary",
-    "shared_robot_kernel_ready": false,
-    "status_message": "Heavy 6DOF sample uses DH parameters as the master model for Pinocchio preview."
-  },
-  "backend_type": "pinocchio_kinematic_backend",
-  "base_frame": {
-    "position_m": [0, 0, 0],
-    "rpy_deg": [0, 0, 0]
-  },
-  "conversion_diagnostics": "Synthetic heavy-payload DH model prepared for main-chain testing.",
-  "derived_model_state": "fresh",
-  "dh_editable": true,
-  "flange_frame": {
-    "position_m": [0, 0, 0],
-    "rpy_deg": [0, 0, 0]
-  },
-  "frame_semantics_version": 1,
-  "ik_solver_config": {
-    "branch_policy": "nearest_seed",
-    "max_iterations": 300,
-    "orientation_tolerance_deg": 1.5,
-    "position_tolerance_mm": 2.0,
-    "solver_type": "numeric_jacobian_transpose",
-    "step_gain": 0.28
-  },
-  "joint_count": 6,
-  "joint_limits": [
-    {"hard_limit": [-185, 185], "joint_id": "joint_1", "max_acceleration": 180, "max_velocity": 95, "soft_limit": [-180, 180]},
-    {"hard_limit": [-70, 75], "joint_id": "joint_2", "max_acceleration": 140, "max_velocity": 80, "soft_limit": [-65, 70]},
-    {"hard_limit": [-160, 85], "joint_id": "joint_3", "max_acceleration": 150, "max_velocity": 85, "soft_limit": [-155, 80]},
-    {"hard_limit": [-200, 200], "joint_id": "joint_4", "max_acceleration": 240, "max_velocity": 120, "soft_limit": [-195, 195]},
-    {"hard_limit": [-125, 125], "joint_id": "joint_5", "max_acceleration": 240, "max_velocity": 120, "soft_limit": [-120, 120]},
-    {"hard_limit": [-360, 360], "joint_id": "joint_6", "max_acceleration": 360, "max_velocity": 180, "soft_limit": [-350, 350]}
-  ],
-  "joint_order_signature": "joint_1|joint_2|joint_3|joint_4|joint_5|joint_6",
-  "last_fk_result": {
-    "joint_positions_deg": [0, -25, 45, 0, 35, 0],
-    "link_poses": [],
-    "message": "Preset heavy sample pose.",
-    "success": true,
-    "tcp_pose": {
-      "position_m": [1.84, 0.0, 2.06],
-      "rpy_deg": [180, 35, 0]
+    "backend_summary": {
+        "active_backend_type": "pinocchio_kinematic_backend",
+        "default_backend_type": "pinocchio_kinematic_backend",
+        "shared_kernel_stage": "pinocchio_primary",
+        "shared_robot_kernel_ready": false,
+        "status_message": "当前默认使用 Pinocchio 共享运动学后端。"
     },
-    "tcp_transform_matrix": [
-      1, 0, 0, 1.84,
-      0, 1, 0, 0,
-      0, 0, 1, 2.06,
-      0, 0, 0, 1
-    ]
-  },
-  "last_ik_result": {
-    "iteration_count": 42,
-    "joint_positions_deg": [0, -25, 45, 0, 35, 0],
-    "message": "Preset sample target resolved from nominal joint pose.",
-    "orientation_error_deg": 0.8,
-    "position_error_mm": 1.2,
-    "success": true
-  },
-  "links": [
-    {"a": 0.35, "alpha": 90, "d": 0.85, "link_id": "link_1", "theta_offset": 0},
-    {"a": 1.15, "alpha": 0, "d": 0.0, "link_id": "link_2", "theta_offset": 0},
-    {"a": 0.95, "alpha": 0, "d": 0.0, "link_id": "link_3", "theta_offset": 0},
-    {"a": 0.20, "alpha": 90, "d": 0.75, "link_id": "link_4", "theta_offset": 0},
-    {"a": 0.0, "alpha": -90, "d": 0.0, "link_id": "link_5", "theta_offset": 0},
-    {"a": 0.0, "alpha": 0, "d": 0.28, "link_id": "link_6", "theta_offset": 0}
-  ],
-  "master_model_type": "dh_mdh",
-  "meta": {
-    "kinematic_id": "kinematic_heavy_6r_floor_300kg",
-    "name": "Heavy 6DOF 300kg DH kinematic model",
-    "requirement_ref": "Heavy 6DOF 300kg Test Project",
-    "source": "topology",
-    "status": "ready",
-    "topology_ref": "topology_heavy_6r_floor_300kg",
-    "version": 1
-  },
-  "model_source_mode": "topology_derived",
-  "modeling_mode": "DH",
-  "parameter_convention": "DH",
-  "pinocchio_model_ready": true,
-  "tcp_frame": {
-    "rpy_deg": [0, 0, 0],
-    "translation_m": [0, 0, 0.25]
-  },
-  "tool_frame": {
-    "position_m": [0, 0, 0.25],
-    "rpy_deg": [0, 0, 0]
-  },
-  "unified_robot_model_ref": "dh_preview::kinematic_heavy_6r_floor_300kg",
-  "unified_robot_snapshot": {
     "backend_type": "pinocchio_kinematic_backend",
-    "conversion_diagnostics": "Heavy 6DOF sample synchronized as a logical DH preview model.",
-    "derived_artifact_exists": false,
-    "derived_artifact_fresh": false,
-    "derived_artifact_generated_at_utc": "2026-05-29T00:00:00Z",
-    "derived_artifact_relative_path": "kinematics/derived/kinematic_heavy_6r_floor_300kg.urdf",
-    "derived_artifact_state_code": "logical_only",
-    "derived_artifact_version": "logical_v2",
+    "base_frame": {
+        "position_m": [
+            0,
+            0,
+            0
+        ],
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ]
+    },
+    "conversion_diagnostics": "当前视图来源为工程 URDF 参考模型；DH/MDH 参数表仅作只读诊断草案。\n当前草案由工程 URDF 参考部分提取，存在近似映射段，可作为 DH/MDH 参数化起点，但需重点校核。；关节 Actuator2 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator3 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator4 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator5 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator6 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator7 的 origin.y 不为 0，当前 DH 草案为近似映射。；当前 DH 草案仅提取运动学主链，不尝试映射 visual/collision Mesh。",
+    "derived_model_state": "fresh",
+    "dh_draft_extraction_level": "partial",
+    "dh_draft_readonly_reason": "当前 DH/MDH 参数表是由工程 URDF 提取的只读诊断草案；修改参数化设计请复制为 DH 模型或从 Topology 生成。",
+    "dh_editable": false,
+    "flange_frame": {
+        "position_m": [
+            0,
+            0,
+            0
+        ],
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ]
+    },
     "frame_semantics_version": 1,
-    "joint_order_signature": "joint_1|joint_2|joint_3|joint_4|joint_5|joint_6",
-    "master_model_type": "dh_mdh",
-    "model_source_mode": "topology_derived",
-    "modeling_mode": "DH",
+    "ik_solver_config": {
+        "branch_policy": "nearest_seed",
+        "max_iterations": 200,
+        "orientation_tolerance_deg": 1,
+        "position_tolerance_mm": 1,
+        "solver_type": "numeric_jacobian_transpose",
+        "step_gain": 0.35
+    },
+    "joint_count": 7,
+    "joint_limits": [
+        {
+            "hard_limit": [
+                -180,
+                180
+            ],
+            "joint_id": "Actuator1",
+            "max_acceleration": 360,
+            "max_velocity": 50.002,
+            "soft_limit": [
+                -175,
+                175
+            ]
+        },
+        {
+            "hard_limit": [
+                -126.051,
+                126.051
+            ],
+            "joint_id": "Actuator2",
+            "max_acceleration": 360,
+            "max_velocity": 50.002,
+            "soft_limit": [
+                -121.051,
+                121.051
+            ]
+        },
+        {
+            "hard_limit": [
+                -180,
+                180
+            ],
+            "joint_id": "Actuator3",
+            "max_acceleration": 360,
+            "max_velocity": 50.002,
+            "soft_limit": [
+                -175,
+                175
+            ]
+        },
+        {
+            "hard_limit": [
+                -146.998,
+                146.998
+            ],
+            "joint_id": "Actuator4",
+            "max_acceleration": 360,
+            "max_velocity": 50.002,
+            "soft_limit": [
+                -141.998,
+                141.998
+            ]
+        },
+        {
+            "hard_limit": [
+                -180,
+                180
+            ],
+            "joint_id": "Actuator5",
+            "max_acceleration": 360,
+            "max_velocity": 50.002,
+            "soft_limit": [
+                -175,
+                175
+            ]
+        },
+        {
+            "hard_limit": [
+                -117.456,
+                117.456
+            ],
+            "joint_id": "Actuator6",
+            "max_acceleration": 360,
+            "max_velocity": 50.002,
+            "soft_limit": [
+                -112.456,
+                112.456
+            ]
+        },
+        {
+            "hard_limit": [
+                -180,
+                180
+            ],
+            "joint_id": "Actuator7",
+            "max_acceleration": 360,
+            "max_velocity": 50.002,
+            "soft_limit": [
+                -175,
+                175
+            ]
+        }
+    ],
+    "joint_order_signature": "D:/10_Source_Repos/21_robot/RoboSDP_v1.0/kinovaGen3.urdf",
+    "last_fk_result": {
+        "joint_positions_deg": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        ],
+        "link_poses": [
+        ],
+        "message": "Pinocchio FK 计算失败：Pinocchio build-context 未就绪：joint_order_signature 中的关节数量=1 与 joint_count=7 不一致。",
+        "success": false,
+        "tcp_pose": {
+            "position_m": [
+                0,
+                0,
+                0
+            ],
+            "rpy_deg": [
+                0,
+                0,
+                0
+            ]
+        },
+        "tcp_transform_matrix": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1
+        ]
+    },
+    "last_ik_result": {
+        "analytical_arm_solution_count": 0,
+        "analytical_branch_diagnostics": [
+        ],
+        "analytical_fk_valid_count": 0,
+        "analytical_limit_valid_count": 0,
+        "analytical_wrist_solution_count": 0,
+        "fallback_reason": "",
+        "iteration_count": 0,
+        "joint_positions_deg": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        ],
+        "message": "Pinocchio IK 求解失败：joint_order_signature 中的关节数量=1 与 joint_count=7 不一致。",
+        "orientation_error_deg": 0,
+        "position_error_mm": 0,
+        "requested_solver_id": "pinocchio_numeric_ik",
+        "solver_id": "pinocchio_numeric_ik",
+        "success": false,
+        "total_solutions_found": 0,
+        "used_fallback": false,
+        "valid_solution_count": 0
+    },
+    "links": [
+        {
+            "a": 0,
+            "alpha": 180,
+            "d": 0.1564,
+            "link_id": "Shoulder_Link",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.0054,
+            "alpha": 90,
+            "d": -0.1284,
+            "link_id": "HalfArm1_Link",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.2104,
+            "alpha": -90,
+            "d": -0.0064,
+            "link_id": "HalfArm2_Link",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.0064,
+            "alpha": 90,
+            "d": -0.2104,
+            "link_id": "ForeArm_Link",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.2084,
+            "alpha": -90,
+            "d": -0.0064,
+            "link_id": "Wrist1_Link",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.0002,
+            "alpha": 90,
+            "d": -0.1059,
+            "link_id": "Wrist2_Link",
+            "theta_offset": 0
+        },
+        {
+            "a": 0.1059,
+            "alpha": -90,
+            "d": -0.0002,
+            "link_id": "Bracelet_Link",
+            "theta_offset": 0
+        }
+    ],
+    "master_model_type": "urdf",
+    "meta": {
+        "kinematic_id": "urdf_preview_kinovaGen3",
+        "name": "JACO3_URDF_V10",
+        "requirement_ref": "",
+        "source": "urdf_dh_draft",
+        "status": "draft",
+        "topology_ref": "",
+        "version": 1
+    },
+    "model_source_mode": "urdf_imported",
+    "modeling_mode": "URDF",
+    "original_imported_urdf_path": "D:/10_Source_Repos/21_robot/RoboSDP_v1.0/kinovaGen3.urdf",
     "parameter_convention": "DH",
     "pinocchio_model_ready": true,
-    "snapshot_version": 2,
-    "source_kinematic_id": "kinematic_heavy_6r_floor_300kg",
-    "unified_robot_model_ref": "dh_preview::kinematic_heavy_6r_floor_300kg"
-  },
-  "urdf_editable": false,
-  "urdf_source_path": "",
-  "workpiece_frame": null
+    "tcp_frame": {
+        "rpy_deg": [
+            0,
+            0,
+            0
+        ],
+        "translation_m": [
+            0,
+            0,
+            0
+        ]
+    },
+    "tool_frame": null,
+    "unified_robot_model_ref": "urdf_preview::D:/10_Source_Repos/21_robot/RoboSDP_v1.0/kinovaGen3.urdf",
+    "unified_robot_snapshot": {
+        "backend_type": "pinocchio_kinematic_backend",
+        "conversion_diagnostics": "当前视图来源为工程 URDF 参考模型；DH/MDH 参数表仅作只读诊断草案。\n当前草案由工程 URDF 参考部分提取，存在近似映射段，可作为 DH/MDH 参数化起点，但需重点校核。；关节 Actuator2 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator3 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator4 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator5 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator6 的 origin.y 不为 0，当前 DH 草案为近似映射。；关节 Actuator7 的 origin.y 不为 0，当前 DH 草案为近似映射。；当前 DH 草案仅提取运动学主链，不尝试映射 visual/collision Mesh。",
+        "derived_artifact_exists": true,
+        "derived_artifact_fresh": true,
+        "derived_artifact_generated_at_utc": "2022-07-26T13:09:20.000Z",
+        "derived_artifact_relative_path": "",
+        "derived_artifact_state_code": "external_master",
+        "derived_artifact_version": "2022-07-26T13:09:20.000Z",
+        "frame_semantics_version": 1,
+        "joint_order_signature": "D:/10_Source_Repos/21_robot/RoboSDP_v1.0/kinovaGen3.urdf",
+        "master_model_type": "urdf",
+        "model_source_mode": "urdf_imported",
+        "modeling_mode": "URDF",
+        "parameter_convention": "DH",
+        "pinocchio_model_ready": true,
+        "snapshot_version": 3,
+        "source_kinematic_id": "urdf_preview_kinovaGen3",
+        "unified_robot_model_ref": "urdf_preview::D:/10_Source_Repos/21_robot/RoboSDP_v1.0/kinovaGen3.urdf"
+    },
+    "urdf_editable": true,
+    "urdf_master_source_type": "original_imported",
+    "urdf_source_path": "D:/10_Source_Repos/21_robot/RoboSDP_v1.0/kinovaGen3.urdf",
+    "workpiece_frame": null
 }

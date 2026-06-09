@@ -32,6 +32,7 @@
 #include <vtkCamera.h>
 #include <vtkCaptionActor2D.h>
 #include <vtkClipPolyData.h>
+#include <vtkCubeSource.h>
 #include <vtkGlyph3D.h>
 #include <vtkImplicitPlaneRepresentation.h>
 #include <vtkImplicitPlaneWidget2.h>
@@ -168,6 +169,141 @@ QIcon MakeCameraToolbarIcon(const QString& kind)
 }
 
 #if defined(ROBOSDP_HAVE_VTK)
+struct RequirementWorkspaceGeometry
+{
+    double minRadius = 0.0;
+    double maxRadius = 0.0;
+    double minHeight = 0.0;
+    double maxHeight = 0.0;
+    bool hasInnerRadius = false;
+};
+
+enum class RequirementPoseCompliance
+{
+    Inside,
+    NearBoundary,
+    Outside
+};
+
+bool TryBuildRequirementWorkspaceGeometry(
+    const std::vector<std::array<double, 3>>& positions,
+    RequirementWorkspaceGeometry& geometry)
+{
+    if (positions.empty())
+    {
+        return false;
+    }
+
+    double minRadius = std::numeric_limits<double>::max();
+    double maxRadius = 0.0;
+    double minHeight = std::numeric_limits<double>::max();
+    double maxHeight = std::numeric_limits<double>::lowest();
+
+    for (const auto& point : positions)
+    {
+        const double radius = std::sqrt(point[0] * point[0] + point[1] * point[1]);
+        if (!std::isfinite(radius) || !std::isfinite(point[2]))
+        {
+            continue;
+        }
+
+        minRadius = std::min(minRadius, radius);
+        maxRadius = std::max(maxRadius, radius);
+        minHeight = std::min(minHeight, point[2]);
+        maxHeight = std::max(maxHeight, point[2]);
+    }
+
+    if (maxRadius <= 0.0 || minRadius == std::numeric_limits<double>::max() || maxHeight <= minHeight)
+    {
+        return false;
+    }
+
+    geometry.minRadius = minRadius;
+    geometry.maxRadius = maxRadius;
+    geometry.minHeight = minHeight;
+    geometry.maxHeight = maxHeight;
+    geometry.hasInnerRadius = minRadius > std::max(0.005, maxRadius * 0.01);
+    return true;
+}
+
+RequirementPoseCompliance EvaluateRequirementPoseCompliance(
+    const RequirementWorkspaceGeometry& geometry,
+    const std::array<double, 3>& position,
+    double positionToleranceM)
+{
+    const double radius = std::sqrt(position[0] * position[0] + position[1] * position[1]);
+    const double tolerance = std::max(0.0, positionToleranceM);
+    if (!std::isfinite(radius) || !std::isfinite(position[2]) ||
+        radius > geometry.maxRadius + tolerance ||
+        (geometry.hasInnerRadius && radius < geometry.minRadius - tolerance) ||
+        position[2] > geometry.maxHeight + tolerance ||
+        position[2] < geometry.minHeight - tolerance)
+    {
+        return RequirementPoseCompliance::Outside;
+    }
+
+    const double radialMargin = geometry.hasInnerRadius
+        ? std::min(radius - geometry.minRadius, geometry.maxRadius - radius)
+        : geometry.maxRadius - radius;
+    const double heightMargin = std::min(position[2] - geometry.minHeight, geometry.maxHeight - position[2]);
+    const double warningBand = std::max(0.02, std::max(tolerance, geometry.maxRadius * 0.03));
+    if (radialMargin <= warningBand || heightMargin <= warningBand)
+    {
+        return RequirementPoseCompliance::NearBoundary;
+    }
+
+    return RequirementPoseCompliance::Inside;
+}
+
+QString ToRequirementPoseComplianceText(RequirementPoseCompliance compliance)
+{
+    switch (compliance)
+    {
+    case RequirementPoseCompliance::Inside:
+        return QStringLiteral("合规");
+    case RequirementPoseCompliance::NearBoundary:
+        return QStringLiteral("近边界");
+    case RequirementPoseCompliance::Outside:
+        return QStringLiteral("超界");
+    }
+    return QStringLiteral("未知");
+}
+
+void RequirementPoseComplianceColor(
+    RequirementPoseCompliance compliance,
+    bool selected,
+    double& red,
+    double& green,
+    double& blue)
+{
+    if (selected)
+    {
+        red = 1.0;
+        green = 0.62;
+        blue = 0.12;
+        return;
+    }
+
+    switch (compliance)
+    {
+    case RequirementPoseCompliance::Inside:
+        red = 0.13;
+        green = 0.77;
+        blue = 0.37;
+        break;
+    case RequirementPoseCompliance::NearBoundary:
+        red = 0.95;
+        green = 0.66;
+        blue = 0.10;
+        break;
+    case RequirementPoseCompliance::Outside:
+        red = 0.91;
+        green = 0.19;
+        blue = 0.24;
+        break;
+    }
+}
+
 vtkSmartPointer<vtkTransform> BuildPoseTransform(
     const RoboSDP::Kinematics::Dto::CartesianPoseDto& pose)
 {
@@ -294,6 +430,116 @@ vtkSmartPointer<vtkActor> CreatePointCloudActor(
     actor->GetProperty()->SetPointSize(pointSize);
     actor->GetProperty()->SetLighting(false);
     return actor;
+}
+
+std::vector<vtkSmartPointer<vtkActor>> CreateRequirementWorkspaceVolumeActors(
+    const RequirementWorkspaceGeometry& geometry,
+    vtkPlane* clipPlane)
+{
+    std::vector<vtkSmartPointer<vtkActor>> actors;
+    constexpr int kSegments = 48;
+    constexpr double kPi = 3.14159265358979323846;
+    const double innerRadius = geometry.hasInnerRadius ? geometry.minRadius : 0.0;
+    const double radialThickness = geometry.maxRadius - innerRadius;
+    const double height = geometry.maxHeight - geometry.minHeight;
+    if (radialThickness <= 0.0 || height <= 0.0)
+    {
+        return actors;
+    }
+
+    actors.reserve(kSegments);
+    const double midRadius = innerRadius + radialThickness * 0.5;
+    const double arcWidth = 2.0 * midRadius * std::sin(kPi / static_cast<double>(kSegments));
+    const double depth = std::max(radialThickness, 0.001);
+
+    for (int i = 0; i < kSegments; ++i)
+    {
+        const double angle = 2.0 * kPi * (static_cast<double>(i) + 0.5) / static_cast<double>(kSegments);
+        vtkNew<vtkCubeSource> segmentSource;
+        segmentSource->SetXLength(std::max(arcWidth, 0.001));
+        segmentSource->SetYLength(depth);
+        segmentSource->SetZLength(height);
+        segmentSource->SetCenter(0.0, midRadius, 0.0);
+        segmentSource->Update();
+
+        vtkNew<vtkPolyDataMapper> mapper;
+        if (clipPlane != nullptr)
+        {
+            vtkNew<vtkClipPolyData> clipper;
+            clipper->SetInputConnection(segmentSource->GetOutputPort());
+            clipper->SetClipFunction(clipPlane);
+            clipper->InsideOutOn();
+            clipper->Update();
+            mapper->SetInputData(clipper->GetOutput());
+        }
+        else
+        {
+            mapper->SetInputConnection(segmentSource->GetOutputPort());
+        }
+
+        auto actor = vtkSmartPointer<vtkActor>::New();
+        actor->SetMapper(mapper);
+        actor->RotateZ(angle * 180.0 / kPi);
+        actor->SetPosition(0.0, 0.0, 0.5 * (geometry.minHeight + geometry.maxHeight));
+        actor->GetProperty()->SetColor(0.23, 0.51, 0.96);
+        actor->GetProperty()->SetOpacity(0.10);
+        actor->GetProperty()->SetAmbient(0.65);
+        actor->GetProperty()->SetDiffuse(0.35);
+        actor->GetProperty()->SetSpecular(0.08);
+        actors.push_back(actor);
+    }
+
+    return actors;
+}
+
+std::vector<vtkSmartPointer<vtkBillboardTextActor3D>> CreateRequirementWorkspaceDimensionLabels(
+    const RequirementWorkspaceGeometry& geometry)
+{
+    std::vector<vtkSmartPointer<vtkBillboardTextActor3D>> labels;
+    labels.reserve(4);
+
+    const double labelRadius = geometry.maxRadius * 1.06;
+    const double midHeight = 0.5 * (geometry.minHeight + geometry.maxHeight);
+    const auto addLabel = [&labels](
+        const QString& text,
+        const std::array<double, 3>& position,
+        int offsetX,
+        int offsetY) {
+        auto label = CreateBillboardLabel(text, position, 0.12, 0.36, 0.86, offsetX, offsetY);
+        label->PickableOff();
+        labels.push_back(label);
+    };
+
+    addLabel(
+        QStringLiteral("Rmax %1 m").arg(geometry.maxRadius, 0, 'f', 3),
+        {geometry.maxRadius, 0.0, geometry.maxHeight},
+        18,
+        14);
+    if (geometry.hasInnerRadius)
+    {
+        addLabel(
+            QStringLiteral("Rmin %1 m").arg(geometry.minRadius, 0, 'f', 3),
+            {geometry.minRadius, 0.0, geometry.minHeight},
+            18,
+            -16);
+    }
+    addLabel(
+        QStringLiteral("Zmax %1 m").arg(geometry.maxHeight, 0, 'f', 3),
+        {labelRadius, 0.0, geometry.maxHeight},
+        18,
+        0);
+    addLabel(
+        QStringLiteral("Zmin %1 m").arg(geometry.minHeight, 0, 'f', 3),
+        {labelRadius, 0.0, geometry.minHeight},
+        18,
+        0);
+    addLabel(
+        QStringLiteral("H %1 m").arg(geometry.maxHeight - geometry.minHeight, 0, 'f', 3),
+        {labelRadius, 0.0, midHeight},
+        18,
+        0);
+
+    return labels;
 }
 
 vtkSmartPointer<vtkActor> CreateClassifiedPointCloudActor(
@@ -852,10 +1098,30 @@ void RobotVtkView::RenderAnalysisLayers(bool renderNow)
             actor = nullptr;
         }
     };
+    auto removeLabel = [this](vtkSmartPointer<vtkBillboardTextActor3D>& actor) {
+        if (actor != nullptr)
+        {
+            if (m_label_renderer != nullptr)
+            {
+                m_label_renderer->RemoveActor(actor);
+            }
+            m_renderer->RemoveActor(actor);
+            actor = nullptr;
+        }
+    };
 
-    removeActor(m_requirement_workspace_actor);
+    for (auto& actor : m_requirement_workspace_volume_actors)
+    {
+        removeActor(actor);
+    }
+    m_requirement_workspace_volume_actors.clear();
     removeActor(m_kinematics_workspace_actor);
     removeActor(m_singularity_workspace_actor);
+    for (auto& labelActor : m_requirement_workspace_label_actors)
+    {
+        removeLabel(labelActor);
+    }
+    m_requirement_workspace_label_actors.clear();
 
     InitializeWorkspaceClipPlane();
     vtkPlane* clipPlane = ShouldUseWorkspaceClipPlane() ? m_workspace_clip_plane.GetPointer() : nullptr;
@@ -863,15 +1129,27 @@ void RobotVtkView::RenderAnalysisLayers(bool renderNow)
     if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerRequirementWorkspace)) &&
         !m_requirementWorkspacePositions.empty())
     {
-        m_requirement_workspace_actor = CreatePointCloudActor(
-            m_requirementWorkspacePositions,
-            0.23,
-            0.51,
-            0.96,
-            0.34,
-            2.4,
-            clipPlane);
-        m_renderer->AddActor(m_requirement_workspace_actor);
+        RequirementWorkspaceGeometry geometry;
+        if (TryBuildRequirementWorkspaceGeometry(m_requirementWorkspacePositions, geometry))
+        {
+            m_requirement_workspace_volume_actors = CreateRequirementWorkspaceVolumeActors(geometry, clipPlane);
+            for (const auto& actor : m_requirement_workspace_volume_actors)
+            {
+                m_renderer->AddActor(actor);
+            }
+            m_requirement_workspace_label_actors = CreateRequirementWorkspaceDimensionLabels(geometry);
+            for (const auto& labelActor : m_requirement_workspace_label_actors)
+            {
+                if (m_label_renderer != nullptr)
+                {
+                    m_label_renderer->AddActor(labelActor);
+                }
+                else
+                {
+                    m_renderer->AddActor(labelActor);
+                }
+            }
+        }
     }
 
     if (IsAnalysisLayerVisible(QString::fromLatin1(kLayerKinematicsWorkspace)) &&
@@ -1163,7 +1441,29 @@ void RobotVtkView::ClearCache()
     m_link_to_joint_index.clear();
     ClearWorkspacePointSelection(false);
     ClearRequirementKeyPoseActors();
-    m_requirement_workspace_actor = nullptr;
+    for (auto& labelActor : m_requirement_workspace_label_actors)
+    {
+        if (labelActor != nullptr)
+        {
+            if (m_label_renderer != nullptr)
+            {
+                m_label_renderer->RemoveActor(labelActor);
+            }
+            if (m_renderer != nullptr)
+            {
+                m_renderer->RemoveActor(labelActor);
+            }
+        }
+    }
+    m_requirement_workspace_label_actors.clear();
+    for (auto& actor : m_requirement_workspace_volume_actors)
+    {
+        if (actor != nullptr && m_renderer != nullptr)
+        {
+            m_renderer->RemoveActor(actor);
+        }
+    }
+    m_requirement_workspace_volume_actors.clear();
     m_kinematics_workspace_actor = nullptr;
     m_singularity_workspace_actor = nullptr;
 #endif
@@ -1286,16 +1586,28 @@ void RobotVtkView::RenderRequirementKeyPoseLayer()
         }
         return;
     }
+
+    RequirementWorkspaceGeometry workspaceGeometry;
+    const bool hasWorkspaceGeometry =
+        TryBuildRequirementWorkspaceGeometry(m_requirementWorkspacePositions, workspaceGeometry);
     for (std::size_t index = 0; index < m_requirementKeyPoses.size(); ++index)
     {
         const auto& keyPose = m_requirementKeyPoses[index];
         const bool selected = static_cast<int>(index) == m_requirementSelectedKeyPoseIndex;
-        const double red = selected ? 1.0 : 0.18;
-        const double green = selected ? 0.62 : 0.72;
-        const double blue = selected ? 0.12 : 1.0;
+        const double toleranceM = std::max(0.0, keyPose.position_tol / 1000.0);
+        const RequirementPoseCompliance compliance = hasWorkspaceGeometry
+            ? EvaluateRequirementPoseCompliance(
+                  workspaceGeometry,
+                  {keyPose.pose[0], keyPose.pose[1], keyPose.pose[2]},
+                  toleranceM)
+            : RequirementPoseCompliance::Inside;
+        double red = 0.18;
+        double green = 0.72;
+        double blue = 1.0;
+        RequirementPoseComplianceColor(compliance, selected, red, green, blue);
 
         vtkNew<vtkSphereSource> markerSource;
-        markerSource->SetRadius(selected ? 0.032 : 0.022);
+        markerSource->SetRadius(selected ? 0.034 : 0.024);
         markerSource->SetThetaResolution(24);
         markerSource->SetPhiResolution(16);
         vtkNew<vtkPolyDataMapper> markerMapper;
@@ -1304,8 +1616,8 @@ void RobotVtkView::RenderRequirementKeyPoseLayer()
         markerActor->SetMapper(markerMapper);
         markerActor->SetPosition(keyPose.pose[0], keyPose.pose[1], keyPose.pose[2]);
         markerActor->GetProperty()->SetColor(red, green, blue);
-        markerActor->GetProperty()->SetOpacity(selected ? 0.92 : 0.72);
-        markerActor->GetProperty()->SetAmbient(0.35);
+        markerActor->GetProperty()->SetOpacity(selected ? 0.96 : 0.86);
+        markerActor->GetProperty()->SetAmbient(0.45);
         m_renderer->AddActor(markerActor);
         m_requirement_key_pose_marker_actors.push_back(markerActor);
 
@@ -1315,8 +1627,12 @@ void RobotVtkView::RenderRequirementKeyPoseLayer()
         m_requirement_key_pose_axes_actors.push_back(axesActor);
 
         const QString labelText = keyPose.name.trimmed().isEmpty()
-                                      ? QStringLiteral("工位%1").arg(static_cast<int>(index) + 1)
-                                      : keyPose.name.trimmed();
+            ? QStringLiteral("工位%1 | %2")
+                  .arg(static_cast<int>(index) + 1)
+                  .arg(ToRequirementPoseComplianceText(compliance))
+            : QStringLiteral("%1 | %2")
+                  .arg(keyPose.name.trimmed())
+                  .arg(ToRequirementPoseComplianceText(compliance));
         std::array<double, 3> labelPosition {
             keyPose.pose[0],
             keyPose.pose[1],

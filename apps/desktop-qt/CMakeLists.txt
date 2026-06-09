@@ -54,6 +54,7 @@ endif()
 find_package(VTK QUIET COMPONENTS
     CommonColor
     CommonCore
+    CommonDataModel
     CommonTransforms
     FiltersCore
     FiltersSources
@@ -108,6 +109,9 @@ if(VTK_FOUND)
         message(WARNING "RoboSDPDesktop: 当前 VTK 缺少 IOGeometry/vtkSTLReader，已启用骨架 VTK 渲染，但会跳过 STL Mesh 静态加载。")
     endif()
     target_link_libraries(RoboSDPDesktop PRIVATE ${VTK_LIBRARIES})
+    if(TARGET VTK::CommonDataModel)
+        target_link_libraries(RoboSDPDesktop PRIVATE VTK::CommonDataModel)
+    endif()
     if(COMMAND vtk_module_autoinit)
         vtk_module_autoinit(
             TARGETS RoboSDPDesktop
