@@ -332,16 +332,16 @@ void AddGroundGrid(vtkRenderer* renderer, double halfSize, double spacing)
         lineActor->SetMapper(lineMapper);
         if (majorLine)
         {
-            // 中文说明：每 1m 主刻度线略亮略粗，帮助快速判断机械臂空间尺度。
-            lineActor->GetProperty()->SetColor(0.42, 0.47, 0.52);
-            lineActor->GetProperty()->SetOpacity(0.48);
-            lineActor->GetProperty()->SetLineWidth(1.25);
+            // 中文说明：参考图中的网格线整体较细，主刻度仅略深，避免破坏蓝紫渐变背景。
+            lineActor->GetProperty()->SetColor(0.29, 0.29, 0.34);
+            lineActor->GetProperty()->SetOpacity(0.70);
+            lineActor->GetProperty()->SetLineWidth(1.0);
         }
         else
         {
-            // 中文说明：副网格保持低亮度细线，只作为背景尺度参考，避免抢占主体视觉层级。
-            lineActor->GetProperty()->SetColor(0.30, 0.34, 0.38);
-            lineActor->GetProperty()->SetOpacity(0.34);
+            // 中文说明：副网格使用同色系浅灰细线，形成截图中的均匀线框平面。
+            lineActor->GetProperty()->SetColor(0.34, 0.34, 0.40);
+            lineActor->GetProperty()->SetOpacity(0.56);
             lineActor->GetProperty()->SetLineWidth(1.0);
         }
         renderer->AddActor(lineActor);
@@ -363,9 +363,10 @@ void ApplyStableViewportBackground(vtkRenderer* renderer)
         return;
     }
 
-    // 中文说明：匹配 ParaView RenderView 的黑色高对比视口。
-    renderer->SetGradientBackground(false);
-    renderer->SetBackground(0.0, 0.0, 0.0);
+    // 中文说明：匹配参考图的白色到蓝紫色纵向渐变视口。
+    renderer->SetGradientBackground(true);
+    renderer->SetBackground(0.18, 0.20, 1.0);
+    renderer->SetBackground2(0.97, 0.97, 1.0);
 }
 
 /**
@@ -903,7 +904,7 @@ void VtkSceneBuilder::BuildMinimalTestScene(
     if (showGroundGrid)
     {
         // 中文说明：地面网格是独立空间参考层，由顶部“视图”页签单独控制。
-        AddGroundGrid(renderer, 1.5, 0.25);
+        AddGroundGrid(renderer, 5.0, 0.5);
     }
 
     if (showAxes)
