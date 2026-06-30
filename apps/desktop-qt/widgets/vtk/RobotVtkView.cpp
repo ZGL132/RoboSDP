@@ -2010,8 +2010,8 @@ void RobotVtkView::BuildAnalysisLayerPanel(QWidget* viewportFrame)
         "background:transparent;"
         "border:none;"
         "}"
-        "QLabel#analysisLayerTitle{color:#ffffff;font-size:28px;font-weight:700;}"
-        "QCheckBox{color:#f8fafc;font-size:26px;font-weight:600;spacing:14px;background:transparent;}"
+        "QLabel#analysisLayerTitle{color:#000000;font-size:28px;font-weight:700;}"
+        "QCheckBox{color:#000000;font-size:26px;font-weight:600;spacing:14px;background:transparent;}"
         "QCheckBox::indicator{width:26px;height:26px;}"
         "QLabel#analysisLayerSwatch{min-width:24px;max-width:24px;min-height:24px;max-height:24px;}"));
 
@@ -2056,7 +2056,7 @@ void RobotVtkView::BuildAnalysisLayerPanel(QWidget* viewportFrame)
 
     auto* clipSwatch = new QLabel(clipRow);
     clipSwatch->setObjectName(QStringLiteral("analysisLayerSwatch"));
-    clipSwatch->setStyleSheet(QStringLiteral("QLabel#analysisLayerSwatch{background:#f8fafc;}"));
+    clipSwatch->setStyleSheet(QStringLiteral("QLabel#analysisLayerSwatch{background:#475569;}"));
 
     m_workspaceClipPlaneCheck = new QCheckBox(QStringLiteral("工作空间剖切平面"), clipRow);
     m_workspaceClipPlaneCheck->setChecked(false);
@@ -2408,7 +2408,7 @@ void RobotVtkView::BuildLayout()
     setObjectName(QStringLiteral("robotVtkView"));
     setStyleSheet(QStringLiteral(
         "QWidget#robotVtkView{background:#dfe3ea;}"
-        "QFrame#renderViewportFrame{background:#000000;border:2px solid #003dff;}"
+        "QFrame#renderViewportFrame{background:#000000;border:none;}"
         "QLabel#vtkStatusLabel{color:#475569;font-size:11px;padding-left:6px;}"));
 
 #if defined(ROBOSDP_HAVE_VTK)
